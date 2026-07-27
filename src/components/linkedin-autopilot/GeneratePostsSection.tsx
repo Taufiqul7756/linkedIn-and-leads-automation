@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { LuSparkles, LuArrowRight, LuX, LuTriangleAlert } from "react-icons/lu";
+import { LuSparkles, LuArrowRight, LuX, LuTriangleAlert, LuLink } from "react-icons/lu";
 import { AxiosError } from "axios";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
@@ -37,6 +37,7 @@ export default function GeneratePostsSection() {
   const workspaceId = activeWorkspace?.id ?? "";
 
   const [addUrlOpen, setAddUrlOpen] = useState(false);
+  const [url, setUrl] = useState("");
   const [postCount, setPostCount] = useState<number | "">("");
   const [postCountError, setPostCountError] = useState("");
   const [tone, setTone] = useState("professional");
@@ -72,19 +73,26 @@ export default function GeneratePostsSection() {
   );
 
   const generateMutation = useMutationWithTokenRefresh(
-    () =>
-      postsService(workspaceId).generatePosts({
+    () => {
+      const body = {
         prompt,
         tone,
         length: length.toLowerCase(),
         content_style: contentStyle.toLowerCase().replace(/\s+/g, "_"),
         use_emoji: useEmoji,
+        use_ai_image: true,
         count: postCount as number,
-      }),
+      };
+      const trimmedUrl = url.trim();
+      return trimmedUrl
+        ? postsService(workspaceId).generatePostsFromLink({ ...body, url: trimmedUrl })
+        : postsService(workspaceId).generatePosts(body);
+    },
     {
       onSuccess: () => {
         queryClient.setQueryData(["posts-text-generating"], null);
         toast.success("Posts created — generating images in the background.");
+        setUrl("");
         setPrompt("");
         setSuggestions([]);
         setPromptError(null);
@@ -262,8 +270,28 @@ export default function GeneratePostsSection() {
         </div>
       </div>
 
+      {/* Source URL */}
+      <div className="mt-4">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+          Source URL{" "}
+          <span className="font-normal normal-case text-gray-400">
+            optional — generate posts from a specific page or article
+          </span>
+        </label>
+        <div className="relative">
+          <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.com/article"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
       {/* Custom prompt */}
-      <div className="mt-5">
+      <div className="mt-4">
         <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
           Custom prompt{" "}
           <span className="font-normal normal-case text-gray-400">

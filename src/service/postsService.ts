@@ -50,6 +50,11 @@ export const postsService = (workspaceId: string) => ({
     post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/regenerate/`, body),
   generatePosts: (body: GeneratePostsBody) =>
     postRaw<GeneratePostsResponse>(`/workspaces/${workspaceId}/content/posts/generate/`, body),
+  generatePostsFromLink: (body: GeneratePostsBody & { url: string }) =>
+    postRaw<GeneratePostsResponse>(
+      `/workspaces/${workspaceId}/content/posts/generate_from_link/`,
+      body
+    ),
   suggestPrompts: (body: SuggestPromptsBody) =>
     post<SuggestPromptsResponse>(`/workspaces/${workspaceId}/content/posts/suggest_prompts/`, body),
 });
