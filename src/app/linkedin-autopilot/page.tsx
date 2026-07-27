@@ -7,6 +7,7 @@ import AccountSection from "@/components/linkedin-autopilot/AccountSection";
 import GeneratePostsSection from "@/components/linkedin-autopilot/GeneratePostsSection";
 import ReviewApprovalSection from "@/components/linkedin-autopilot/ReviewApprovalSection";
 import PostManagementSection from "@/components/linkedin-autopilot/PostManagementSection";
+import AgentModeSection from "@/components/linkedin-autopilot/AgentModeSection";
 import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowSection";
 
 // Syncs ?workspace=<id> from URL into WorkspaceContext on page load
@@ -51,6 +52,7 @@ export default function LinkedInAutopilotPage() {
           <WorkspaceUrlSync />
         </Suspense>
         <SetupStepper />
+        <AgentModeSection />
         <Suspense fallback={null}>
           <AccountSection />
         </Suspense>
