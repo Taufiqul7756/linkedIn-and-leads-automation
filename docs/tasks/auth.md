@@ -7,6 +7,17 @@
 
 ---
 
+## Phase 0 — Landing Page & Auth Redesign (Done)
+
+- [x] `src/app/page.tsx` — public landing page (hero, products, stats, CTA, footer)
+- [x] `src/components/layout/LandingNavbar.tsx` — public navbar (Products dropdown, Pricing soon, Login, Free Trial)
+- [x] `src/components/layout/AuthGuard.tsx` — added `/` to PUBLIC_ROUTES
+- [x] `src/components/layout/Navbar.tsx` — hide on `/` (in addition to `/login`, `/register`); Leads nav item disabled with "Soon" badge
+- [x] `src/app/login/page.tsx` — redesigned to split-panel layout (left: form + back button; right: dark visual panel with testimonial + dashboard mockup)
+- [x] `src/app/register/page.tsx` — same split-panel layout as login
+
+---
+
 ## Phase 1 — Core Auth (Done)
 
 - [x] `src/types/Auth.ts` — `AuthUser`, `LoginResponse` types

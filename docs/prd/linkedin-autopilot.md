@@ -18,10 +18,25 @@ Give users a fully automated LinkedIn content pipeline with a single human appro
 
 ## Sections
 
-### 1. Page Header
-- Title: "LinkedIn Autopilot" with LinkedIn icon
-- Subtitle: "Generate on-brand posts from your website, approve, schedule, and auto-publish."
-- No header action buttons
+### 1. Setup Stepper
+Horizontal progress bar at the top of the page showing 5 onboarding steps. Each step is clickable and opens its corresponding modal.
+
+| # | Label | Completion | Modal |
+|---|-------|-----------|-------|
+| 1 | LinkedIn Connect | `account.connected === true` | `LinkedInManageModal` |
+| 2 | Profile URL | API coming later | `ProfileUrlModal` |
+| 3 | Knowledge | API coming later | `KnowledgeUploadModal` (pre-selects "knowledge") |
+| 4 | Tune | API coming later | `KnowledgeUploadModal` (pre-selects "tune") |
+| 5 | Style Upload | API coming later | `KnowledgeUploadModal` (pre-selects "style") |
+
+- Done → teal filled circle with checkmark + teal connector line
+- Active (first incomplete) → blue outlined circle
+- Pending → gray circle + gray connector line
+- Component: `src/components/linkedin-autopilot/SetupStepper.tsx`
+
+**New modals:**
+- `ProfileUrlModal` — URL input field, save button (API placeholder)
+- `KnowledgeUploadModal` — type selector (Knowledge/Tune/Style), PDF upload (drag & drop), URL input, uploaded items list with type badge
 
 ### 2. Account & Knowledge Base
 - **LinkedIn account card**: Shows connection status (Connected/Disconnected), authorized user, OAuth scope.
@@ -90,7 +105,9 @@ Give users a fully automated LinkedIn content pipeline with a single human appro
 
 | Modal | Trigger | Content |
 | --- | --- | --- |
-| `LinkedInManageModal` | Manage button | Connected account info, Connect, Disconnect |
+| `LinkedInManageModal` | Manage button / Stepper step 1 | Connected account info, Connect, Disconnect |
+| `ProfileUrlModal` | Stepper step 2 | LinkedIn profile URL input (API pending) |
+| `KnowledgeUploadModal` | Stepper steps 3–5 | Type selector (Knowledge/Tune/Style), PDF upload, URL add, items list with type badges |
 | `KnowledgeBaseUploadModal` | Add sources button | Drag-and-drop PDF/DOC/DOCX + textarea |
 | `ScheduleModal` | Schedule / Reschedule | Date + time + timezone; `onConfirm(scheduledAt)` |
 | `EditPostModal` | Edit button | Content textarea + image upload + hashtags |

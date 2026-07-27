@@ -32,8 +32,15 @@
 - [x] User avatar with logout dropdown (POST `/auth/logout/`, clears localStorage, redirects to `/login`)
 
 ### Page Header
-- [x] LinkedIn icon + title + subtitle
-- [x] No header action buttons (Calendar + Generate Posts removed)
+- [x] ~~LinkedIn icon + title + subtitle~~ — **removed** (PageHeader component deleted)
+
+### Setup Stepper
+- [x] `src/components/linkedin-autopilot/SetupStepper.tsx` — 5-step horizontal progress bar
+- [x] Step 1 (LinkedIn Connect) — completion driven by `account.connected`; opens `LinkedInManageModal`
+- [x] Step 2 (Profile URL) — always pending (API TBD); opens `ProfileUrlModal`
+- [x] Steps 3–5 (Knowledge / Tune / Style) — always pending (API TBD); open `KnowledgeUploadModal` with correct type pre-selected
+- [x] `src/components/linkedin-autopilot/ProfileUrlModal.tsx` — URL input modal (API placeholder)
+- [x] `src/components/linkedin-autopilot/KnowledgeUploadModal.tsx` — unified modal: type dropdown, PDF upload, URL input, items list with type badges
 
 ### Account & Knowledge Base Section
 - [x] LinkedIn account card (Connected status, Manage button → LinkedInManageModal)
