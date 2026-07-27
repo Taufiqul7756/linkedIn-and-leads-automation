@@ -16,12 +16,16 @@ export const agentService = (workspaceId: string) => ({
   deleteProfile: (id: string) => del<void>(`/workspaces/${workspaceId}/linkedin/profiles/${id}/`),
 
   // Phase B — Marketing Plans
-  generatePlans: () =>
+  generatePlans: (writerModel?: string) =>
     postRaw<MarketingPlan[] | { results: MarketingPlan[] }>(
-      `/workspaces/${workspaceId}/content/plans/`
+      `/workspaces/${workspaceId}/content/plans/`,
+      writerModel ? { writer_model: writerModel } : undefined
     ),
 
   // Phase C — Generate from plan (all params optional — backend uses its own defaults)
-  generateFromPlan: (planId: string) =>
-    postRaw(`/workspaces/${workspaceId}/content/plans/${planId}/generate/`),
+  generateFromPlan: (planId: string, writerModel?: string) =>
+    postRaw(
+      `/workspaces/${workspaceId}/content/plans/${planId}/generate/`,
+      writerModel ? { writer_model: writerModel } : undefined
+    ),
 });

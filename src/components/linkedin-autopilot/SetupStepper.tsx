@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinService } from "@/service/linkedinService";
+import { agentService } from "@/service/agentService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import LinkedInManageModal from "./LinkedInManageModal";
 import ProfileUrlModal from "./ProfileUrlModal";
@@ -43,9 +44,17 @@ export default function SetupStepper() {
     { enabled: !!workspaceId }
   );
 
+  const { data: profiles } = useQueryWithTokenRefresh(
+    ["linkedin-profiles", workspaceId],
+    () => agentService(workspaceId).getProfiles(),
+    { enabled: !!workspaceId }
+  );
+
+  const hasReadyProfile = profiles?.results?.some((p) => p.status === "ready") ?? false;
+
   const completed = [
     account?.connected === true,
-    false, // Profile URL — API coming later
+    hasReadyProfile,
     false, // Knowledge — API coming later
     false, // Tune — API coming later
     false, // Style Upload — API coming later

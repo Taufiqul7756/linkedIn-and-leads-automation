@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   LuLink,
   LuLoader,
@@ -25,6 +26,7 @@ interface ProfileUrlModalProps {
 export default function ProfileUrlModal({ isOpen, onClose }: ProfileUrlModalProps) {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
+  const queryClient = useQueryClient();
 
   const [profiles, setProfiles] = useState<LinkedInProfile[]>([]);
   const [loadingList, setLoadingList] = useState(false);
@@ -49,6 +51,9 @@ export default function ProfileUrlModal({ isOpen, onClose }: ProfileUrlModalProp
       if (p.status === "ready" || p.status === "error") {
         clearInterval(pollRefs.current[id]);
         delete pollRefs.current[id];
+        if (p.status === "ready") {
+          queryClient.invalidateQueries({ queryKey: ["linkedin-profiles", workspaceId] });
+        }
       }
     }, 3000);
   };

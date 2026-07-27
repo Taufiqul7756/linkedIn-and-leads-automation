@@ -22,6 +22,7 @@ import { agentService } from "@/service/agentService";
 import { postsService } from "@/service/postsService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import { LinkedInProfile, MarketingPlan } from "@/types/Agent";
+import ModelSwitcher, { useSelectedModel } from "./ModelSwitcher";
 
 type Phase =
   | "a-loading"
@@ -95,6 +96,7 @@ export default function AgentModeSection() {
   const workspaceId = activeWorkspace?.id ?? "";
   const queryClient = useQueryClient();
 
+  const selectedModelId = useSelectedModel();
   const [phase, setPhase] = useState<Phase>("a-loading");
   const [profile, setProfile] = useState<LinkedInProfile | null>(null);
   const [profiles, setProfiles] = useState<LinkedInProfile[]>([]);
@@ -279,7 +281,7 @@ export default function AgentModeSection() {
   const handleGeneratePlans = async () => {
     setPhase("b-generating");
     try {
-      const data = await agentService(workspaceId).generatePlans();
+      const data = await agentService(workspaceId).generatePlans(selectedModelId ?? undefined);
       const planList = Array.isArray(data)
         ? data
         : ((data as { results?: MarketingPlan[] }).results ?? []);
@@ -307,7 +309,10 @@ export default function AgentModeSection() {
 
     setPhase("c-generating");
     try {
-      await agentService(workspaceId).generateFromPlan(selectedPlan.id);
+      await agentService(workspaceId).generateFromPlan(
+        selectedPlan.id,
+        selectedModelId ?? undefined
+      );
       // 202 queued — poll until the plan's draft posts appear
       setGeneratedPlanId(selectedPlan.id);
       setPhase("c-polling");
@@ -348,12 +353,14 @@ export default function AgentModeSection() {
         title="Agent Mode"
         width="3xl"
         disableBackdropClose
+        minHeight="480px"
+        bodyClassName="flex flex-col"
       >
         <StepBar current={currentStep as "a" | "b" | "c"} />
 
         {/* ── Phase A: Loading ── */}
         {phase === "a-loading" && (
-          <div className="flex flex-col items-center gap-3 py-10">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
             <LuLoader className="h-8 w-8 animate-spin text-blue-500" />
             <p className="text-sm text-gray-500">Checking LinkedIn profile…</p>
           </div>
@@ -401,7 +408,7 @@ export default function AgentModeSection() {
 
         {/* ── Phase A: Polling ── */}
         {phase === "a-polling" && (
-          <div className="flex flex-col items-center gap-3 rounded-xl bg-blue-50 py-10">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl bg-blue-50 py-10">
             <LuLoader className="h-8 w-8 animate-spin text-blue-500" />
             <p className="text-sm font-medium text-gray-700">
               {profile?.status === "fetching"
@@ -450,114 +457,122 @@ export default function AgentModeSection() {
 
         {/* ── Phase A: Ready ── */}
         {phase === "a-ready" && (
-          <div className="space-y-3">
-            {/* Profile list */}
-            {profiles.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100">
-                  <LuUser className="h-4 w-4 text-teal-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-gray-900">{p.name ?? "Profile ready"}</p>
-                  {p.headline && <p className="truncate text-xs text-gray-500">{p.headline}</p>}
-                  <p className="truncate text-xs text-blue-600">{p.url}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <LuCheck className="h-4 w-4 text-teal-500" strokeWidth={2.5} />
-                  <button
-                    onClick={() => setDeleteTarget(p)}
-                    className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
-                  >
-                    <LuTrash2 className="h-3 w-3" />
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
+          <>
+            {/* Spacer pushes controls to the bottom */}
+            <div className="flex-1" />
 
-            {/* Inline delete confirm */}
-            {deleteTarget && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
-                <p className="text-sm font-medium text-red-800">
-                  Remove{" "}
-                  <span className="font-semibold">{deleteTarget.name || deleteTarget.url}</span>?
-                </p>
-                <p className="mt-0.5 text-xs text-red-500">This action cannot be undone.</p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => setDeleteTarget(null)}
-                    disabled={isDeleting}
-                    className="flex-1 rounded-lg border border-gray-200 bg-white py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleDeleteProfile}
-                    disabled={isDeleting}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {isDeleting ? (
-                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <LuTrash2 className="h-3.5 w-3.5" />
-                    )}
-                    {isDeleting ? "Removing…" : "Yes, remove"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Add another profile URL */}
-            {!deleteTarget && (
-              <div className="space-y-2 pt-1">
-                <div className="relative">
-                  <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="url"
-                    value={profileUrl}
-                    onChange={(e) => setProfileUrl(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSubmitProfile();
-                    }}
-                    placeholder="Add another profile URL (optional)"
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {profileUrl.trim() && (
+            <div className="space-y-3">
+              {/* Profile list */}
+              {profiles.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-100">
+                    <LuUser className="h-4 w-4 text-teal-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {p.name ?? "Profile ready"}
+                    </p>
+                    {p.headline && <p className="truncate text-xs text-gray-500">{p.headline}</p>}
+                    <p className="truncate text-xs text-blue-600">{p.url}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <LuCheck className="h-4 w-4 text-teal-500" strokeWidth={2.5} />
                     <button
-                      onClick={handleSubmitProfile}
-                      disabled={profileLoading}
-                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                      onClick={() => setDeleteTarget(p)}
+                      className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
                     >
-                      {profileLoading ? (
+                      <LuTrash2 className="h-3 w-3" />
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Inline delete confirm */}
+              {deleteTarget && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
+                  <p className="text-sm font-medium text-red-800">
+                    Remove{" "}
+                    <span className="font-semibold">{deleteTarget.name || deleteTarget.url}</span>?
+                  </p>
+                  <p className="mt-0.5 text-xs text-red-500">This action cannot be undone.</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => setDeleteTarget(null)}
+                      disabled={isDeleting}
+                      className="flex-1 rounded-lg border border-gray-200 bg-white py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteProfile}
+                      disabled={isDeleting}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {isDeleting ? (
                         <LuLoader className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <LuArrowRight className="h-3.5 w-3.5" />
+                        <LuTrash2 className="h-3.5 w-3.5" />
                       )}
-                      Add
+                      {isDeleting ? "Removing…" : "Yes, remove"}
                     </button>
-                  )}
-                  <button
-                    onClick={handleGeneratePlans}
-                    disabled={profileLoading}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    <LuSparkles className="h-4 w-4" />
-                    Generate Marketing Plans
-                  </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+
+              {/* Add another profile URL */}
+              {!deleteTarget && (
+                <div className="space-y-2 pt-1">
+                  <div className="relative">
+                    <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="url"
+                      value={profileUrl}
+                      onChange={(e) => setProfileUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSubmitProfile();
+                      }}
+                      placeholder="Add another profile URL (optional)"
+                      className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {profileUrl.trim() && (
+                      <button
+                        onClick={handleSubmitProfile}
+                        disabled={profileLoading}
+                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {profileLoading ? (
+                          <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <LuArrowRight className="h-3.5 w-3.5" />
+                        )}
+                        Add
+                      </button>
+                    )}
+                    <button
+                      onClick={handleGeneratePlans}
+                      disabled={profileLoading}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <LuSparkles className="h-4 w-4" />
+                      Generate Marketing Plans
+                    </button>
+                    <ModelSwitcher dropUp />
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* ── Phase B: Generating plans ── */}
         {phase === "b-generating" && (
-          <div className="flex flex-col items-center gap-3 py-10">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
             <LuLoader className="h-8 w-8 animate-spin text-blue-500" />
             <p className="text-sm text-gray-500">Building your content marketing plans…</p>
             <p className="text-xs text-gray-400">Analyzing your profile and knowledge base.</p>
@@ -666,7 +681,7 @@ export default function AgentModeSection() {
                 );
               })}
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={handleGeneratePlans}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
@@ -674,6 +689,7 @@ export default function AgentModeSection() {
                 <LuRefreshCw className="h-3.5 w-3.5" />
                 Regenerate
               </button>
+              <ModelSwitcher dropUp />
               <button
                 onClick={handleGenerateFromPlan}
                 disabled={!selectedPlan}
@@ -688,7 +704,7 @@ export default function AgentModeSection() {
 
         {/* ── Phase C: Queuing ── */}
         {phase === "c-generating" && (
-          <div className="flex flex-col items-center gap-3 py-10">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10">
             <LuLoader className="h-7 w-7 animate-spin text-blue-500" />
             <p className="text-sm text-gray-500">Sending to queue…</p>
           </div>
@@ -696,7 +712,7 @@ export default function AgentModeSection() {
 
         {/* ── Phase C: Polling for posts ── */}
         {phase === "c-polling" && (
-          <div className="flex flex-col items-center gap-5 py-10">
+          <div className="flex flex-1 flex-col items-center justify-center gap-5 py-10">
             {/* Ring spinner */}
             <div className="relative flex h-20 w-20 items-center justify-center">
               <div className="absolute inset-0 rounded-full border-4 border-blue-100" />

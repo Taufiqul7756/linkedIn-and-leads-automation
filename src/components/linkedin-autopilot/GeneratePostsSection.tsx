@@ -12,6 +12,7 @@ import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import AddUrlModal from "./AddUrlModal";
+import ModelSwitcher, { useSelectedModel } from "./ModelSwitcher";
 
 const TONE_OPTIONS = [
   { value: "professional", label: "Professional" },
@@ -45,6 +46,7 @@ export default function GeneratePostsSection() {
   const [length, setLength] = useState<Length>("Medium");
   const [contentStyle, setContentStyle] = useState("Thought leadership");
   const [prompt, setPrompt] = useState("");
+  const selectedModelId = useSelectedModel();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [promptError, setPromptError] = useState<{
     prompt: string;
@@ -82,6 +84,7 @@ export default function GeneratePostsSection() {
         use_emoji: useEmoji,
         use_ai_image: true,
         count: postCount as number,
+        ...(selectedModelId ? { writer_model: selectedModelId } : {}),
       };
       const trimmedUrl = url.trim();
       return trimmedUrl
@@ -376,17 +379,20 @@ export default function GeneratePostsSection() {
           <p className="text-xs text-gray-400">
             Posts are generated as drafts and won&apos;t publish until you approve them.
           </p>
-          <button
-            onClick={handleGenerate}
-            disabled={generateMutation.isPending || postCount === ""}
-            className={cn(
-              "flex items-center gap-2 self-start rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:self-auto",
-              !canAct && "opacity-50"
-            )}
-          >
-            <LuArrowRight className="h-4 w-4" />
-            {generateMutation.isPending ? "Generating…" : "Generate"}
-          </button>
+          <div className="flex items-center gap-2">
+            <ModelSwitcher />
+            <button
+              onClick={handleGenerate}
+              disabled={generateMutation.isPending || postCount === ""}
+              className={cn(
+                "flex items-center gap-2 self-start rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:self-auto",
+                !canAct && "opacity-50"
+              )}
+            >
+              <LuArrowRight className="h-4 w-4" />
+              {generateMutation.isPending ? "Generating…" : "Generate"}
+            </button>
+          </div>
         </div>
       </div>
 
