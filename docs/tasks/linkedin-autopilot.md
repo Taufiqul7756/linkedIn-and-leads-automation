@@ -32,8 +32,15 @@
 - [x] User avatar with logout dropdown (POST `/auth/logout/`, clears localStorage, redirects to `/login`)
 
 ### Page Header
-- [x] LinkedIn icon + title + subtitle
-- [x] No header action buttons (Calendar + Generate Posts removed)
+- [x] ~~LinkedIn icon + title + subtitle~~ — **removed** (PageHeader component deleted)
+
+### Setup Stepper
+- [x] `src/components/linkedin-autopilot/SetupStepper.tsx` — 5-step horizontal progress bar
+- [x] Step 1 (LinkedIn Connect) — completion driven by `account.connected`; opens `LinkedInManageModal`
+- [x] Step 2 (Profile URL) — completion driven by `["linkedin-profiles",workspaceId]`; checks for any `status === "ready"` profile
+- [x] Steps 3–5 (Knowledge / Tune / Style) — always pending (API TBD); open `KnowledgeUploadModal` with correct type pre-selected
+- [x] `src/components/linkedin-autopilot/ProfileUrlModal.tsx` — full profile list (ready/pending/error states), add URL, inline delete confirm, per-profile polling, invalidates `["linkedin-profiles",workspaceId]` on ready
+- [x] `src/components/linkedin-autopilot/KnowledgeUploadModal.tsx` — unified modal: type dropdown, PDF upload, URL input, items list with type badges
 
 ### Account & Knowledge Base Section
 - [x] LinkedIn account card (Connected status, Manage button → LinkedInManageModal)
@@ -173,14 +180,45 @@ All service files must prefix endpoints with `/workspaces/${workspaceId}/` using
 ### React Query cache invalidation on workspace switch
 - [ ] On `setActiveWorkspace()` → call `queryClient.invalidateQueries()` to clear all cached data
 
-## Phase 7 — Future
+## Phase 7 — Agent Mode & Model Switcher ✅
+
+### Types & Services
+- [x] `src/types/Agent.ts` — `LinkedInProfile`, `MarketingPlan`
+- [x] `src/types/AIModel.ts` — `AIModel`
+- [x] `src/service/agentService.ts` — `getProfiles`, `createProfile({profile_url})`, `getProfile`, `refetchProfile`, `deleteProfile`, `generatePlans(writerModel?)`, `generateFromPlan(planId, writerModel?)`
+- [x] `src/service/aiModelService.ts` — `getModels()` → `GET /ai-models/`
+- [x] `src/service/postsService.ts` — added `getDraftsByPlan(planId)`
+- [x] `src/types/Post.ts` — added `writer_model?` to `GeneratePostsBody`
+
+### Model Switcher
+- [x] `src/components/linkedin-autopilot/ModelSwitcher.tsx` — fetches models, click-outside dropdown, radio-style selection, stores `model_id` in `["selected-model"]` cache
+- [x] `useSelectedModel()` hook exported from `ModelSwitcher.tsx`
+- [x] Placed in `GeneratePostsSection` bottom bar (next to Generate button)
+- [x] Placed in `AgentModeSection` a-ready phase (before Generate Marketing Plans)
+- [x] Placed in `AgentModeSection` b-select action row (before Generate Posts)
+- [x] `writer_model` passed to `generatePosts`, `generatePostsFromLink`, `generatePlans`, `generateFromPlan`
+- [x] `Modal.tsx` — added `"3xl": "max-w-3xl"` width + `disableBackdropClose` prop
+
+### Agent Mode
+- [x] `src/components/linkedin-autopilot/AgentModeSection.tsx` — full 3-phase modal
+- [x] Phase A: load profiles, URL submit, polling (3s), ready/error states, profile list with Remove + inline delete confirm, add-another URL
+- [x] Phase B: generate plans, 3-column plan cards (title/angle/target_audience/pillars/sample_hooks), select + regenerate
+- [x] Phase C: generate from plan, poll for drafts (2.5s), hand off image polling via `["posts-generating"]` flag, auto-close after 2s
+- [x] Mounted in `src/app/linkedin-autopilot/page.tsx` between SetupStepper and AccountSection
+
+### Setup Stepper — Step 2 Live
+- [x] `SetupStepper.tsx` — fetches `["linkedin-profiles",workspaceId]` via `agentService`
+- [x] Step 2 marked done when any profile `status === "ready"`
+- [x] `ProfileUrlModal.tsx` invalidates `["linkedin-profiles",workspaceId]` when profile polling reaches `ready`
+
+## Phase 8 — Future
 
 - [ ] Website crawler + knowledge base API
 - [ ] Real-time agent status polling (WebSocket)
 - [ ] Calendar view page
 - [ ] Bulk delete confirmation modal
-- [ ] Run Agent API call
 - [ ] Regenerate Post API wired (modal exists, API now available)
 - [ ] Refresh metrics button per post
 - [ ] Image removal via PATCH (backend support needed)
 - [ ] Hashtag PATCH (backend fixing)
+- [ ] Setup Stepper steps 3–5 completion tracking (Knowledge / Tune / Style APIs)

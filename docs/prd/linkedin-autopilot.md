@@ -18,10 +18,25 @@ Give users a fully automated LinkedIn content pipeline with a single human appro
 
 ## Sections
 
-### 1. Page Header
-- Title: "LinkedIn Autopilot" with LinkedIn icon
-- Subtitle: "Generate on-brand posts from your website, approve, schedule, and auto-publish."
-- No header action buttons
+### 1. Setup Stepper
+Horizontal progress bar at the top of the page showing 5 onboarding steps. Each step is clickable and opens its corresponding modal.
+
+| # | Label | Completion | Modal |
+|---|-------|-----------|-------|
+| 1 | LinkedIn Connect | `account.connected === true` | `LinkedInManageModal` |
+| 2 | Profile URL | any profile with `status === "ready"` via `GET /linkedin/profiles/` | `ProfileUrlModal` |
+| 3 | Knowledge | API coming later | `KnowledgeUploadModal` (pre-selects "knowledge") |
+| 4 | Tune | API coming later | `KnowledgeUploadModal` (pre-selects "tune") |
+| 5 | Style Upload | API coming later | `KnowledgeUploadModal` (pre-selects "style") |
+
+- Done → teal filled circle with checkmark + teal connector line
+- Active (first incomplete) → blue outlined circle
+- Pending → gray circle + gray connector line
+- Component: `src/components/linkedin-autopilot/SetupStepper.tsx`
+
+**Modals:**
+- `ProfileUrlModal` — lists existing profiles (teal=ready, blue+spinner=pending/fetching, red=error+Retry button), inline delete confirm per profile, add URL input, per-profile polling via setInterval. On `ready`, invalidates `["linkedin-profiles", workspaceId]` → stepper auto-updates.
+- `KnowledgeUploadModal` — type selector (Knowledge/Tune/Style), PDF upload (drag & drop), URL input, uploaded items list with type badge
 
 ### 2. Account & Knowledge Base
 - **LinkedIn account card**: Shows connection status (Connected/Disconnected), authorized user, OAuth scope.
@@ -79,7 +94,35 @@ Give users a fully automated LinkedIn content pipeline with a single human appro
 - Three-dot dropdown: **View** → ViewPostModal · **Delete** → DeleteConfirmModal → `DELETE /workspaces/{workspace_pk}/content/posts/{id}/`
 - APIs: `GET /workspaces/{workspace_pk}/content/posts/?page_size=N&page=N&status=X&exclude_status=draft`
 
-### 6. Autopilot Agent Workflow
+### 6. Agent Mode
+Blue banner above AccountSection. "Run Agent" button opens a 3-phase modal (`width="3xl"`, backdrop close disabled).
+
+**Phase A — LinkedIn Profile**
+- Loads existing profiles on open. If none: URL input form. If pending/fetching: spinner with polling (3s). If error: error banner + Retry + Change URL.
+- a-ready: content is pinned to the **bottom** of the modal (modal body is `flex flex-col` with `minHeight 480px`; a `flex-1` spacer fills the top). Bottom layout: profile list cards → inline delete confirm → add-another URL input → action row. Action row order: "Generate Marketing Plans" button (primary, flex-1) → ModelSwitcher (dropUp — opens upward to avoid overflow clipping).
+
+**Phase B — Marketing Plans**
+- Calls `POST /workspaces/{id}/content/plans/` with optional `{ writer_model }`. Shows spinner while generating.
+- Displays 3 plan cards in a 3-column grid — each shows: title, angle, target_audience, content pillars (bullet list), sample_hooks[0] (italic quote). One card selected at a time.
+- Action row: Regenerate | ModelSwitcher | Generate Posts.
+
+**Phase C — Generate Posts**
+- Calls `POST /workspaces/{id}/content/plans/{id}/generate/` with optional `{ writer_model }`. API returns 202 queued.
+- Polls `GET /content/posts/?plan={planId}&status=draft` every 2.5s. When posts appear: sets `["posts-generating"]` flag → ReviewApprovalSection handles image polling. Phase shows ring spinner + bouncing dots.
+- On completion: "Posts created!" success state → modal auto-closes after 2s.
+
+**StepBar** — shows A/B/C with done (teal), active (blue), pending (gray) states.
+
+### 7. Model Switcher
+Dropdown component `ModelSwitcher` that fetches available AI models and lets users pick which model generates content.
+
+- Data: `GET /api/v1/ai-models/` → `[{ model_id, label, provider, is_default }]`
+- Selection stored in React Query cache at `["selected-model"]` (global, no workspaceId)
+- `useSelectedModel()` hook exported from `ModelSwitcher.tsx` — reads `["selected-model"]`
+- Appears in: GeneratePostsSection bottom bar, AgentModeSection a-ready phase, AgentModeSection b-select action row
+- `writer_model` sent to: `POST /content/posts/generate/`, `POST /content/posts/generate_from_link/`, `POST /content/plans/`, `POST /content/plans/{id}/generate/`
+
+### 8. Autopilot Agent Workflow (UI-only)
 - Live status indicator
 - Orchestrator banner: coordinating status, agents active, posts in flight, gate needs-you count
 - 7 agent cards in 4+3 grid (Connector, Knowledge, Generator, Review Gate, Scheduler, Publisher, Analytics)
@@ -90,7 +133,9 @@ Give users a fully automated LinkedIn content pipeline with a single human appro
 
 | Modal | Trigger | Content |
 | --- | --- | --- |
-| `LinkedInManageModal` | Manage button | Connected account info, Connect, Disconnect |
+| `LinkedInManageModal` | Manage button / Stepper step 1 | Connected account info, Connect, Disconnect |
+| `ProfileUrlModal` | Stepper step 2 | Profile list (ready/pending/error), add URL, inline delete confirm, polling |
+| `KnowledgeUploadModal` | Stepper steps 3–5 | Type selector (Knowledge/Tune/Style), PDF upload, URL add, items list with type badges |
 | `KnowledgeBaseUploadModal` | Add sources button | Drag-and-drop PDF/DOC/DOCX + textarea |
 | `ScheduleModal` | Schedule / Reschedule | Date + time + timezone; `onConfirm(scheduledAt)` |
 | `EditPostModal` | Edit button | Content textarea + image upload + hashtags |
@@ -126,7 +171,7 @@ All endpoints prefixed with `/api/v1/workspaces/{workspace_pk}/`
 | GET | `.../content/posts/?status=draft` | Draft posts list |
 | GET | `.../content/posts/?exclude_status=draft&page=N&page_size=N` | Post management table |
 | GET | `.../content/posts/{id}/` | View single post |
-| POST | `.../content/posts/generate/` | Generate posts (no scope in body) |
+| POST | `.../content/posts/generate/` | Generate posts (`{ ..., writer_model? }`) |
 | POST | `.../content/posts/suggest_prompts/` | Prompt suggestions |
 | POST | `.../content/posts/{id}/approve/` | Approve draft |
 | POST | `.../content/posts/{id}/schedule/` | Schedule post |
@@ -153,11 +198,29 @@ Top-level (unchanged):
 | POST | `/api/v1/auth/logout/` | Sign out |
 | GET | `/api/v1/linkedin/callback/` | OAuth callback (workspace from signed state) |
 
+## Agent Mode — API Endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `.../linkedin/profiles/` | List LinkedIn profiles |
+| POST | `.../linkedin/profiles/` | Create profile (`{ profile_url }`) |
+| GET | `.../linkedin/profiles/{id}/` | Get single profile (for polling) |
+| POST | `.../linkedin/profiles/{id}/refetch/` | Retry failed profile fetch |
+| DELETE | `.../linkedin/profiles/{id}/` | Delete profile |
+| POST | `.../content/plans/` | Generate marketing plans (`{ writer_model? }`) |
+| POST | `.../content/plans/{id}/generate/` | Generate posts from plan (`{ writer_model? }`) |
+| GET | `.../content/posts/?plan={id}&status=draft` | Poll for plan's draft posts |
+
+Top-level:
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/v1/ai-models/` | List available AI models |
+
 ## Out of Scope (remaining)
 
 - Real-time agent status polling (WebSocket)
 - Calendar view
 - Bulk delete confirmation modal
-- Run Agent API call
 - Image removal via PATCH
 - Hashtag PATCH (backend fixing)
+- Steps 3–5 completion tracking (Knowledge / Tune / Style)

@@ -2,11 +2,12 @@
 import { useEffect, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useWorkspace } from "@/context/WorkspaceContext";
-import PageHeader from "@/components/linkedin-autopilot/PageHeader";
+import SetupStepper from "@/components/linkedin-autopilot/SetupStepper";
 import AccountSection from "@/components/linkedin-autopilot/AccountSection";
 import GeneratePostsSection from "@/components/linkedin-autopilot/GeneratePostsSection";
 import ReviewApprovalSection from "@/components/linkedin-autopilot/ReviewApprovalSection";
 import PostManagementSection from "@/components/linkedin-autopilot/PostManagementSection";
+import AgentModeSection from "@/components/linkedin-autopilot/AgentModeSection";
 import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowSection";
 
 // Syncs ?workspace=<id> from URL into WorkspaceContext on page load
@@ -50,7 +51,8 @@ export default function LinkedInAutopilotPage() {
         <Suspense fallback={null}>
           <WorkspaceUrlSync />
         </Suspense>
-        <PageHeader />
+        <SetupStepper />
+        <AgentModeSection />
         <Suspense fallback={null}>
           <AccountSection />
         </Suspense>

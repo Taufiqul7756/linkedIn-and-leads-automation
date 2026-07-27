@@ -7,8 +7,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
-  width?: "sm" | "md" | "lg" | "xl" | "2xl";
+  width?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl";
   disableBackdropClose?: boolean;
+  minHeight?: string;
+  bodyClassName?: string;
 }
 
 const widthClass = {
@@ -17,6 +19,7 @@ const widthClass = {
   lg: "max-w-lg",
   xl: "max-w-xl",
   "2xl": "max-w-2xl",
+  "3xl": "max-w-3xl",
 };
 
 export default function Modal({
@@ -26,6 +29,8 @@ export default function Modal({
   children,
   width = "md",
   disableBackdropClose = false,
+  minHeight,
+  bodyClassName,
 }: ModalProps) {
   useEffect(() => {
     if (!isOpen || disableBackdropClose) return;
@@ -62,7 +67,12 @@ export default function Modal({
         </div>
 
         {/* Body — scrollable */}
-        <div className="overflow-y-auto px-6 py-5">{children}</div>
+        <div
+          className={`overflow-y-auto px-6 py-5${bodyClassName ? ` ${bodyClassName}` : ""}`}
+          style={minHeight ? { minHeight } : undefined}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

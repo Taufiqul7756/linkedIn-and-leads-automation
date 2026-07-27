@@ -48,16 +48,26 @@ export type PaginatedPosts = {
 };
 
 export type GeneratePostsBody = {
+  url?: string;
   prompt: string;
   tone: string;
   length: string;
   content_style: string;
   use_emoji: boolean;
+  use_ai_image: boolean;
   count: number;
+  writer_model?: string;
 };
 
 export type GeneratePostsResponse = {
+  id: string;
+  url: string;
   status: string;
+  title: string;
+  summary: string;
+  knowledge_items: string;
+  error: string;
+  created_at: string;
 };
 
 export type RegeneratePostBody = {
