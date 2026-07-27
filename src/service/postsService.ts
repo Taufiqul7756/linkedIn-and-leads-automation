@@ -55,6 +55,8 @@ export const postsService = (workspaceId: string) => ({
       `/workspaces/${workspaceId}/content/posts/generate_from_link/`,
       body
     ),
+  getDraftsByPlan: (planId: string) =>
+    get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?plan=${planId}&status=draft`),
   suggestPrompts: (body: SuggestPromptsBody) =>
     post<SuggestPromptsResponse>(`/workspaces/${workspaceId}/content/posts/suggest_prompts/`, body),
 });

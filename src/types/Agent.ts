@@ -11,16 +11,14 @@ export type LinkedInProfile = {
 
 export type MarketingPlan = {
   id: string;
+  batch: string;
+  linkedin_profile: string;
   title: string;
-  description: string;
-  themes: string[];
+  angle: string;
+  target_audience: string;
+  rationale: string;
+  pillars: string[];
+  sample_hooks: string[];
+  cadence: string;
   created_at: string;
-};
-
-export type GenerateFromPlanBody = {
-  count: number;
-  tone: string;
-  length: string;
-  use_emoji: boolean;
-  use_ai_image: boolean;
 };
