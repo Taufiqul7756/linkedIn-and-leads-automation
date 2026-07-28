@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     email?: string;
@@ -27,8 +28,12 @@ export default function RegisterPage() {
   }>({});
 
   const registerMutation = useMutation({
-    mutationFn: (data: { email: string; username: string; password: string }) =>
-      authService().register(data),
+    mutationFn: (data: {
+      email: string;
+      username: string;
+      password: string;
+      linkedin_profile_url?: string;
+    }) => authService().register(data),
     onSuccess: (data: LoginResponse) => {
       login(data);
       toast.success("Account created!");
@@ -52,7 +57,10 @@ export default function RegisterPage() {
       return;
     }
     setFieldErrors({});
-    registerMutation.mutate(result.data);
+    registerMutation.mutate({
+      ...result.data,
+      ...(linkedinUrl.trim() ? { linkedin_profile_url: linkedinUrl.trim() } : {}),
+    });
   };
 
   return (
@@ -157,6 +165,29 @@ export default function RegisterPage() {
               {fieldErrors.password && (
                 <p className="mt-1.5 text-xs text-red-500">{fieldErrors.password}</p>
               )}
+            </div>
+
+            {/* LinkedIn URL — optional */}
+            <div>
+              <label
+                htmlFor="linkedin-url"
+                className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"
+              >
+                <FaLinkedinIn className="h-3.5 w-3.5 text-blue-600" />
+                LinkedIn Profile URL
+                <span className="text-xs font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="linkedin-url"
+                type="url"
+                placeholder="https://www.linkedin.com/in/yourname"
+                value={linkedinUrl}
+                onChange={(e) => setLinkedinUrl(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Relay uses this to personalise content to your voice.
+              </p>
             </div>
 
             {/* Submit */}

@@ -3,6 +3,7 @@ export type DocumentType = {
   file: string;
   scope: "corporate" | "personal";
   filename: string;
+  purpose: "knowledge" | "tone" | "style";
   status: "pending" | "processing" | "extracting" | "ready" | "error";
   num_pages: number | null;
   summary: string;

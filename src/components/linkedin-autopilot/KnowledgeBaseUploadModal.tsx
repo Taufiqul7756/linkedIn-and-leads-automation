@@ -103,7 +103,7 @@ export default function KnowledgeBaseUploadModal({
     setIsUploading(true);
     try {
       const results = await Promise.all(
-        files.map((f) => documentService(workspaceId).uploadDocument(f))
+        files.map((f) => documentService(workspaceId).uploadDocument(f, "knowledge"))
       );
       const failed = results.filter((r) => !r).length;
       if (failed === 0) {

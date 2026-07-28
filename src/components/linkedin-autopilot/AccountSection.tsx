@@ -3,18 +3,18 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { FaLinkedinIn } from "react-icons/fa";
-import { LuGlobe, LuUpload, LuLink, LuRefreshCw } from "react-icons/lu";
+import { LuGlobe, LuUpload, LuRefreshCw } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { linkedinService } from "@/service/linkedinService";
 import { postsService } from "@/service/postsService";
 import { websiteService } from "@/service/websiteService";
+import { documentService } from "@/service/documentService";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { PostStatsType } from "@/types/Post";
 import LinkedInManageModal from "./LinkedInManageModal";
-import KnowledgeBaseUploadModal from "./KnowledgeBaseUploadModal";
-import AddUrlModal from "./AddUrlModal";
+import KnowledgeUploadModal from "./KnowledgeUploadModal";
 
 function formatNextScheduled(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -57,8 +57,7 @@ function buildStatCards(stats: PostStatsType | undefined) {
 
 export default function AccountSection() {
   const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
-  const [kbUploadModalOpen, setKbUploadModalOpen] = useState(false);
-  const [addUrlModalOpen, setAddUrlModalOpen] = useState(false);
+  const [sourcesModalOpen, setSourcesModalOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
@@ -152,6 +151,14 @@ export default function AccountSection() {
   );
   const website = websites?.results?.[0];
 
+  // Fetch uploaded documents
+  const { data: documents } = useQueryWithTokenRefresh(
+    ["documents", workspaceId],
+    () => documentService(workspaceId).getDocuments(),
+    { enabled: !!workspaceId }
+  );
+  const docCount = documents?.results?.length ?? 0;
+
   // Fetch post stats
   const { data: postStats } = useQueryWithTokenRefresh(
     ["post-stats", workspaceId],
@@ -237,36 +244,38 @@ export default function AccountSection() {
           </button>
         </div>
 
-        {/* Website knowledge base */}
+        {/* Knowledge base */}
         <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100">
             <LuGlobe className="h-5 w-5 text-violet-600" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-900">Website knowledge base</span>
+              <span className="text-sm font-semibold text-gray-900">Knowledge base</span>
               {websiteStatusBadge()}
             </div>
             <p className="mt-0.5 text-xs text-gray-500">
               {websitesLoading ? (
                 "Loading..."
               ) : website ? (
-                <span className="text-blue-600">{website.url}</span>
-              ) : (
-                "No website added yet"
-              )}
+                <>
+                  <span className="text-blue-600">{website.url}</span>
+                  {docCount > 0 && (
+                    <span className="ml-2 text-gray-400">
+                      · {docCount} document{docCount > 1 ? "s" : ""} uploaded
+                    </span>
+                  )}
+                </>
+              ) : docCount > 0 ? (
+                <span className="text-violet-600">
+                  {docCount} document{docCount > 1 ? "s" : ""} uploaded
+                </span>
+              ) : null}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <button
-              onClick={() => setAddUrlModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <LuLink className="h-3.5 w-3.5" />
-              Add URL
-            </button>
-            <button
-              onClick={() => setKbUploadModalOpen(true)}
+              onClick={() => setSourcesModalOpen(true)}
               className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
             >
               <LuUpload className="h-3.5 w-3.5" />
@@ -330,11 +339,7 @@ export default function AccountSection() {
         onDisconnect={handleDisconnect}
         isDisconnecting={isDisconnecting}
       />
-      <KnowledgeBaseUploadModal
-        isOpen={kbUploadModalOpen}
-        onClose={() => setKbUploadModalOpen(false)}
-      />
-      <AddUrlModal isOpen={addUrlModalOpen} onClose={() => setAddUrlModalOpen(false)} />
+      <KnowledgeUploadModal isOpen={sourcesModalOpen} onClose={() => setSourcesModalOpen(false)} />
     </div>
   );
 }

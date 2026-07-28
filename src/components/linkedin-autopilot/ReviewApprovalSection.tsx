@@ -196,6 +196,7 @@ export default function ReviewApprovalSection() {
     {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         toast.success("Post approved!");
         setApprovingId(null);

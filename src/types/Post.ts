@@ -57,6 +57,9 @@ export type GeneratePostsBody = {
   use_ai_image: boolean;
   count: number;
   writer_model?: string;
+  documents?: string[];
+  tone_document?: string;
+  style_document?: string;
 };
 
 export type GeneratePostsResponse = {

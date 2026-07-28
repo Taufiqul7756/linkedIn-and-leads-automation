@@ -18,6 +18,7 @@ export const authService = () => ({
     email: string;
     username: string;
     password: string;
+    linkedin_profile_url?: string;
   }): Promise<LoginResponse> => {
     const response = await authApi.post<LoginResponse>("/auth/register/", data);
     return response.data;

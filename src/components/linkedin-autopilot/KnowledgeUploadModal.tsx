@@ -1,7 +1,14 @@
 "use client";
 import { useState, useRef } from "react";
 import Modal from "@/components/ui/Modal";
-import { LuUpload, LuLink, LuX, LuFileText } from "react-icons/lu";
+import { LuUpload, LuLink, LuX, LuFileText, LuLoader, LuTrash2 } from "react-icons/lu";
+import toast from "react-hot-toast";
+import { useWorkspace } from "@/context/WorkspaceContext";
+import { documentService } from "@/service/documentService";
+import { extractErrorMessage } from "@/utils/extractErrorMessage";
+import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
+import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
+import { useQueryClient } from "@tanstack/react-query";
 
 type SourceType = "knowledge" | "tune" | "style";
 
@@ -10,6 +17,7 @@ interface UploadedItem {
   name: string;
   kind: "file" | "url";
   type: SourceType;
+  file?: File;
 }
 
 interface KnowledgeUploadModalProps {
@@ -20,7 +28,7 @@ interface KnowledgeUploadModalProps {
 
 const TYPE_LABELS: Record<SourceType, string> = {
   knowledge: "Knowledge",
-  tune: "Tune",
+  tune: "Tone",
   style: "Style",
 };
 
@@ -35,11 +43,38 @@ export default function KnowledgeUploadModal({
   onClose,
   initialType = "knowledge",
 }: KnowledgeUploadModalProps) {
+  const { activeWorkspace } = useWorkspace();
+  const workspaceId = activeWorkspace?.id ?? "";
+  const queryClient = useQueryClient();
+
   const [selectedType, setSelectedType] = useState<SourceType>(initialType);
   const [urlInput, setUrlInput] = useState("");
   const [items, setItems] = useState<UploadedItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: existingDocs, isLoading: docsLoading } = useQueryWithTokenRefresh(
+    ["documents", workspaceId],
+    () => documentService(workspaceId).getDocuments(),
+    { enabled: !!workspaceId && isOpen }
+  );
+
+  const deleteMutation = useMutationWithTokenRefresh(
+    (id: string) => documentService(workspaceId).deleteDocument(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["documents", workspaceId] });
+        toast.success("Document removed.");
+        setDeletingId(null);
+      },
+      onError: (err: unknown) => {
+        toast.error(extractErrorMessage(err));
+        setDeletingId(null);
+      },
+    }
+  );
 
   // Reset initialType when modal opens with a different step
   // (handled via key prop on parent — no useEffect needed)
@@ -47,9 +82,8 @@ export default function KnowledgeUploadModal({
   const addFile = (file: File) => {
     setItems((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), name: file.name, kind: "file", type: selectedType },
+      { id: crypto.randomUUID(), name: file.name, kind: "file", type: selectedType, file },
     ]);
-    // API will come
   };
 
   const addUrl = () => {
@@ -165,6 +199,54 @@ export default function KnowledgeUploadModal({
         </div>
       </div>
 
+      {/* Existing uploaded documents */}
+      {(docsLoading || (existingDocs?.results?.length ?? 0) > 0) && (
+        <div className="mb-5">
+          <p className="mb-2 text-sm font-medium text-gray-700">Uploaded documents</p>
+          {docsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <LuLoader className="h-3.5 w-3.5 animate-spin" />
+              Loading…
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {existingDocs!.results.map((doc) => {
+                const purposeKey = doc.purpose === "tone" ? "tune" : doc.purpose;
+                return (
+                  <li
+                    key={doc.id}
+                    className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+                  >
+                    <LuFileText className="h-4 w-4 shrink-0 text-gray-400" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
+                      {doc.filename}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${TYPE_STYLES[purposeKey as SourceType]}`}
+                    >
+                      {TYPE_LABELS[purposeKey as SourceType]}
+                    </span>
+                    {deletingId === doc.id ? (
+                      <LuLoader className="h-4 w-4 shrink-0 animate-spin text-gray-400" />
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setDeletingId(doc.id);
+                          deleteMutation.mutate(doc.id);
+                        }}
+                        className="shrink-0 text-gray-300 transition-colors hover:text-red-400"
+                      >
+                        <LuTrash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Items list */}
       {items.length > 0 && (
         <div className="mb-5">
@@ -206,11 +288,49 @@ export default function KnowledgeUploadModal({
           Cancel
         </button>
         <button
-          onClick={onClose}
-          disabled={items.length === 0}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          onClick={async () => {
+            if (!workspaceId || isSaving) return;
+            setIsSaving(true);
+            try {
+              const fileItems = items.filter((i) => i.kind === "file" && i.file);
+              const urlItems = items.filter((i) => i.kind === "url");
+
+              // Upload each PDF
+              await Promise.all(
+                fileItems.map((item) => {
+                  const purpose =
+                    item.type === "tune" ? "tone" : (item.type as "knowledge" | "tone" | "style");
+                  return documentService(workspaceId).uploadDocument(item.file!, purpose);
+                })
+              );
+
+              // URL items — log for now until API is ready
+              if (urlItems.length > 0) {
+                console.log(
+                  "URL sources (pending API):",
+                  urlItems.map((i) => ({ url: i.name, type: i.type === "tune" ? "tone" : i.type }))
+                );
+              }
+
+              queryClient.invalidateQueries({ queryKey: ["documents", workspaceId] });
+              toast.success(
+                fileItems.length > 0
+                  ? `${fileItems.length} document${fileItems.length > 1 ? "s" : ""} uploaded successfully.`
+                  : "Sources saved."
+              );
+              setItems([]);
+              onClose();
+            } catch (err) {
+              toast.error(extractErrorMessage(err));
+            } finally {
+              setIsSaving(false);
+            }
+          }}
+          disabled={items.length === 0 || isSaving}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
-          Save sources
+          {isSaving && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+          {isSaving ? "Uploading…" : "Save sources"}
         </button>
       </div>
     </Modal>

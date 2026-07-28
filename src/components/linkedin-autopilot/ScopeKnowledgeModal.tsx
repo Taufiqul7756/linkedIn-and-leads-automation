@@ -202,7 +202,9 @@ export default function ScopeKnowledgeModal({ isOpen, onClose, scope }: ScopeKno
     if (files.length === 0) return;
     setIsUploading(true);
     try {
-      await Promise.all(files.map((f) => documentService(workspaceId).uploadDocument(f)));
+      await Promise.all(
+        files.map((f) => documentService(workspaceId).uploadDocument(f, "knowledge"))
+      );
       toast.success(`${files.length} file${files.length > 1 ? "s" : ""} uploaded!`);
       setFiles([]);
       queryClient.invalidateQueries({ queryKey: ["documents", workspaceId] });

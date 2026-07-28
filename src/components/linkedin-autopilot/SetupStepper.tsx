@@ -7,6 +7,7 @@ import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinService } from "@/service/linkedinService";
 import { agentService } from "@/service/agentService";
+import { documentService } from "@/service/documentService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import LinkedInManageModal from "./LinkedInManageModal";
 import ProfileUrlModal from "./ProfileUrlModal";
@@ -24,7 +25,7 @@ const STEPS: { label: string; modal: ModalState }[] = [
   { label: "LinkedIn Connect", modal: { type: "linkedin" } },
   { label: "Profile URL", modal: { type: "profileUrl" } },
   { label: "Knowledge", modal: { type: "knowledge", initialType: "knowledge" } },
-  { label: "Tune", modal: { type: "knowledge", initialType: "tune" } },
+  { label: "Tone", modal: { type: "knowledge", initialType: "tune" } },
   { label: "Style Upload", modal: { type: "knowledge", initialType: "style" } },
 ];
 
@@ -52,12 +53,19 @@ export default function SetupStepper() {
 
   const hasReadyProfile = profiles?.results?.some((p) => p.status === "ready") ?? false;
 
+  const { data: documents } = useQueryWithTokenRefresh(
+    ["documents", workspaceId],
+    () => documentService(workspaceId).getDocuments(),
+    { enabled: !!workspaceId }
+  );
+  const docs = documents?.results ?? [];
+
   const completed = [
     account?.connected === true,
     hasReadyProfile,
-    false, // Knowledge — API coming later
-    false, // Tune — API coming later
-    false, // Style Upload — API coming later
+    docs.some((d) => d.purpose === "knowledge"),
+    docs.some((d) => d.purpose === "tone"),
+    docs.some((d) => d.purpose === "style"),
   ];
 
   const activeIndex = completed.findIndex((c) => !c);
