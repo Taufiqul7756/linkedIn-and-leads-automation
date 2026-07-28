@@ -38,24 +38,26 @@
 - [x] `src/components/linkedin-autopilot/SetupStepper.tsx` — 5-step horizontal progress bar
 - [x] Step 1 (LinkedIn Connect) — completion driven by `account.connected`; opens `LinkedInManageModal`
 - [x] Step 2 (Profile URL) — completion driven by `["linkedin-profiles",workspaceId]`; checks for any `status === "ready"` profile
-- [x] Steps 3–5 (Knowledge / Tune / Style) — always pending (API TBD); open `KnowledgeUploadModal` with correct type pre-selected
-- [x] `src/components/linkedin-autopilot/ProfileUrlModal.tsx` — full profile list (ready/pending/error states), add URL, inline delete confirm, per-profile polling, invalidates `["linkedin-profiles",workspaceId]` on ready
-- [x] `src/components/linkedin-autopilot/KnowledgeUploadModal.tsx` — unified modal: type dropdown, PDF upload, URL input, items list with type badges
+- [x] Steps 3–5 (Knowledge / Tone / Style) — completion driven by `GET /documents/` per purpose; teal checkmark when ≥1 doc of that purpose exists
+- [x] `src/components/linkedin-autopilot/ProfileUrlModal.tsx` — full profile list (ready/pending/error states), add URL, inline delete confirm, per-profile polling via list endpoint `GET /profiles/` (not single), invalidates `["linkedin-profiles",workspaceId]` on ready
+- [x] `src/components/linkedin-autopilot/KnowledgeUploadModal.tsx` — unified modal: type dropdown (Knowledge/Tone/Style), PDF upload, URL input, existing uploaded docs list (filename + badge + delete), items-to-upload list with badges; wires upload + delete APIs
 
 ### Account & Knowledge Base Section
 - [x] LinkedIn account card (Connected status, Manage button → LinkedInManageModal)
-- [x] Website knowledge base card (Ready status, Add Sources → AddUrlModal, Add to Knowledge Base → KnowledgeBaseUploadModal, Re-crawl button)
+- [x] Knowledge base card (renamed from "Website knowledge base") — shows website URL + doc count when available; no "No website added yet" placeholder; single "Add sources" button → KnowledgeUploadModal; Re-crawl button
 - [x] 5 stats cards row (Awaiting · Approved · Scheduled · Published · Avg Engagement) — real API
 
 ### Generate Posts Section
 - [x] Number of posts free-form input (min 1, max 50) + Use Emoji toggle (Yes/No)
-- [x] Tone dropdown
 - [x] Length toggle (Short / Medium / Long)
-- [x] Content style dropdown
+- [x] Tone reference PDF dropdown (from `GET /documents/?purpose=tone`) — sends `tone_document` in body
+- [x] Style reference PDF dropdown (from `GET /documents/?purpose=style`) — sends `style_document` in body
+- [x] Source URL optional input (before custom prompt)
 - [x] Custom prompt textarea
 - [x] Suggest prompts button
-- [x] Generate button + footer note
+- [x] Generate button — no frontend website validation; fires regardless of website status
 - [x] Gradient background (blue-gray → white, top to bottom)
+- [x] Tone and content style hardcoded (`"professional"` / `"thought_leadership"`); no user dropdowns
 
 ### Review & Approval Section
 - [x] Section header with awaiting badge
@@ -66,7 +68,7 @@
 - [x] Regenerate Post button → RegeneratePostConfirmModal
 - [x] Regenerate Image button → floating prompt dropdown → Generate Image API
 - [x] Delete button → RejectConfirmModal → DELETE API
-- [x] Approve button → POST approve API
+- [x] Approve button → POST approve API; invalidates `["posts","all"]` so Post Management table refreshes immediately
 
 ### Post Management Section
 - [x] Filter dropdown: All / Approved / Scheduled / Published / Failed
@@ -134,7 +136,7 @@
 ## Phase 6 — Workspace Migration (CURRENT)
 
 ### Auth & Register
-- [ ] Register page (`src/app/register/page.tsx`) — see auth tasks Phase 2
+- [x] Register page — added optional `linkedin_profile_url` field; sent in POST `/auth/register/` body if provided
 - [ ] WorkspaceContext + WorkspaceProvider — see auth tasks Phase 3
 
 ### Service URL Migration
@@ -221,4 +223,4 @@ All service files must prefix endpoints with `/workspaces/${workspaceId}/` using
 - [ ] Refresh metrics button per post
 - [ ] Image removal via PATCH (backend support needed)
 - [ ] Hashtag PATCH (backend fixing)
-- [ ] Setup Stepper steps 3–5 completion tracking (Knowledge / Tune / Style APIs)
+- [x] Setup Stepper steps 3–5 completion tracking — driven by real `GET /documents/` data per purpose

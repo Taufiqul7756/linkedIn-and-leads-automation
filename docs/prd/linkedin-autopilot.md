@@ -25,9 +25,9 @@ Horizontal progress bar at the top of the page showing 5 onboarding steps. Each 
 |---|-------|-----------|-------|
 | 1 | LinkedIn Connect | `account.connected === true` | `LinkedInManageModal` |
 | 2 | Profile URL | any profile with `status === "ready"` via `GET /linkedin/profiles/` | `ProfileUrlModal` |
-| 3 | Knowledge | API coming later | `KnowledgeUploadModal` (pre-selects "knowledge") |
-| 4 | Tune | API coming later | `KnowledgeUploadModal` (pre-selects "tune") |
-| 5 | Style Upload | API coming later | `KnowledgeUploadModal` (pre-selects "style") |
+| 3 | Knowledge | any doc with `purpose === "knowledge"` via `GET /documents/` | `KnowledgeUploadModal` (pre-selects "knowledge") |
+| 4 | Tone | any doc with `purpose === "tone"` via `GET /documents/` | `KnowledgeUploadModal` (pre-selects "tune") |
+| 5 | Style Upload | any doc with `purpose === "style"` via `GET /documents/` | `KnowledgeUploadModal` (pre-selects "style") |
 
 - Done → teal filled circle with checkmark + teal connector line
 - Active (first incomplete) → blue outlined circle
@@ -36,14 +36,13 @@ Horizontal progress bar at the top of the page showing 5 onboarding steps. Each 
 
 **Modals:**
 - `ProfileUrlModal` — lists existing profiles (teal=ready, blue+spinner=pending/fetching, red=error+Retry button), inline delete confirm per profile, add URL input, per-profile polling via setInterval. On `ready`, invalidates `["linkedin-profiles", workspaceId]` → stepper auto-updates.
-- `KnowledgeUploadModal` — type selector (Knowledge/Tune/Style), PDF upload (drag & drop), URL input, uploaded items list with type badge
+- `KnowledgeUploadModal` — type selector (Knowledge/Tone/Style), PDF upload (drag & drop), URL input, existing uploaded documents list (filename + purpose badge + delete), items-to-upload list with type badges; wires `POST /documents/` on save with `purpose` field; `DELETE /documents/{id}/` per existing doc
 
 ### 2. Account & Knowledge Base
 - **LinkedIn account card**: Shows connection status (Connected/Disconnected), authorized user, OAuth scope.
   - Action: **Manage** → opens LinkedInManageModal (current account info + "Connect your LinkedIn" button + disconnect link)
-- **Website knowledge base card**: Shows crawl status (Ready/Stale), domain, facet count.
-  - Action: **Add sources** → opens AddUrlModal: add new URL + list existing indexed URLs with status dot + delete per URL
-  - Action: **Add to Knowledge Base** → opens KnowledgeBaseUploadModal: drag-and-drop PDF upload + list of uploaded docs with status + delete per doc
+- **Knowledge base card**: Shows website crawl status (Ready/Stale) and domain when a website is indexed; shows uploaded document count when docs exist; empty when neither. No "No website added yet" placeholder.
+  - Action: **Add sources** → opens `KnowledgeUploadModal` (unified modal for all source types)
   - Action: **Re-crawl** → triggers re-index of website
 - **Stats grid** (2 rows × 4 cards, real API): Row 1 — Drafts · Approved · Scheduled · Published; Row 2 — Failed · Published This Week · Next Scheduled · Avg. Engagement
   - API: `GET /api/v1/workspaces/{workspace_pk}/content/posts/stats/`
@@ -52,11 +51,16 @@ Horizontal progress bar at the top of the page showing 5 onboarding steps. Each 
   - `avg_engagement` displayed as percentage with 1 decimal
 
 ### 3. Generate Posts from Knowledge Base
-- Controls: Number of posts (free-form input), Tone (dropdown), Length (Short/Medium/Long), Content Style (dropdown), Use Emoji (Yes/No toggle)
-- Optional custom prompt textarea with placeholder
-- "Suggest prompts" button → `POST /workspaces/{workspace_pk}/content/posts/suggest_prompts/` → shows clickable suggestion chips
+- Controls: Number of posts (free-form input), Use Emoji (Yes/No toggle), Length (Short/Medium/Long)
+- **Tone reference PDF** dropdown — populated from `GET /documents/?purpose=tone`; optional, sends `tone_document` in generate body
+- **Style reference PDF** dropdown — populated from `GET /documents/?purpose=style`; optional, sends `style_document` in generate body
+- **Source URL** (optional) — generate posts from a specific page/article
+- Custom prompt textarea with placeholder
+- No frontend website validation — Generate button fires regardless of whether a website is indexed; backend handles validation
+- Tone and content style are hardcoded (`"professional"` / `"thought_leadership"`) — no user-facing dropdowns
+- "Suggest prompts" button → `POST /workspaces/{workspace_pk}/content/posts/suggest_prompts/` → shows clickable suggestion chips (requires website)
 - Footer note: posts stay as drafts until approved
-- Primary action: Generate → `POST /workspaces/{workspace_pk}/content/posts/generate/` with `{ prompt, tone, length, content_style, use_emoji, count }` — **no `scope` field**
+- Primary action: Generate → `POST /workspaces/{workspace_pk}/content/posts/generate/` with `{ prompt, tone, length, content_style, use_emoji, count, tone_document?, style_document?, writer_model? }`
 - Generate is **synchronous**: posts created immediately; images generated async (`image_status: "pending"`)
 - On success: invalidates `["posts","draft"]`; sets `["posts-generating"]` flag for image polling
 - If prompt not covered by KB → API returns `{ prompt, suggested_topics[] }` → amber warning banner
@@ -74,7 +78,7 @@ Horizontal progress bar at the top of the page showing 5 onboarding steps. Each 
   - **Regenerate Post** → RegeneratePostConfirmModal → `POST /workspaces/{workspace_pk}/content/posts/{id}/regenerate/`
   - **Regenerate Image** → floating prompt textarea → `POST /workspaces/{workspace_pk}/content/posts/{id}/generate_image/`
   - **Delete** → DeleteConfirmModal → `DELETE /workspaces/{workspace_pk}/content/posts/{id}/`
-  - **Approve** → `POST /workspaces/{workspace_pk}/content/posts/{id}/approve/`
+  - **Approve** → `POST /workspaces/{workspace_pk}/content/posts/{id}/approve/`; on success invalidates both `["posts","draft"]` and `["posts","all"]` — Post Management table updates immediately
 - APIs: `GET /workspaces/{workspace_pk}/content/posts/?status=draft`
 
 ### 5. Post Management
@@ -185,8 +189,10 @@ All endpoints prefixed with `/api/v1/workspaces/{workspace_pk}/`
 | POST | `.../websites/` | Add website URL (no scope field) |
 | DELETE | `.../websites/{id}/` | Remove website URL |
 | POST | `.../websites/{id}/recrawl/` | Re-crawl website |
-| GET | `.../documents/` | List uploaded documents |
-| POST | `.../documents/` | Upload document (no scope field) |
+| GET | `.../documents/` | List all uploaded documents |
+| GET | `.../documents/?purpose=tone` | List tone reference docs (used by Generate section dropdown) |
+| GET | `.../documents/?purpose=style` | List style reference docs (used by Generate section dropdown) |
+| POST | `.../documents/` | Upload document (`file` binary + `purpose`: knowledge/tone/style) |
 | DELETE | `.../documents/{id}/` | Delete document |
 | POST | `.../documents/{id}/reextract/` | Re-extract document |
 | GET | `.../linkedin/connect/` | Returns `{ authorize_url }` |
@@ -223,4 +229,3 @@ Top-level:
 - Bulk delete confirmation modal
 - Image removal via PATCH
 - Hashtag PATCH (backend fixing)
-- Steps 3–5 completion tracking (Knowledge / Tune / Style)
