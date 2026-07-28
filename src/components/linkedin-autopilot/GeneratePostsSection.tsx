@@ -6,29 +6,15 @@ import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
 import { postsService } from "@/service/postsService";
 import { websiteService } from "@/service/websiteService";
+import { documentService } from "@/service/documentService";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
-import AddUrlModal from "./AddUrlModal";
 import ModelSwitcher, { useSelectedModel } from "./ModelSwitcher";
 
-const TONE_OPTIONS = [
-  { value: "professional", label: "Professional" },
-  { value: "conversational", label: "Conversational" },
-  { value: "bold", label: "Bold / Contrarian" },
-  { value: "storytelling", label: "Storytelling" },
-];
 const LENGTH_OPTIONS = ["Short", "Medium", "Long"] as const;
-const CONTENT_STYLES = [
-  "Thought leadership",
-  "Case study",
-  "How-to",
-  "Bold take",
-  "Storytelling",
-  "Product update",
-];
 
 type Length = (typeof LENGTH_OPTIONS)[number];
 
@@ -37,14 +23,13 @@ export default function GeneratePostsSection() {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
 
-  const [addUrlOpen, setAddUrlOpen] = useState(false);
   const [url, setUrl] = useState("");
+  const [toneDocId, setToneDocId] = useState("");
+  const [styleDocId, setStyleDocId] = useState("");
   const [postCount, setPostCount] = useState<number | "">("");
   const [postCountError, setPostCountError] = useState("");
-  const [tone, setTone] = useState("professional");
   const [useEmoji, setUseEmoji] = useState(false);
   const [length, setLength] = useState<Length>("Medium");
-  const [contentStyle, setContentStyle] = useState("Thought leadership");
   const [prompt, setPrompt] = useState("");
   const selectedModelId = useSelectedModel();
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -59,6 +44,18 @@ export default function GeneratePostsSection() {
     { enabled: !!workspaceId }
   );
   const website = websites?.results?.[0];
+
+  const { data: toneDocs } = useQueryWithTokenRefresh(
+    ["documents", workspaceId, "tone"],
+    () => documentService(workspaceId).getDocuments("tone"),
+    { enabled: !!workspaceId }
+  );
+
+  const { data: styleDocs } = useQueryWithTokenRefresh(
+    ["documents", workspaceId, "style"],
+    () => documentService(workspaceId).getDocuments("style"),
+    { enabled: !!workspaceId }
+  );
 
   const suggestMutation = useMutationWithTokenRefresh(
     (websiteId: string) => postsService(workspaceId).suggestPrompts({ website_profile: websiteId }),
@@ -78,13 +75,15 @@ export default function GeneratePostsSection() {
     () => {
       const body = {
         prompt,
-        tone,
+        tone: "professional",
         length: length.toLowerCase(),
-        content_style: contentStyle.toLowerCase().replace(/\s+/g, "_"),
+        content_style: "thought_leadership",
         use_emoji: useEmoji,
         use_ai_image: true,
         count: postCount as number,
         ...(selectedModelId ? { writer_model: selectedModelId } : {}),
+        ...(toneDocId ? { tone_document: toneDocId } : {}),
+        ...(styleDocId ? { style_document: styleDocId } : {}),
       };
       const trimmedUrl = url.trim();
       return trimmedUrl
@@ -123,21 +122,12 @@ export default function GeneratePostsSection() {
   );
 
   const handleSuggest = () => {
-    if (!website) {
-      toast("Please add a website or document to your knowledge base first.", { icon: "📚" });
-      setAddUrlOpen(true);
-      return;
-    }
+    if (!website) return;
     setSuggestions([]);
     suggestMutation.mutate(website.id);
   };
 
   const handleGenerate = () => {
-    if (!website) {
-      toast("Please add a website or document to your knowledge base first.", { icon: "📚" });
-      setAddUrlOpen(true);
-      return;
-    }
     if (postCount === "" || postCount < 1) {
       setPostCountError("Enter how many posts to generate.");
       return;
@@ -147,7 +137,7 @@ export default function GeneratePostsSection() {
     generateMutation.mutate(undefined);
   };
 
-  const canAct = !!website && !!workspaceId;
+  const canAct = !!workspaceId;
 
   return (
     <div className="rounded-xl border border-[#D8DCF0] bg-gradient-to-b from-[#ECEEF8] to-white px-6 py-5">
@@ -160,7 +150,7 @@ export default function GeneratePostsSection() {
         </h2>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5 lg:gap-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5">
         {/* Number of posts */}
         <div>
           <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -185,24 +175,6 @@ export default function GeneratePostsSection() {
             )}
           />
           {postCountError && <p className="mt-1 text-xs text-red-500">{postCountError}</p>}
-        </div>
-
-        {/* Tone */}
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Tone
-          </label>
-          <select
-            value={tone}
-            onChange={(e) => setTone(e.target.value)}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            {TONE_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Use Emoji */}
@@ -253,20 +225,40 @@ export default function GeneratePostsSection() {
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Content style */}
+      {/* Tone & Style document references */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Content style
+            Tone reference <span className="font-normal normal-case text-gray-400">PDF</span>
           </label>
           <select
-            value={contentStyle}
-            onChange={(e) => setContentStyle(e.target.value)}
+            value={toneDocId}
+            onChange={(e) => setToneDocId(e.target.value)}
             className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            {CONTENT_STYLES.map((s) => (
-              <option key={s} value={s}>
-                {s}
+            <option value="">None</option>
+            {toneDocs?.results?.map((doc) => (
+              <option key={doc.id} value={doc.id}>
+                {doc.filename}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Style reference <span className="font-normal normal-case text-gray-400">PDF</span>
+          </label>
+          <select
+            value={styleDocId}
+            onChange={(e) => setStyleDocId(e.target.value)}
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">None</option>
+            {styleDocs?.results?.map((doc) => (
+              <option key={doc.id} value={doc.id}>
+                {doc.filename}
               </option>
             ))}
           </select>
@@ -395,8 +387,6 @@ export default function GeneratePostsSection() {
           </div>
         </div>
       </div>
-
-      <AddUrlModal isOpen={addUrlOpen} onClose={() => setAddUrlOpen(false)} />
     </div>
   );
 }

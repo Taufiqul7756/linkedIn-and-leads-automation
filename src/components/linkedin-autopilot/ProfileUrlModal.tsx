@@ -45,15 +45,20 @@ export default function ProfileUrlModal({ isOpen, onClose }: ProfileUrlModalProp
   const startPolling = (id: string) => {
     if (pollRefs.current[id]) return;
     pollRefs.current[id] = setInterval(async () => {
-      const p = await agentService(workspaceId).getProfile(id);
-      if (!p) return;
-      setProfiles((prev) => prev.map((x) => (x.id === id ? p : x)));
-      if (p.status === "ready" || p.status === "error") {
-        clearInterval(pollRefs.current[id]);
-        delete pollRefs.current[id];
-        if (p.status === "ready") {
-          queryClient.invalidateQueries({ queryKey: ["linkedin-profiles", workspaceId] });
+      try {
+        const data = await agentService(workspaceId).getProfiles();
+        const p = data?.results?.find((x) => x.id === id);
+        if (!p) return;
+        setProfiles((prev) => prev.map((x) => (x.id === id ? p : x)));
+        if (p.status === "ready" || p.status === "error") {
+          clearInterval(pollRefs.current[id]);
+          delete pollRefs.current[id];
+          if (p.status === "ready") {
+            queryClient.invalidateQueries({ queryKey: ["linkedin-profiles", workspaceId] });
+          }
         }
+      } catch {
+        // ignore transient poll errors
       }
     }, 3000);
   };

@@ -7,4 +7,6 @@ export interface AuthUser {
 export interface LoginResponse {
   token: string;
   user: AuthUser;
+  workspace?: string;
+  linkedin_profile?: string;
 }
