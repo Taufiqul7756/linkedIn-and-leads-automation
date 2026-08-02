@@ -1,5 +1,5 @@
 "use client";
-import { Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import SetupStepper from "@/components/linkedin-autopilot/SetupStepper";
 import AccountSection from "@/components/linkedin-autopilot/AccountSection";
@@ -11,14 +11,26 @@ import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowS
 
 type Mode = "agent" | "manual";
 
+function urlMode(searchParams: ReturnType<typeof useSearchParams>): Mode {
+  return searchParams.get("mode") === "manual" ? "manual" : "agent";
+}
+
 function LinkedInAutopilotContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  const mode: Mode = searchParams.get("mode") === "manual" ? "manual" : "agent";
+  // Local state so tab clicks respond instantly, independent of router/hydration
+  const [mode, setModeState] = useState<Mode>(() => urlMode(searchParams));
+
+  // Keep local state in sync when URL changes externally (back/forward, OAuth cleanup)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setModeState(urlMode(searchParams));
+  }, [searchParams]);
 
   const setMode = (newMode: Mode) => {
+    setModeState(newMode); // immediate UI response
     const params = new URLSearchParams(searchParams.toString());
     params.set("mode", newMode);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });

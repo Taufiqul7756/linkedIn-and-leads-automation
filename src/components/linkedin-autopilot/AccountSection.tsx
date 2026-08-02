@@ -77,12 +77,20 @@ export default function AccountSection() {
     { enabled: !!workspaceId }
   );
 
-  // Handle OAuth callback
+  // Handle OAuth callback — preserve ?mode= when cleaning up ?code= and ?state=
+  const cleanOAuthParams = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("code");
+    params.delete("state");
+    const qs = params.toString();
+    router.replace(`/linkedin-autopilot${qs ? `?${qs}` : ""}`);
+  };
+
   useEffect(() => {
     if (!code || !state) return;
     const sessionKey = `linkedin_callback_${state}`;
     if (sessionStorage.getItem(sessionKey)) {
-      router.replace("/linkedin-autopilot");
+      cleanOAuthParams();
       return;
     }
     sessionStorage.setItem(sessionKey, "1");
@@ -98,7 +106,7 @@ export default function AccountSection() {
         }
       })
       .catch(() => toast.error("Failed to connect LinkedIn account."))
-      .finally(() => router.replace("/linkedin-autopilot"));
+      .finally(() => cleanOAuthParams());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, state]);
 
