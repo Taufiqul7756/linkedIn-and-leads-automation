@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   LuPencil,
@@ -126,6 +127,8 @@ export default function ReviewApprovalSection() {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode") === "manual" ? "manual" : "agent";
 
   const [editPost, setEditPost] = useState<PostType | null>(null);
   const [rejectPost, setRejectPost] = useState<PostType | null>(null);
@@ -154,8 +157,8 @@ export default function ReviewApprovalSection() {
   const baselineCount = typeof baseline === "number" ? baseline : 0;
 
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
-    ["posts", "draft", workspaceId],
-    () => postsService(workspaceId).getDraftPosts(),
+    ["posts", "draft", workspaceId, mode],
+    () => postsService(workspaceId).getDraftPosts(mode),
     {
       enabled: !!workspaceId,
       refetchInterval: isPolling
@@ -195,7 +198,7 @@ export default function ReviewApprovalSection() {
     (id: string) => postsService(workspaceId).approvePost(id),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId], exact: false });
         queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         toast.success("Post approved!");
@@ -212,7 +215,7 @@ export default function ReviewApprovalSection() {
     (id: string) => postsService(workspaceId).rejectPost(id),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId], exact: false });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         toast.success("Post deleted.");
         setRejectPost(null);
@@ -230,7 +233,7 @@ export default function ReviewApprovalSection() {
       postsService(workspaceId).regeneratePost(id, opts),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId], exact: false });
         toast.success("Post regenerated!");
         setRegeneratingId(null);
         setRegenerateTarget(null);
@@ -247,7 +250,7 @@ export default function ReviewApprovalSection() {
       postsService(workspaceId).generateImage(id, prompt),
     {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId], exact: false });
         toast.success("Image generated!");
         setGeneratingImageId(null);
       },

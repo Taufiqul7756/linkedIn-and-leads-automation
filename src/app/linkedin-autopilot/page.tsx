@@ -10,7 +10,7 @@ import PostManagementSection from "@/components/linkedin-autopilot/PostManagemen
 import AgentModeSection from "@/components/linkedin-autopilot/AgentModeSection";
 import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowSection";
 
-type Mode = "agentic" | "manual";
+type Mode = "agent" | "manual";
 
 function LinkedInAutopilotContent() {
   const searchParams = useSearchParams();
@@ -18,7 +18,7 @@ function LinkedInAutopilotContent() {
   const pathname = usePathname();
   const { workspaces, activeWorkspace, setActiveWorkspace } = useWorkspace();
 
-  const mode: Mode = searchParams.get("mode") === "manual" ? "manual" : "agentic";
+  const mode: Mode = searchParams.get("mode") === "manual" ? "manual" : "agent";
 
   const setMode = (newMode: Mode) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -44,7 +44,7 @@ function LinkedInAutopilotContent() {
     if (!urlId) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("workspace", activeWorkspace.id);
-      if (!params.get("mode")) params.set("mode", "agentic");
+      if (!params.get("mode")) params.set("mode", "agent");
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
   }, [activeWorkspace, searchParams, router, pathname]);
@@ -54,9 +54,9 @@ function LinkedInAutopilotContent() {
       {/* Mode Tabs */}
       <div className="flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
         <button
-          onClick={() => setMode("agentic")}
+          onClick={() => setMode("agent")}
           className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
-            mode === "agentic"
+            mode === "agent"
               ? "bg-blue-600 text-white shadow-sm"
               : "text-gray-500 hover:text-gray-700"
           }`}
@@ -76,7 +76,7 @@ function LinkedInAutopilotContent() {
       </div>
 
       <SetupStepper mode={mode} />
-      {mode === "agentic" && <AgentModeSection />}
+      {mode === "agent" && <AgentModeSection />}
       <AccountSection />
       {mode === "manual" && <GeneratePostsSection />}
       <ReviewApprovalSection />

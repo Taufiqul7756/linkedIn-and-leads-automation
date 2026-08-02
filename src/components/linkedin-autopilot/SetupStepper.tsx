@@ -21,7 +21,7 @@ type ModalState =
   | { type: "profileUrl" }
   | { type: "knowledge"; initialType: KnowledgeType };
 
-type Mode = "agentic" | "manual";
+type Mode = "agent" | "manual";
 
 const ALL_STEPS: { label: string; modal: ModalState }[] = [
   { label: "LinkedIn Connect", modal: { type: "linkedin" } },

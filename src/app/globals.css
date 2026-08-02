@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+@keyframes shimmer-card {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.animate-shimmer-card {
+  background: linear-gradient(
+    90deg,
+    #eff6ff 0%,
+    #dbeafe 30%,
+    #93c5fd 50%,
+    #dbeafe 70%,
+    #eff6ff 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-card 1.6s ease-in-out infinite;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

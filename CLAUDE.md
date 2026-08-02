@@ -145,7 +145,8 @@ Use `src/components/ui/Modal.tsx` for all modals. It handles backdrop, ESC key, 
 </Modal>
 ```
 
-- Widths: `"sm"` | `"md"` | `"lg"` | `"xl"` | `"2xl"`
+- Widths: `"sm"` | `"md"` | `"lg"` | `"xl"` | `"2xl"` | `"3xl"`
+- Extra props: `disableBackdropClose` (bool), `minHeight` (string, inline style on body), `bodyClassName` (string, extra classes on body div)
 - Modal panel has `max-h-[90vh]` with scrollable body (`overflow-y-auto`) and pinned header (`shrink-0`)
 - Modal state lives in the parent component
 - Pass `null` as the selected item when closed; guard with `if (!item) return null` inside the modal

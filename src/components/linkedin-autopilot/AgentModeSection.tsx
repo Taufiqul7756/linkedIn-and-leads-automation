@@ -9,11 +9,15 @@ import {
   LuRefreshCw,
   LuSparkles,
   LuArrowRight,
+  LuArrowLeft,
   LuUser,
   LuX,
   LuTrash2,
   LuPencil,
   LuSave,
+  LuGlobe,
+  LuFileText,
+  LuUpload,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import Modal from "@/components/ui/Modal";
@@ -23,7 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { agentService } from "@/service/agentService";
 import { postsService } from "@/service/postsService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
-import { LinkedInProfile, MarketingPlan } from "@/types/Agent";
+import { LinkedInProfile, MarketingPlan, ProfileDocument, ProfileWebsite } from "@/types/Agent";
 import ModelSwitcher, { useSelectedModel } from "./ModelSwitcher";
 
 type Phase =
@@ -112,9 +116,31 @@ export default function AgentModeSection() {
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<MarketingPlan>>({});
   const [isSavingPlan, setIsSavingPlan] = useState(false);
+  const [profileDocs, setProfileDocs] = useState<ProfileDocument[]>([]);
+  const [profileWebsites, setProfileWebsites] = useState<ProfileWebsite[]>([]);
+  const [deleteDocTarget, setDeleteDocTarget] = useState<ProfileDocument | null>(null);
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false);
+  const [deleteWebsiteTarget, setDeleteWebsiteTarget] = useState<ProfileWebsite | null>(null);
+  const [isDeletingWebsite, setIsDeletingWebsite] = useState(false);
+  const [docUploading, setDocUploading] = useState(false);
+  const [docPurpose, setDocPurpose] = useState("knowledge");
+  const [websiteInput, setWebsiteInput] = useState("");
+  const [websitePurpose, setWebsitePurpose] = useState("knowledge");
+  const [websiteAdding, setWebsiteAdding] = useState(false);
+  // Pre-profile queue — collected in a-submit, uploaded once profile is ready
+  const [queuedWebsiteInput, setQueuedWebsiteInput] = useState("");
+  const [queuedWebsitePurpose, setQueuedWebsitePurpose] = useState("knowledge");
+  const [queuedDocPurpose, setQueuedDocPurpose] = useState("knowledge");
+  const [queuedWebsites, setQueuedWebsites] = useState<{ url: string; purpose: string }[]>([]);
+  const [queuedDocs, setQueuedDocs] = useState<{ file: File; name: string; purpose: string }[]>([]);
+  const queuedWebsitesRef = useRef<{ url: string; purpose: string }[]>([]);
+  const queuedDocsRef = useRef<{ file: File; name: string; purpose: string }[]>([]);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const postPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resourcePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queuedFileInputRef = useRef<HTMLInputElement>(null);
 
   const GENERATE_COUNT = 5;
 
@@ -132,10 +158,40 @@ export default function AgentModeSection() {
     }
   };
 
+  const stopResourcePolling = () => {
+    if (resourcePollRef.current) {
+      clearInterval(resourcePollRef.current);
+      resourcePollRef.current = null;
+    }
+  };
+
+  const startResourcePolling = () => {
+    if (resourcePollRef.current) return; // already polling
+    resourcePollRef.current = setInterval(async () => {
+      try {
+        const [docsData, sitesData] = await Promise.all([
+          agentService(workspaceId).getAgentDocuments(),
+          agentService(workspaceId).getAgentWebsites(),
+        ]);
+        const docs = docsData?.results ?? [];
+        const sites = sitesData?.results ?? [];
+        setProfileDocs(docs);
+        setProfileWebsites(sites);
+        const isTerminal = (s: string) => s === "ready" || s === "error" || s === "failed";
+        const stillPending =
+          docs.some((d) => !isTerminal(d.status)) || sites.some((s) => !isTerminal(s.status));
+        if (!stillPending) stopResourcePolling();
+      } catch {
+        stopResourcePolling();
+      }
+    }, 3000);
+  };
+
   useEffect(
     () => () => {
       stopPolling();
       stopPostPolling();
+      stopResourcePolling();
     },
 
     []
@@ -150,6 +206,8 @@ export default function AgentModeSection() {
       if (p.status === "ready") {
         stopPolling();
         setPhase("a-ready");
+        loadAgentResources();
+        uploadQueuedResources();
       } else if (p.status === "error") {
         stopPolling();
         setPhase("a-error");
@@ -191,6 +249,8 @@ export default function AgentModeSection() {
       } else if (latest.status === "ready") {
         setProfile(latest);
         setPhase("a-ready");
+        loadAgentResources();
+        uploadQueuedResources();
       } else if (latest.status === "error") {
         setProfile(latest);
         setPhase("a-error");
@@ -201,6 +261,145 @@ export default function AgentModeSection() {
       }
     } catch {
       setPhase("a-submit");
+    }
+  };
+
+  const loadAgentResources = async () => {
+    try {
+      const [docsData, sitesData] = await Promise.all([
+        agentService(workspaceId).getAgentDocuments(),
+        agentService(workspaceId).getAgentWebsites(),
+      ]);
+      setProfileDocs(docsData?.results ?? []);
+      setProfileWebsites(sitesData?.results ?? []);
+    } catch {
+      // silently ignore — resources are optional
+    }
+  };
+
+  const uploadQueuedResources = async () => {
+    const websites = queuedWebsitesRef.current;
+    const docs = queuedDocsRef.current;
+    if (websites.length === 0 && docs.length === 0) return;
+    try {
+      await Promise.allSettled([
+        ...websites.map(({ url, purpose }) =>
+          agentService(workspaceId).addAgentWebsite(url, purpose)
+        ),
+        ...docs.map(({ file, purpose }) =>
+          agentService(workspaceId).uploadAgentDocument(file, purpose)
+        ),
+      ]);
+      queuedWebsitesRef.current = [];
+      queuedDocsRef.current = [];
+      setQueuedWebsites([]);
+      setQueuedDocs([]);
+      await loadAgentResources();
+      startResourcePolling();
+    } catch {
+      // silently ignore — queued uploads are best-effort
+    }
+  };
+
+  const handleAddQueuedWebsite = async () => {
+    const url = queuedWebsiteInput.trim();
+    if (!url) return;
+    setWebsiteAdding(true);
+    try {
+      const site = await agentService(workspaceId).addAgentWebsite(url, queuedWebsitePurpose);
+      if (site) {
+        setProfileWebsites((prev) => [site, ...prev]);
+        startResourcePolling();
+      }
+      setQueuedWebsiteInput("");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setWebsiteAdding(false);
+    }
+  };
+
+  const handleQueueDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setDocUploading(true);
+    try {
+      const doc = await agentService(workspaceId).uploadAgentDocument(file, queuedDocPurpose);
+      if (doc) {
+        setProfileDocs((prev) => [doc, ...prev]);
+        startResourcePolling();
+      }
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setDocUploading(false);
+    }
+  };
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+    e.target.value = "";
+    setDocUploading(true);
+    try {
+      const doc = await agentService(workspaceId).uploadAgentDocument(file, docPurpose);
+      if (doc) {
+        setProfileDocs((prev) => [doc, ...prev]);
+        startResourcePolling();
+      }
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setDocUploading(false);
+    }
+  };
+
+  const handleDeleteDoc = async () => {
+    if (!deleteDocTarget) return;
+    setIsDeletingDoc(true);
+    try {
+      await agentService(workspaceId).deleteAgentDocument(deleteDocTarget.id);
+      setProfileDocs((prev) => prev.filter((d) => d.id !== deleteDocTarget.id));
+      setDeleteDocTarget(null);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsDeletingDoc(false);
+    }
+  };
+
+  const handleAddWebsite = async () => {
+    if (!websiteInput.trim()) return;
+    setWebsiteAdding(true);
+    try {
+      const site = await agentService(workspaceId).addAgentWebsite(
+        websiteInput.trim(),
+        websitePurpose
+      );
+      if (site) {
+        setProfileWebsites((prev) => [site, ...prev]);
+        startResourcePolling();
+      }
+      setWebsiteInput("");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setWebsiteAdding(false);
+    }
+  };
+
+  const handleDeleteWebsite = async () => {
+    if (!deleteWebsiteTarget) return;
+    setIsDeletingWebsite(true);
+    try {
+      await agentService(workspaceId).deleteAgentWebsite(deleteWebsiteTarget.id);
+      setProfileWebsites((prev) => prev.filter((s) => s.id !== deleteWebsiteTarget.id));
+      setDeleteWebsiteTarget(null);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsDeletingWebsite(false);
     }
   };
 
@@ -216,12 +415,28 @@ export default function AgentModeSection() {
     setGeneratedPlanId("");
     setEditingPlanId(null);
     setEditDraft({});
-    if (workspaceId) checkProfile();
+    setProfileDocs([]);
+    setProfileWebsites([]);
+    setWebsiteInput("");
+    setWebsitePurpose("knowledge");
+    setDocPurpose("knowledge");
+    setQueuedWebsiteInput("");
+    setQueuedWebsitePurpose("knowledge");
+    setQueuedDocPurpose("knowledge");
+    setQueuedWebsites([]);
+    setQueuedDocs([]);
+    queuedWebsitesRef.current = [];
+    queuedDocsRef.current = [];
+    if (workspaceId) {
+      checkProfile();
+      loadAgentResources();
+    }
   };
 
   const handleClose = () => {
     stopPolling();
     stopPostPolling();
+    stopResourcePolling();
     setOpen(false);
   };
 
@@ -359,6 +574,29 @@ export default function AgentModeSection() {
     }
   };
 
+  const PURPOSE_LABELS: Record<string, string> = {
+    knowledge: "Knowledge",
+    tone: "Tone",
+    style: "Style",
+  };
+  const PURPOSE_COLORS: Record<string, string> = {
+    knowledge: "bg-gray-100 text-gray-600",
+    tone: "bg-purple-100 text-purple-700",
+    style: "bg-orange-100 text-orange-700",
+  };
+  const purposeSelect = (value: string, onChange: (v: string) => void) => (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+    >
+      <option value="knowledge">Knowledge</option>
+      <option value="tone">Tone</option>
+      <option value="style">Style</option>
+    </select>
+  );
+
   const currentStep = phase.startsWith("a") ? "a" : phase.startsWith("b") ? "b" : "c";
 
   return (
@@ -405,40 +643,296 @@ export default function AgentModeSection() {
         {/* ── Phase A: Submit URL ── */}
         {phase === "a-submit" && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Enter your LinkedIn profile URL so the agent can analyze your presence and build a
-              personalized content plan.
-            </p>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+            {/* Hidden file input for queued docs */}
+            <input
+              ref={queuedFileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={handleQueueDoc}
+            />
+
+            {/* LinkedIn Profile URL */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                <LuUser className="h-3.5 w-3.5 text-blue-500" />
                 LinkedIn Profile URL
-              </label>
-              <div className="relative">
-                <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="url"
-                  value={profileUrl}
-                  onChange={(e) => setProfileUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSubmitProfile();
-                  }}
-                  placeholder="https://linkedin.com/in/your-profile"
-                  className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+              </p>
+              <div className="flex gap-1.5">
+                <div className="relative flex-1">
+                  <LuLink className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="url"
+                    value={profileUrl}
+                    onChange={(e) => setProfileUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSubmitProfile();
+                    }}
+                    placeholder="https://linkedin.com/in/your-profile"
+                    className="h-8 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  onClick={handleSubmitProfile}
+                  disabled={!profileUrl.trim() || profileLoading}
+                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {profileLoading ? (
+                    <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LuArrowRight className="h-3.5 w-3.5" />
+                  )}
+                  {profileLoading ? "Submitting…" : "Analyze Profile"}
+                </button>
               </div>
             </div>
-            <button
-              onClick={handleSubmitProfile}
-              disabled={!profileUrl.trim() || profileLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              {profileLoading ? (
-                <LuLoader className="h-4 w-4 animate-spin" />
-              ) : (
-                <LuArrowRight className="h-4 w-4" />
+
+            {/* Websites */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
+                Websites
+                <span className="font-normal text-gray-400">(optional)</span>
+              </p>
+              {profileWebsites.length > 0 && (
+                <ul className="mb-2 space-y-1">
+                  {profileWebsites.map((site) => {
+                    const crawling =
+                      site.status !== "ready" &&
+                      site.status !== "error" &&
+                      site.status !== "failed";
+                    return (
+                      <li
+                        key={site.id}
+                        className={cn(
+                          "overflow-hidden rounded-lg border",
+                          crawling
+                            ? "animate-shimmer-card border-blue-200"
+                            : "border-gray-200 bg-white"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 px-2.5 py-1.5">
+                          <LuGlobe className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                          <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                            {site.url}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                              PURPOSE_COLORS[site.purpose] ?? PURPOSE_COLORS.knowledge
+                            )}
+                          >
+                            {PURPOSE_LABELS[site.purpose] ?? site.purpose}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                              site.status === "ready"
+                                ? "bg-teal-100 text-teal-700"
+                                : site.status === "error" || site.status === "failed"
+                                  ? "bg-red-100 text-red-600"
+                                  : "bg-blue-100 text-blue-600"
+                            )}
+                          >
+                            {site.status}
+                          </span>
+                          <button
+                            onClick={() => setDeleteWebsiteTarget(site)}
+                            className="shrink-0 text-gray-300 hover:text-red-500"
+                          >
+                            <LuX className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-              {profileLoading ? "Submitting…" : "Analyze Profile"}
-            </button>
+              {queuedWebsites.length > 0 && (
+                <ul className="mb-2 space-y-1">
+                  {queuedWebsites.map((item, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5"
+                    >
+                      <LuGlobe className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                        {item.url}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                          PURPOSE_COLORS[item.purpose] ?? PURPOSE_COLORS.knowledge
+                        )}
+                      >
+                        {PURPOSE_LABELS[item.purpose] ?? item.purpose}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const next = queuedWebsites.filter((_, i) => i !== idx);
+                          queuedWebsitesRef.current = next;
+                          setQueuedWebsites(next);
+                        }}
+                        className="shrink-0 text-gray-300 hover:text-red-500"
+                      >
+                        <LuX className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-1.5">
+                <div className="relative flex-1">
+                  <LuLink className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="url"
+                    value={queuedWebsiteInput}
+                    onChange={(e) => setQueuedWebsiteInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddQueuedWebsite();
+                    }}
+                    placeholder="https://yoursite.com"
+                    className="h-8 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                {purposeSelect(queuedWebsitePurpose, setQueuedWebsitePurpose)}
+                <button
+                  onClick={handleAddQueuedWebsite}
+                  disabled={!queuedWebsiteInput.trim() || websiteAdding}
+                  className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {websiteAdding ? <LuLoader className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+                </button>
+              </div>
+            </div>
+
+            {/* Documents */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                <LuFileText className="h-3.5 w-3.5 text-blue-500" />
+                Documents
+                <span className="font-normal text-gray-400">(optional)</span>
+              </p>
+              {profileDocs.length > 0 && (
+                <ul className="mb-2 space-y-1">
+                  {profileDocs.map((doc) => {
+                    const processing =
+                      doc.status !== "ready" && doc.status !== "error" && doc.status !== "failed";
+                    return (
+                      <li
+                        key={doc.id}
+                        className={cn(
+                          "overflow-hidden rounded-lg border",
+                          processing
+                            ? "animate-shimmer-card border-blue-200"
+                            : "border-gray-200 bg-white"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 px-2.5 py-1.5">
+                          <LuFileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                          <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                            {doc.filename}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                              PURPOSE_COLORS[doc.purpose] ?? PURPOSE_COLORS.knowledge
+                            )}
+                          >
+                            {PURPOSE_LABELS[doc.purpose] ?? doc.purpose}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                              doc.status === "ready"
+                                ? "bg-teal-100 text-teal-700"
+                                : doc.status === "error" || doc.status === "failed"
+                                  ? "bg-red-100 text-red-600"
+                                  : "bg-blue-100 text-blue-600"
+                            )}
+                          >
+                            {doc.status}
+                          </span>
+                          <button
+                            onClick={() => setDeleteDocTarget(doc)}
+                            className="shrink-0 text-gray-300 hover:text-red-500"
+                          >
+                            <LuX className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {queuedDocs.length > 0 && (
+                <ul className="mb-2 space-y-1">
+                  {queuedDocs.map((d, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5"
+                    >
+                      <LuFileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                        {d.name}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                          PURPOSE_COLORS[d.purpose] ?? PURPOSE_COLORS.knowledge
+                        )}
+                      >
+                        {PURPOSE_LABELS[d.purpose] ?? d.purpose}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const next = queuedDocs.filter((_, i) => i !== idx);
+                          queuedDocsRef.current = next;
+                          setQueuedDocs(next);
+                        }}
+                        className="shrink-0 text-gray-300 hover:text-red-500"
+                      >
+                        <LuX className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-1.5">
+                {purposeSelect(queuedDocPurpose, setQueuedDocPurpose)}
+                <button
+                  onClick={() => queuedFileInputRef.current?.click()}
+                  disabled={docUploading}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white py-2 text-xs font-medium text-gray-500 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+                >
+                  {docUploading ? (
+                    <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LuUpload className="h-3.5 w-3.5" />
+                  )}
+                  {docUploading ? "Uploading…" : "Upload Document"}
+                </button>
+              </div>
+            </div>
+
+            {/* Generate Marketing Plans */}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={handleGeneratePlans}
+                disabled={
+                  !profileUrl.trim() &&
+                  queuedWebsites.length === 0 &&
+                  queuedDocs.length === 0 &&
+                  profileWebsites.length === 0 &&
+                  profileDocs.length === 0
+                }
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                <LuSparkles className="h-4 w-4" />
+                Generate Marketing Plans
+              </button>
+              <ModelSwitcher dropUp />
+            </div>
           </div>
         )}
 
@@ -451,7 +945,7 @@ export default function AgentModeSection() {
                 ? "Fetching your LinkedIn data…"
                 : "Processing your profile…"}
             </p>
-            <p className="text-xs text-gray-400">{profile?.url}</p>
+            <p className="text-xs text-gray-400">{profile?.profile_url}</p>
             <p className="text-xs text-gray-400">This usually takes 15–30 seconds.</p>
           </div>
         )}
@@ -464,7 +958,7 @@ export default function AgentModeSection() {
               <div>
                 <p className="text-sm font-medium text-red-800">Profile fetch failed</p>
                 <p className="mt-0.5 text-xs text-red-600">
-                  {profile?.error_message ?? "An unknown error occurred."}
+                  {profile?.error || "An unknown error occurred."}
                 </p>
               </div>
             </div>
@@ -509,10 +1003,12 @@ export default function AgentModeSection() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-900">
-                      {p.name ?? "Profile ready"}
+                      {p.profile_url.match(/linkedin\.com\/in\/([^/?#]+)/)?.[1] ?? "Profile ready"}
                     </p>
-                    {p.headline && <p className="truncate text-xs text-gray-500">{p.headline}</p>}
-                    <p className="truncate text-xs text-blue-600">{p.url}</p>
+                    {p.facets?.summary && (
+                      <p className="truncate text-xs text-gray-500">{p.facets.summary}</p>
+                    )}
+                    <p className="truncate text-xs text-blue-600">{p.profile_url}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <LuCheck className="h-4 w-4 text-teal-500" strokeWidth={2.5} />
@@ -527,81 +1023,334 @@ export default function AgentModeSection() {
                 </div>
               ))}
 
-              {/* Inline delete confirm */}
-              {deleteTarget && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
-                  <p className="text-sm font-medium text-red-800">
-                    Remove{" "}
-                    <span className="font-semibold">{deleteTarget.name || deleteTarget.url}</span>?
+              {/* Delete website confirm modal */}
+              <Modal
+                isOpen={!!deleteWebsiteTarget}
+                onClose={() => !isDeletingWebsite && setDeleteWebsiteTarget(null)}
+                title="Remove Website"
+                width="sm"
+                disableBackdropClose={isDeletingWebsite}
+              >
+                <p className="text-sm text-gray-700">
+                  Remove <span className="font-semibold">{deleteWebsiteTarget?.url}</span>? This
+                  action cannot be undone.
+                </p>
+                <div className="mt-5 flex gap-2">
+                  <button
+                    onClick={() => setDeleteWebsiteTarget(null)}
+                    disabled={isDeletingWebsite}
+                    className="flex-1 rounded-lg border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteWebsite}
+                    disabled={isDeletingWebsite}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {isDeletingWebsite ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuTrash2 className="h-3.5 w-3.5" />
+                    )}
+                    {isDeletingWebsite ? "Removing…" : "Yes, remove"}
+                  </button>
+                </div>
+              </Modal>
+
+              {/* Delete doc confirm modal */}
+              <Modal
+                isOpen={!!deleteDocTarget}
+                onClose={() => !isDeletingDoc && setDeleteDocTarget(null)}
+                title="Remove Document"
+                width="sm"
+                disableBackdropClose={isDeletingDoc}
+              >
+                <p className="text-sm text-gray-700">
+                  Remove <span className="font-semibold">{deleteDocTarget?.filename}</span>? This
+                  action cannot be undone.
+                </p>
+                <div className="mt-5 flex gap-2">
+                  <button
+                    onClick={() => setDeleteDocTarget(null)}
+                    disabled={isDeletingDoc}
+                    className="flex-1 rounded-lg border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteDoc}
+                    disabled={isDeletingDoc}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {isDeletingDoc ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuTrash2 className="h-3.5 w-3.5" />
+                    )}
+                    {isDeletingDoc ? "Removing…" : "Yes, remove"}
+                  </button>
+                </div>
+              </Modal>
+
+              {/* Delete profile confirm modal */}
+              <Modal
+                isOpen={!!deleteTarget}
+                onClose={() => !isDeleting && setDeleteTarget(null)}
+                title="Remove Profile"
+                width="sm"
+                disableBackdropClose={isDeleting}
+              >
+                <p className="text-sm text-gray-700">
+                  Remove{" "}
+                  <span className="font-semibold">
+                    {deleteTarget?.profile_url.match(/linkedin\.com\/in\/([^/?#]+)/)?.[1] ??
+                      deleteTarget?.profile_url}
+                  </span>
+                  ? This action cannot be undone.
+                </p>
+                <div className="mt-5 flex gap-2">
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    disabled={isDeleting}
+                    className="flex-1 rounded-lg border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteProfile}
+                    disabled={isDeleting}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {isDeleting ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuTrash2 className="h-3.5 w-3.5" />
+                    )}
+                    {isDeleting ? "Removing…" : "Yes, remove"}
+                  </button>
+                </div>
+              </Modal>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                className="hidden"
+                onChange={handleDocUpload}
+              />
+
+              {/* Knowledge Sources */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                  Knowledge Sources
+                </p>
+
+                {/* Websites */}
+                <div className="mb-3">
+                  <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                    <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
+                    Websites
                   </p>
-                  <p className="mt-0.5 text-xs text-red-500">This action cannot be undone.</p>
-                  <div className="mt-3 flex gap-2">
+                  {profileWebsites.length > 0 && (
+                    <ul className="mb-1.5 space-y-1">
+                      {profileWebsites.map((site) => {
+                        const crawling =
+                          site.status !== "ready" &&
+                          site.status !== "error" &&
+                          site.status !== "failed";
+                        return (
+                          <li
+                            key={site.id}
+                            className={cn(
+                              "overflow-hidden rounded-lg border",
+                              crawling
+                                ? "animate-shimmer-card border-blue-200"
+                                : "border-gray-200 bg-white"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 px-2.5 py-1.5">
+                              <LuGlobe className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                              <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                                {site.url}
+                              </span>
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                  PURPOSE_COLORS[site.purpose] ?? PURPOSE_COLORS.knowledge
+                                )}
+                              >
+                                {PURPOSE_LABELS[site.purpose] ?? site.purpose}
+                              </span>
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                  site.status === "ready"
+                                    ? "bg-teal-100 text-teal-700"
+                                    : site.status === "error" || site.status === "failed"
+                                      ? "bg-red-100 text-red-600"
+                                      : "bg-blue-100 text-blue-600"
+                                )}
+                              >
+                                {site.status}
+                              </span>
+                              <button
+                                onClick={() => setDeleteWebsiteTarget(site)}
+                                className="shrink-0 text-gray-300 hover:text-red-500"
+                              >
+                                <LuX className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="flex gap-1.5">
+                    <div className="relative flex-1">
+                      <LuLink className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="url"
+                        value={websiteInput}
+                        onChange={(e) => setWebsiteInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleAddWebsite();
+                        }}
+                        placeholder="https://yoursite.com"
+                        className="h-8 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    {purposeSelect(websitePurpose, setWebsitePurpose)}
                     <button
-                      onClick={() => setDeleteTarget(null)}
-                      disabled={isDeleting}
-                      className="flex-1 rounded-lg border border-gray-200 bg-white py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                      onClick={handleAddWebsite}
+                      disabled={!websiteInput.trim() || websiteAdding}
+                      className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                     >
-                      Cancel
+                      {websiteAdding ? <LuLoader className="h-3.5 w-3.5 animate-spin" /> : "Add"}
                     </button>
+                  </div>
+                </div>
+
+                {/* Documents */}
+                <div>
+                  <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                    <LuFileText className="h-3.5 w-3.5 text-blue-500" />
+                    Documents
+                  </p>
+                  {profileDocs.length > 0 && (
+                    <ul className="mb-1.5 space-y-1">
+                      {profileDocs.map((doc) => {
+                        const crawling =
+                          doc.status !== "ready" &&
+                          doc.status !== "error" &&
+                          doc.status !== "failed";
+                        return (
+                          <li
+                            key={doc.id}
+                            className={cn(
+                              "overflow-hidden rounded-lg border",
+                              crawling
+                                ? "animate-shimmer-card border-blue-200"
+                                : "border-gray-200 bg-white"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 px-2.5 py-1.5">
+                              <LuFileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                              <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                                {doc.filename}
+                              </span>
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                  PURPOSE_COLORS[doc.purpose] ?? PURPOSE_COLORS.knowledge
+                                )}
+                              >
+                                {PURPOSE_LABELS[doc.purpose] ?? doc.purpose}
+                              </span>
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                  doc.status === "ready"
+                                    ? "bg-teal-100 text-teal-700"
+                                    : doc.status === "error" || doc.status === "failed"
+                                      ? "bg-red-100 text-red-600"
+                                      : "bg-blue-100 text-blue-600"
+                                )}
+                              >
+                                {doc.status}
+                              </span>
+                              <button
+                                onClick={() => setDeleteDocTarget(doc)}
+                                className="shrink-0 text-gray-300 hover:text-red-500"
+                              >
+                                <LuX className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className="flex gap-1.5">
+                    {purposeSelect(docPurpose, setDocPurpose)}
                     <button
-                      onClick={handleDeleteProfile}
-                      disabled={isDeleting}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={docUploading}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white py-2 text-xs font-medium text-gray-500 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
                     >
-                      {isDeleting ? (
+                      {docUploading ? (
                         <LuLoader className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <LuTrash2 className="h-3.5 w-3.5" />
+                        <LuUpload className="h-3.5 w-3.5" />
                       )}
-                      {isDeleting ? "Removing…" : "Yes, remove"}
+                      {docUploading ? "Uploading…" : "Upload Document"}
                     </button>
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Add another profile URL */}
-              {!deleteTarget && (
-                <div className="space-y-2 pt-1">
-                  <div className="relative">
-                    <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="url"
-                      value={profileUrl}
-                      onChange={(e) => setProfileUrl(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSubmitProfile();
-                      }}
-                      placeholder="Add another profile URL (optional)"
-                      className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {profileUrl.trim() && (
-                      <button
-                        onClick={handleSubmitProfile}
-                        disabled={profileLoading}
-                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        {profileLoading ? (
-                          <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <LuArrowRight className="h-3.5 w-3.5" />
-                        )}
-                        Add
-                      </button>
-                    )}
-                    <button
-                      onClick={handleGeneratePlans}
-                      disabled={profileLoading}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      <LuSparkles className="h-4 w-4" />
-                      Generate Marketing Plans
-                    </button>
-                    <ModelSwitcher dropUp />
-                  </div>
+              <div className="space-y-2 pt-1">
+                <div className="relative">
+                  <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="url"
+                    value={profileUrl}
+                    onChange={(e) => setProfileUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSubmitProfile();
+                    }}
+                    placeholder="Add another profile URL (optional)"
+                    className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  {profileUrl.trim() && (
+                    <button
+                      onClick={handleSubmitProfile}
+                      disabled={profileLoading}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {profileLoading ? (
+                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <LuArrowRight className="h-3.5 w-3.5" />
+                      )}
+                      Add
+                    </button>
+                  )}
+                  <button
+                    onClick={handleGeneratePlans}
+                    disabled={profileLoading}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <LuSparkles className="h-4 w-4" />
+                    Generate Marketing Plans
+                  </button>
+                  <ModelSwitcher dropUp />
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -618,10 +1367,19 @@ export default function AgentModeSection() {
         {/* ── Phase B: Select plan ── */}
         {phase === "b-select" && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Choose the marketing plan that best fits your goals. The agent will generate posts
-              aligned to it.
-            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setPhase("a-ready")}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                <LuArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
+              <p className="text-sm text-gray-600">
+                Choose the marketing plan that best fits your goals. The agent will generate posts
+                aligned to it.
+              </p>
+            </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {plans.map((plan, i) => {
                 const isSelected = selectedPlan?.id === plan.id;
