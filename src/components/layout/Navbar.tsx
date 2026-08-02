@@ -98,13 +98,16 @@ export default function Navbar() {
     }
   };
 
-  const handleSelectWorkspace = (id: string) => {
-    setActiveWorkspace(id);
-    // Persist workspace in URL
-    const params = new URLSearchParams(window.location.search);
-    params.set("workspace", id);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  const handleSelectWorkspace = async (id: string) => {
+    setActiveWorkspace(id); // optimistic
     setMenuOpen(false);
+    try {
+      await workspaceService().setDefaultWorkspace(id);
+      await refetchWorkspaces();
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+      await refetchWorkspaces(); // revert to server state
+    }
   };
 
   const handleCreateWorkspace = async (e: React.FormEvent) => {
@@ -114,11 +117,8 @@ export default function Navbar() {
     try {
       const ws = await workspaceService().createWorkspace(newName.trim(), newType);
       if (!ws) throw new Error("Failed to create workspace");
+      await workspaceService().setDefaultWorkspace(ws.id);
       await refetchWorkspaces();
-      setActiveWorkspace(ws.id);
-      const params = new URLSearchParams(window.location.search);
-      params.set("workspace", ws.id);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
       toast.success(`Workspace "${ws.name}" created!`);
       setMenuOpen(false);
     } catch (err) {
