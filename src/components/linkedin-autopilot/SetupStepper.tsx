@@ -21,7 +21,9 @@ type ModalState =
   | { type: "profileUrl" }
   | { type: "knowledge"; initialType: KnowledgeType };
 
-const STEPS: { label: string; modal: ModalState }[] = [
+type Mode = "agentic" | "manual";
+
+const ALL_STEPS: { label: string; modal: ModalState }[] = [
   { label: "LinkedIn Connect", modal: { type: "linkedin" } },
   { label: "Profile URL", modal: { type: "profileUrl" } },
   { label: "Knowledge", modal: { type: "knowledge", initialType: "knowledge" } },
@@ -29,7 +31,7 @@ const STEPS: { label: string; modal: ModalState }[] = [
   { label: "Style Upload", modal: { type: "knowledge", initialType: "style" } },
 ];
 
-export default function SetupStepper() {
+export default function SetupStepper({ mode }: { mode: Mode }) {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
@@ -60,13 +62,17 @@ export default function SetupStepper() {
   );
   const docs = documents?.results ?? [];
 
-  const completed = [
+  const allCompleted = [
     account?.connected === true,
     hasReadyProfile,
     docs.some((d) => d.purpose === "knowledge"),
     docs.some((d) => d.purpose === "tone"),
     docs.some((d) => d.purpose === "style"),
   ];
+
+  // In manual mode, hide the Profile URL step (index 1)
+  const STEPS = mode === "manual" ? ALL_STEPS.filter((_, i) => i !== 1) : ALL_STEPS;
+  const completed = mode === "manual" ? allCompleted.filter((_, i) => i !== 1) : allCompleted;
 
   const activeIndex = completed.findIndex((c) => !c);
   const effectiveActive = activeIndex === -1 ? STEPS.length : activeIndex;

@@ -12,6 +12,8 @@ import {
   LuUser,
   LuX,
   LuTrash2,
+  LuPencil,
+  LuSave,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import Modal from "@/components/ui/Modal";
@@ -107,6 +109,9 @@ export default function AgentModeSection() {
   const [plans, setPlans] = useState<MarketingPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<MarketingPlan | null>(null);
   const [generatedPlanId, setGeneratedPlanId] = useState("");
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<MarketingPlan>>({});
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const postPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -209,6 +214,8 @@ export default function AgentModeSection() {
     setPlans([]);
     setSelectedPlan(null);
     setGeneratedPlanId("");
+    setEditingPlanId(null);
+    setEditDraft({});
     if (workspaceId) checkProfile();
   };
 
@@ -279,6 +286,8 @@ export default function AgentModeSection() {
   };
 
   const handleGeneratePlans = async () => {
+    setEditingPlanId(null);
+    setEditDraft({});
     setPhase("b-generating");
     try {
       const data = await agentService(workspaceId).generatePlans(selectedModelId ?? undefined);
@@ -296,6 +305,33 @@ export default function AgentModeSection() {
     } catch (err) {
       toast.error(extractErrorMessage(err));
       setPhase("a-ready");
+    }
+  };
+
+  const handleEditPlan = (plan: MarketingPlan) => {
+    setEditingPlanId(plan.id);
+    setEditDraft({
+      title: plan.title,
+      angle: plan.angle,
+      target_audience: plan.target_audience,
+      pillars: plan.pillars,
+      sample_hooks: plan.sample_hooks,
+    });
+  };
+
+  const handleSavePlan = async (planId: string) => {
+    setIsSavingPlan(true);
+    try {
+      const updated = await agentService(workspaceId).updatePlan(planId, editDraft);
+      if (updated) {
+        setPlans((prev) => prev.map((p) => (p.id === planId ? updated : p)));
+        if (selectedPlan?.id === planId) setSelectedPlan(updated);
+      }
+      setEditingPlanId(null);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsSavingPlan(false);
     }
   };
 
@@ -589,12 +625,13 @@ export default function AgentModeSection() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {plans.map((plan, i) => {
                 const isSelected = selectedPlan?.id === plan.id;
+
                 return (
-                  <button
+                  <div
                     key={plan.id}
                     onClick={() => setSelectedPlan(plan)}
                     className={cn(
-                      "flex flex-col rounded-xl border p-4 text-left transition-all",
+                      "relative flex cursor-pointer flex-col rounded-xl border p-4 transition-all",
                       isSelected
                         ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
                         : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/40"
@@ -610,11 +647,23 @@ export default function AgentModeSection() {
                       >
                         {isSelected ? <LuCheck className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
                       </span>
-                      {isSelected && (
-                        <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                          Selected
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {isSelected && (
+                          <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            Selected
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditPlan(plan);
+                          }}
+                          className="flex items-center justify-center rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                          title="Edit plan"
+                        >
+                          <LuPencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Title */}
@@ -677,7 +726,7 @@ export default function AgentModeSection() {
                         </p>
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -762,6 +811,110 @@ export default function AgentModeSection() {
             </button>
           </div>
         )}
+      </Modal>
+
+      {/* ── Edit Plan Modal ── */}
+      <Modal
+        isOpen={editingPlanId !== null}
+        onClose={() => setEditingPlanId(null)}
+        title="Edit Marketing Plan"
+        width="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Title
+            </label>
+            <input
+              type="text"
+              value={editDraft.title ?? ""}
+              onChange={(e) => setEditDraft((d) => ({ ...d, title: e.target.value }))}
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Angle
+            </label>
+            <textarea
+              value={editDraft.angle ?? ""}
+              onChange={(e) => setEditDraft((d) => ({ ...d, angle: e.target.value }))}
+              rows={4}
+              className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Target Audience
+            </label>
+            <textarea
+              value={editDraft.target_audience ?? ""}
+              onChange={(e) => setEditDraft((d) => ({ ...d, target_audience: e.target.value }))}
+              rows={4}
+              className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Content Pillars (one per line)
+            </label>
+            <textarea
+              value={(editDraft.pillars ?? []).join("\n")}
+              onChange={(e) =>
+                setEditDraft((d) => ({
+                  ...d,
+                  pillars: e.target.value
+                    .split("\n")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                }))
+              }
+              rows={4}
+              className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Sample Hook
+            </label>
+            <textarea
+              value={(editDraft.sample_hooks ?? [])[0] ?? ""}
+              onChange={(e) =>
+                setEditDraft((d) => ({
+                  ...d,
+                  sample_hooks: [e.target.value, ...(d.sample_hooks ?? []).slice(1)],
+                }))
+              }
+              rows={4}
+              className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => setEditingPlanId(null)}
+              className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleSavePlan(editingPlanId!)}
+              disabled={isSavingPlan}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSavingPlan ? (
+                <LuLoader className="h-4 w-4 animate-spin" />
+              ) : (
+                <LuSave className="h-4 w-4" />
+              )}
+              {isSavingPlan ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
       </Modal>
     </>
   );
