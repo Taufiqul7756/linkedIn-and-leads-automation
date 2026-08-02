@@ -50,7 +50,13 @@ export default function Navbar() {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   // Create workspace inline form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -169,20 +175,24 @@ export default function Navbar() {
 
           {/* Avatar + workspace dropdown */}
           <div ref={menuRef} className="relative">
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="flex h-8 select-none items-center gap-1.5 rounded-full bg-violet-100 pl-1 pr-2 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-200"
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-200 text-[11px] font-bold">
-                {initials}
-              </span>
-              {activeWorkspace && (
-                <span className="hidden max-w-[100px] truncate text-xs font-medium text-violet-800 sm:inline">
-                  {activeWorkspace.name}
+            {!mounted ? (
+              <div className="h-8 w-24 animate-pulse rounded-full bg-gray-200 sm:w-32" />
+            ) : (
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex h-8 select-none items-center gap-1.5 rounded-full bg-violet-100 pl-1 pr-2 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-200"
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-200 text-[11px] font-bold">
+                  {initials}
                 </span>
-              )}
-              <LuChevronDown className="h-3 w-3 text-violet-500" />
-            </button>
+                {activeWorkspace && (
+                  <span className="hidden max-w-[100px] truncate text-xs font-medium text-violet-800 sm:inline">
+                    {activeWorkspace.name}
+                  </span>
+                )}
+                <LuChevronDown className="h-3 w-3 text-violet-500" />
+              </button>
+            )}
 
             {menuOpen && (
               <div className="absolute right-0 top-full z-30 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
