@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import SetupStepper from "@/components/linkedin-autopilot/SetupStepper";
 import AccountSection from "@/components/linkedin-autopilot/AccountSection";
@@ -11,26 +11,20 @@ import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowS
 
 type Mode = "agent" | "manual";
 
-function urlMode(searchParams: ReturnType<typeof useSearchParams>): Mode {
-  return searchParams.get("mode") === "manual" ? "manual" : "agent";
-}
-
 function LinkedInAutopilotContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  // Local state so tab clicks respond instantly, independent of router/hydration
-  const [mode, setModeState] = useState<Mode>(() => urlMode(searchParams));
-
-  // Keep local state in sync when URL changes externally (back/forward, OAuth cleanup)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setModeState(urlMode(searchParams));
-  }, [searchParams]);
+  // Initialized from URL so reload restores the correct mode.
+  // No effect — useSearchParams() returns a new object every render,
+  // which would fire an effect and reset mode back before router.replace completes.
+  const [mode, setModeState] = useState<Mode>(() =>
+    searchParams.get("mode") === "manual" ? "manual" : "agent"
+  );
 
   const setMode = (newMode: Mode) => {
-    setModeState(newMode); // immediate UI response
+    setModeState(newMode); // immediate UI — no waiting for router
     const params = new URLSearchParams(searchParams.toString());
     params.set("mode", newMode);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
