@@ -1,7 +1,6 @@
 "use client";
-import { useEffect, Suspense } from "react";
+import { Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useWorkspace } from "@/context/WorkspaceContext";
 import SetupStepper from "@/components/linkedin-autopilot/SetupStepper";
 import AccountSection from "@/components/linkedin-autopilot/AccountSection";
 import GeneratePostsSection from "@/components/linkedin-autopilot/GeneratePostsSection";
@@ -16,7 +15,6 @@ function LinkedInAutopilotContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { workspaces, activeWorkspace, setActiveWorkspace } = useWorkspace();
 
   const mode: Mode = searchParams.get("mode") === "manual" ? "manual" : "agent";
 
@@ -25,30 +23,6 @@ function LinkedInAutopilotContent() {
     params.set("mode", newMode);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
-
-  // Sync ?workspace= → context
-  useEffect(() => {
-    const urlId = searchParams.get("workspace");
-    if (!urlId || workspaces.length === 0) return;
-    const found = workspaces.find((w) => w.id === urlId);
-    if (found && found.id !== activeWorkspace?.id) {
-      setActiveWorkspace(urlId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, workspaces, setActiveWorkspace]);
-
-  // If ?workspace= is absent from URL, inject it (and default mode=agent).
-  // Reads window.location.search directly so stale searchParams closure never
-  // triggers a spurious mode reset when only the workspace changes.
-  useEffect(() => {
-    if (!activeWorkspace) return;
-    const liveParams = new URLSearchParams(window.location.search);
-    if (liveParams.get("workspace")) return; // already present — don't touch URL
-    liveParams.set("workspace", activeWorkspace.id);
-    if (!liveParams.get("mode")) liveParams.set("mode", "agent");
-    router.replace(`${pathname}?${liveParams.toString()}`, { scroll: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeWorkspace?.id, pathname]); // only re-run when workspace identity or route changes
 
   return (
     <div className="space-y-4 sm:space-y-5">

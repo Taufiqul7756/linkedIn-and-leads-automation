@@ -13,6 +13,8 @@ export const workspaceService = () => ({
   getWorkspaces: () => get<WorkspaceType[] | PaginatedWorkspaces>("/workspaces/"),
   createWorkspace: (name: string, type: "corporate" | "personal") =>
     post<WorkspaceType>("/workspaces/", { name, type }),
+  setDefaultWorkspace: (id: string) =>
+    patch<WorkspaceType>(`/workspaces/${id}/`, { is_default: true }),
   renameWorkspace: (id: string, name: string) =>
     patch<WorkspaceType>(`/workspaces/${id}/`, { name }),
   deleteWorkspace: (id: string) => del<void>(`/workspaces/${id}/`),

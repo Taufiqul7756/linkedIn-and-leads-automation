@@ -31,10 +31,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         ? data
         : ((data as unknown as { results?: WorkspaceType[] }).results ?? []);
       setWorkspaces(list);
-      // Restore persisted selection, fallback to first
+      // Prefer server-side default, fallback to localStorage, then first
       const stored = localStorage.getItem(WORKSPACE_KEY);
-      const found = stored ? list.find((w) => w.id === stored) : null;
-      const active = found ?? list[0] ?? null;
+      const active =
+        list.find((w) => w.is_default) ??
+        (stored ? list.find((w) => w.id === stored) : null) ??
+        list[0] ??
+        null;
       if (active) {
         setActiveWorkspaceId(active.id);
         localStorage.setItem(WORKSPACE_KEY, active.id);
