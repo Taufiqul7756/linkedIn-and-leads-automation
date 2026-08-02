@@ -12,8 +12,10 @@ import {
 
 export const postsService = (workspaceId: string) => ({
   getPostStats: () => get<PostStatsType>(`/workspaces/${workspaceId}/content/posts/stats/`),
-  getDraftPosts: () =>
-    get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?status=draft`),
+  getDraftPosts: (state?: "agent" | "manual") =>
+    get<PaginatedPosts>(
+      `/workspaces/${workspaceId}/content/posts/?status=draft${state ? `&state=${state}` : ""}`
+    ),
   getAllPosts: (status?: string, page?: number, pageSize = 10) => {
     const q = new URLSearchParams();
     if (status && status !== "all") {

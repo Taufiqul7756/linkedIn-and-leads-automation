@@ -4,7 +4,7 @@
 
 A single-page dashboard that lets users generate on-brand LinkedIn posts from their workspace knowledge base, review and approve drafts, schedule, and auto-publish — all orchestrated by a multi-agent AI workflow.
 
-Every API call is scoped to the **active workspace** via `/workspaces/{workspace_pk}/` prefix. The workspace type (`corporate` / `personal`) controls knowledge grounding and writing voice. `?scope=` param is gone everywhere.
+Every API call is scoped to the **active workspace** via `/workspaces/{workspace_pk}/` prefix.
 
 ## Problem
 
@@ -18,16 +18,25 @@ Give users a fully automated LinkedIn content pipeline with a single human appro
 
 ## Sections
 
-### 1. Setup Stepper
-Horizontal progress bar at the top of the page showing 5 onboarding steps. Each step is clickable and opens its corresponding modal.
+### 0. Mode Tabs
 
-| # | Label | Completion | Modal |
-|---|-------|-----------|-------|
-| 1 | LinkedIn Connect | `account.connected === true` | `LinkedInManageModal` |
-| 2 | Profile URL | any profile with `status === "ready"` via `GET /linkedin/profiles/` | `ProfileUrlModal` |
-| 3 | Knowledge | any doc with `purpose === "knowledge"` via `GET /documents/` | `KnowledgeUploadModal` (pre-selects "knowledge") |
-| 4 | Tone | any doc with `purpose === "tone"` via `GET /documents/` | `KnowledgeUploadModal` (pre-selects "tune") |
-| 5 | Style Upload | any doc with `purpose === "style"` via `GET /documents/` | `KnowledgeUploadModal` (pre-selects "style") |
+Two tabs at the top of the page: **Agent** (default) and **Manual**. Mode persists in URL as `?mode=agent|manual`.
+
+- **Agent** (default): shows `AgentModeSection` banner, hides `GeneratePostsSection`. Stepper shows all 5 steps including Profile URL.
+- **Manual**: shows `GeneratePostsSection`, hides `AgentModeSection`. Stepper shows 4 steps (Profile URL step hidden).
+- Tab state: `useSearchParams()` read from URL; `router.replace()` to update, preserving other params. Wrapped in `<Suspense>`.
+
+### 1. Setup Stepper
+
+Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manual"` prop — in manual mode, the Profile URL step is filtered out.
+
+| # | Label | Agentic | Manual | Completion | Modal |
+|---|-------|---------|--------|-----------|-------|
+| 1 | LinkedIn Connect | ✓ | ✓ | `account.connected === true` | `LinkedInManageModal` |
+| 2 | Profile URL | ✓ (agent) | — | any profile `status === "ready"` via `GET /linkedin/profiles/` | `ProfileUrlModal` |
+| 3 | Knowledge | ✓ | ✓ | any doc `purpose === "knowledge"` via `GET /documents/` | `KnowledgeUploadModal` |
+| 4 | Tone | ✓ | ✓ | any doc `purpose === "tone"` | `KnowledgeUploadModal` |
+| 5 | Style Upload | ✓ | ✓ | any doc `purpose === "style"` | `KnowledgeUploadModal` |
 
 - Done → teal filled circle with checkmark + teal connector line
 - Active (first incomplete) → blue outlined circle
@@ -35,128 +44,120 @@ Horizontal progress bar at the top of the page showing 5 onboarding steps. Each 
 - Component: `src/components/linkedin-autopilot/SetupStepper.tsx`
 
 **Modals:**
-- `ProfileUrlModal` — lists existing profiles (teal=ready, blue+spinner=pending/fetching, red=error+Retry button), inline delete confirm per profile, add URL input, per-profile polling via setInterval. On `ready`, invalidates `["linkedin-profiles", workspaceId]` → stepper auto-updates.
-- `KnowledgeUploadModal` — type selector (Knowledge/Tone/Style), PDF upload (drag & drop), URL input, existing uploaded documents list (filename + purpose badge + delete), items-to-upload list with type badges; wires `POST /documents/` on save with `purpose` field; `DELETE /documents/{id}/` per existing doc
+- `ProfileUrlModal` — lists existing profiles (teal=ready, blue+spinner=pending/fetching, red=error+Retry button), modal delete confirm per profile (username extracted from `profile_url` via regex `/linkedin\.com\/in\/([^/?#]+)/`), add URL input, per-profile polling via list endpoint. On `ready`, invalidates `["linkedin-profiles", workspaceId]`.
+- `KnowledgeUploadModal` — type selector (Knowledge/Tone/Style), PDF upload, URL input, existing docs list (filename + purpose badge + delete), items-to-upload list; wires `POST /documents/` with `purpose` field; `DELETE /documents/{id}/` per existing doc.
 
 ### 2. Account & Knowledge Base
-- **LinkedIn account card**: Shows connection status (Connected/Disconnected), authorized user, OAuth scope.
-  - Action: **Manage** → opens LinkedInManageModal (current account info + "Connect your LinkedIn" button + disconnect link)
-- **Knowledge base card**: Shows website crawl status (Ready/Stale) and domain when a website is indexed; shows uploaded document count when docs exist; empty when neither. No "No website added yet" placeholder.
-  - Action: **Add sources** → opens `KnowledgeUploadModal` (unified modal for all source types)
-  - Action: **Re-crawl** → triggers re-index of website
-- **Stats grid** (2 rows × 4 cards, real API): Row 1 — Drafts · Approved · Scheduled · Published; Row 2 — Failed · Published This Week · Next Scheduled · Avg. Engagement
-  - API: `GET /api/v1/workspaces/{workspace_pk}/content/posts/stats/`
-  - Response fields: `drafts`, `approved`, `scheduled`, `published`, `failed`, `published_this_week`, `next_scheduled_at` (ISO), `avg_engagement`
-  - `next_scheduled_at` displayed as relative time ("in 2h 40m")
-  - `avg_engagement` displayed as percentage with 1 decimal
 
-### 3. Generate Posts from Knowledge Base
-- Controls: Number of posts (free-form input), Use Emoji (Yes/No toggle), Length (Short/Medium/Long)
-- **Tone reference PDF** dropdown — populated from `GET /documents/?purpose=tone`; optional, sends `tone_document` in generate body
-- **Style reference PDF** dropdown — populated from `GET /documents/?purpose=style`; optional, sends `style_document` in generate body
-- **Source URL** (optional) — generate posts from a specific page/article
-- Custom prompt textarea with placeholder
-- No frontend website validation — Generate button fires regardless of whether a website is indexed; backend handles validation
-- Tone and content style are hardcoded (`"professional"` / `"thought_leadership"`) — no user-facing dropdowns
-- "Suggest prompts" button → `POST /workspaces/{workspace_pk}/content/posts/suggest_prompts/` → shows clickable suggestion chips (requires website)
-- Footer note: posts stay as drafts until approved
-- Primary action: Generate → `POST /workspaces/{workspace_pk}/content/posts/generate/` with `{ prompt, tone, length, content_style, use_emoji, count, tone_document?, style_document?, writer_model? }`
+- **LinkedIn account card**: Shows connection status, authorized user, OAuth scope. **Manage** → `LinkedInManageModal`.
+- **Knowledge base card**: Shows website crawl status and domain when indexed; shows uploaded document count when docs exist. **Add sources** → `KnowledgeUploadModal`. **Re-crawl** → triggers re-index.
+- **Stats grid** (2 rows × 4 cards): Row 1 — Drafts · Approved · Scheduled · Published; Row 2 — Failed · Published This Week · Next Scheduled · Avg. Engagement
+  - API: `GET /workspaces/{workspace_pk}/content/posts/stats/`
+
+### 3. Generate Posts (Manual mode only)
+
+- Controls: Number of posts, Use Emoji (Yes/No), Length (Short/Medium/Long)
+- **Tone reference PDF** dropdown — from `GET /documents/?purpose=tone`; sends `tone_document` in body
+- **Style reference PDF** dropdown — from `GET /documents/?purpose=style`; sends `style_document` in body
+- **Source URL** (optional) + Custom prompt textarea
+- Tone/content style hardcoded (`"professional"` / `"thought_leadership"`) — no user dropdowns
+- Generate → `POST /workspaces/{id}/content/posts/generate/` with `{ prompt, tone, length, content_style, use_emoji, count, tone_document?, style_document?, writer_model? }`
 - Generate is **synchronous**: posts created immediately; images generated async (`image_status: "pending"`)
 - On success: invalidates `["posts","draft"]`; sets `["posts-generating"]` flag for image polling
-- If prompt not covered by KB → API returns `{ prompt, suggested_topics[] }` → amber warning banner
-- Card has gradient background: blue-gray (`#ECEEF8`) → white
 
 ### 4. Review & Approval
+
 - Shows drafts awaiting review (badge count)
+- **Filtered by mode**: reads `?mode=` from URL and passes `state=agent|manual` to `GET /content/posts/?status=draft&state=agent|manual` — each tab shows only its own posts
+- Query key includes mode: `["posts","draft",workspaceId,mode]` — switching tabs auto-refetches
 - Polls every 5s after Generate fires (via `["posts-generating"]` flag); stops when all drafts have `image_status !== "pending"`
-- Two-column card grid, each card showing:
-  - Author avatar (initials from LinkedIn account name), Draft badge
-  - Post body text (whitespace-pre-line)
-  - **Image area**: `pending` → blue dashed spinner; `image_url` present → image; otherwise nothing
-  - Hashtags (prefixed with `#`)
-  - **Edit** → EditPostModal
-  - **Regenerate Post** → RegeneratePostConfirmModal → `POST /workspaces/{workspace_pk}/content/posts/{id}/regenerate/`
-  - **Regenerate Image** → floating prompt textarea → `POST /workspaces/{workspace_pk}/content/posts/{id}/generate_image/`
-  - **Delete** → DeleteConfirmModal → `DELETE /workspaces/{workspace_pk}/content/posts/{id}/`
-  - **Approve** → `POST /workspaces/{workspace_pk}/content/posts/{id}/approve/`; on success invalidates both `["posts","draft"]` and `["posts","all"]` — Post Management table updates immediately
-- APIs: `GET /workspaces/{workspace_pk}/content/posts/?status=draft`
+- Two-column card grid: author avatar, Draft badge, post body, image area, hashtags
+- Actions per card: Edit → `EditPostModal` · Regenerate Post · Regenerate Image · Delete → `RejectConfirmModal` · Approve → `POST .../approve/`
+- Approve invalidates `["posts","draft",workspaceId]` (partial match, `exact: false`) + `["posts","all"]`
 
 ### 5. Post Management
+
 - Excludes draft posts server-side via `exclude_status=draft`
 - Table with checkbox selection + select-all (indeterminate state)
-- **Bulk delete** appears when ≥ 2 rows selected
-- **Page size selector** (2 / 5 / 10 / 15 / 20 per page, default 10)
-- **Filter** dropdown: All / Approved / Scheduled / Published / Failed (no Draft)
-- Pagination bar always visible (Previous / Next, page X · N total)
+- Bulk delete when ≥ 2 rows selected
+- Page size selector (2 / 5 / 10 / 15 / 20), filter dropdown (All / Approved / Scheduled / Published / Failed)
 - Columns: ☐ · POST · CREATED · SCHEDULED · PUBLISHED · STATUS · ENGAGEMENT · ACTIONS
-- Status pills: Approved (emerald) · Scheduled (blue) · Published (green) · Failed (red)
-- Per-row actions based on status:
-  - Approved → **Schedule** → ScheduleModal → `POST /workspaces/{workspace_pk}/content/posts/{id}/schedule/`
-  - Scheduled → **Reschedule** → ScheduleModal + ▶ play button
-  - Failed → **Retry**
-  - Published → **External link** icon
-- Three-dot dropdown: **View** → ViewPostModal · **Delete** → DeleteConfirmModal → `DELETE /workspaces/{workspace_pk}/content/posts/{id}/`
-- APIs: `GET /workspaces/{workspace_pk}/content/posts/?page_size=N&page=N&status=X&exclude_status=draft`
+- Per-row actions: Schedule / Reschedule / Retry / External link; three-dot: View → `ViewPostModal` · Delete → `RejectConfirmModal`
 
-### 6. Agent Mode
-Blue banner above AccountSection. "Run Agent" button opens a 3-phase modal (`width="3xl"`, backdrop close disabled).
+### 6. Agent Mode (Agentic mode only)
+
+Blue banner above `AccountSection`. **Run Agent** opens a 3-phase modal (`width="3xl"`, `disableBackdropClose`, `bodyClassName="flex flex-col"`, `minHeight="480px"`).
 
 **Phase A — LinkedIn Profile**
-- Loads existing profiles on open. If none: URL input form. If pending/fetching: spinner with polling (3s). If error: error banner + Retry + Change URL.
-- a-ready: content is pinned to the **bottom** of the modal (modal body is `flex flex-col` with `minHeight 480px`; a `flex-1` spacer fills the top). Bottom layout: profile list cards → inline delete confirm → add-another URL input → action row. Action row order: "Generate Marketing Plans" button (primary, flex-1) → ModelSwitcher (dropUp — opens upward to avoid overflow clipping).
+
+Phase states: `a-loading | a-submit | a-polling | a-ready | a-error`
+
+- **a-loading**: checks existing profiles on open.
+- **a-submit**: shown when no profile exists yet. Three sections stacked:
+  1. LinkedIn Profile URL — inline input + Analyze Profile button
+  2. Websites — add URL with purpose selector (knowledge/tone/style); items call `POST /linkedin/agent/websites/` immediately; show shimmer while crawling, stop shimmer on ready/error/failed
+  3. Documents — upload PDF with purpose selector; calls `POST /linkedin/agent/documents/` immediately; same shimmer/polling behavior
+  - Generate Marketing Plans enabled if any profile URL, website, or doc exists
+- **a-polling**: spinner while profile fetches (polls `GET /linkedin/profiles/` every 3s)
+- **a-ready**: content pinned to bottom via `flex-1` spacer. Layout: profile cards (username from regex, modal delete confirm) → Knowledge Sources card (websites + docs with shimmer, purpose badges, status badges, modal delete confirms) → add-another URL input → action row (Generate Marketing Plans + ModelSwitcher dropUp)
+- **a-error**: error banner + Change URL + Retry
 
 **Phase B — Marketing Plans**
-- Calls `POST /workspaces/{id}/content/plans/` with optional `{ writer_model }`. Shows spinner while generating.
-- Displays 3 plan cards in a 3-column grid — each shows: title, angle, target_audience, content pillars (bullet list), sample_hooks[0] (italic quote). One card selected at a time.
-- Action row: Regenerate | ModelSwitcher | Generate Posts.
+
+Phase states: `b-generating | b-select`
+
+- `b-generating`: spinner while `POST /content/plans/` runs
+- `b-select`: 3-column grid of plan cards. Each card: title, angle, target_audience, content pillars, sample_hooks[0]. Pencil icon → edit modal (`Modal width="lg"`) → `PATCH /content/plans/{id}/`. Back button returns to `a-ready`. Action row: Regenerate | ModelSwitcher | Generate Posts.
 
 **Phase C — Generate Posts**
-- Calls `POST /workspaces/{id}/content/plans/{id}/generate/` with optional `{ writer_model }`. API returns 202 queued.
-- Polls `GET /content/posts/?plan={planId}&status=draft` every 2.5s. When posts appear: sets `["posts-generating"]` flag → ReviewApprovalSection handles image polling. Phase shows ring spinner + bouncing dots.
-- On completion: "Posts created!" success state → modal auto-closes after 2s.
 
-**StepBar** — shows A/B/C with done (teal), active (blue), pending (gray) states.
+Phase states: `c-generating | c-polling | c-done`
+
+- Calls `POST /content/plans/{id}/generate/`; polls drafts every 2.5s; on posts found sets `["posts-generating"]` flag; auto-closes after 2s.
+
+**Terminal statuses for polling**: `ready`, `error`, `failed` — polling stops on any of these. `failed` shows red badge (same as `error`).
+
+**Knowledge Sources (agent-level endpoints — workspace-scoped, no profile required):**
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `.../linkedin/agent/documents/` | List agent docs |
+| POST | `.../linkedin/agent/documents/` | Upload doc (FormData: `file` + `purpose`) |
+| DELETE | `.../linkedin/agent/documents/{id}/` | Delete doc |
+| GET | `.../linkedin/agent/websites/` | List agent websites |
+| POST | `.../linkedin/agent/websites/` | Add website (`{ url, purpose }`) |
+| GET | `.../linkedin/agent/websites/{id}/` | Get single website |
+| DELETE | `.../linkedin/agent/websites/{id}/` | Delete website |
+| POST | `.../linkedin/agent/websites/{id}/recrawl/` | Recrawl website |
+
+**Purpose values**: `knowledge` (default) · `tone` · `style`
 
 ### 7. Model Switcher
-Dropdown component `ModelSwitcher` that fetches available AI models and lets users pick which model generates content.
 
-- Data: `GET /api/v1/ai-models/` → `[{ model_id, label, provider, is_default }]`
-- Selection stored in React Query cache at `["selected-model"]` (global, no workspaceId)
-- `useSelectedModel()` hook exported from `ModelSwitcher.tsx` — reads `["selected-model"]`
+`ModelSwitcher` component — fetches `GET /ai-models/`, stores selection in `["selected-model"]` cache.
+
+- `useSelectedModel()` hook exported from `ModelSwitcher.tsx`
 - Appears in: GeneratePostsSection bottom bar, AgentModeSection a-ready phase, AgentModeSection b-select action row
-- `writer_model` sent to: `POST /content/posts/generate/`, `POST /content/posts/generate_from_link/`, `POST /content/plans/`, `POST /content/plans/{id}/generate/`
+- `writer_model` sent to: `POST /content/posts/generate/`, `POST /content/plans/`, `POST /content/plans/{id}/generate/`
+- `dropUp` prop opens dropdown upward (used inside modal to avoid clipping)
 
 ### 8. Autopilot Agent Workflow (UI-only)
-- Live status indicator
-- Orchestrator banner: coordinating status, agents active, posts in flight, gate needs-you count
-- 7 agent cards in 4+3 grid (Connector, Knowledge, Generator, Review Gate, Scheduler, Publisher, Analytics)
+
+- Live status indicator, orchestrator banner, 7 agent cards in 4+3 grid
 
 ---
 
-## Modals
-
-| Modal | Trigger | Content |
-| --- | --- | --- |
-| `LinkedInManageModal` | Manage button / Stepper step 1 | Connected account info, Connect, Disconnect |
-| `ProfileUrlModal` | Stepper step 2 | Profile list (ready/pending/error), add URL, inline delete confirm, polling |
-| `KnowledgeUploadModal` | Stepper steps 3–5 | Type selector (Knowledge/Tune/Style), PDF upload, URL add, items list with type badges |
-| `KnowledgeBaseUploadModal` | Add sources button | Drag-and-drop PDF/DOC/DOCX + textarea |
-| `ScheduleModal` | Schedule / Reschedule | Date + time + timezone; `onConfirm(scheduledAt)` |
-| `EditPostModal` | Edit button | Content textarea + image upload + hashtags |
-| `RejectConfirmModal` | Delete button | Warning + post excerpt + Cancel + Delete |
-| `ViewPostModal` | Three-dot → View | Full post detail from `GET /content/posts/{id}/` |
-| `RegeneratePostConfirmModal` | Regenerate Post | Amber warning, post excerpt, Cancel + Regenerate |
-
----
-
-## Data Model (real API)
+## Data Model
 
 | Type | Key Fields |
-| --- | --- |
-| `PostType` | id, body, hashtags (string[]), image_url, image_status (`"pending"`/`"done"`/`"failed"`), tone, length, content_style, use_emoji, status, scheduled_at, published_at, linkedin_urn, engagement, created_at |
-| `PostEngagement` | impressions, likes, comments, rate, synced_at |
-| `PostStatsType` | drafts, approved, scheduled, published, failed, published_this_week, next_scheduled_at, avg_engagement |
-| `PaginatedPosts` | count, next, previous, results: PostType[] |
+|------|-----------|
+| `LinkedInProfile` | id, profile_url, status (string), facets `{ topics, summary, brand_tone, value_props }`, knowledge_items, posts_count, error, created_at |
+| `ProfileDocument` | id, file, filename, purpose, status (string), num_pages, summary, guide, facets, error, created_at |
+| `ProfileWebsite` | id, url, kind, purpose, status (string), summary, facets, error, created_at |
+| `MarketingPlan` | id, batch, linkedin_profile, title, angle, target_audience, rationale, pillars, sample_hooks, cadence, created_at |
+| `PostType` | id, body, hashtags (string[]), image_url, image_status, tone, length, content_style, use_emoji, status, scheduled_at, published_at, engagement, created_at |
+
+**Note**: `LinkedInProfile` has `profile_url` (not `url`) and `facets` object (not `name`/`headline`). Username displayed by extracting from `profile_url` via regex `/linkedin\.com\/in\/([^/?#]+)/`.
 
 ## Status Flow
 
@@ -170,57 +171,52 @@ Dropdown component `ModelSwitcher` that fetches available AI models and lets use
 All endpoints prefixed with `/api/v1/workspaces/{workspace_pk}/`
 
 | Method | Endpoint | Purpose |
-| --- | --- | --- |
+|--------|----------|---------|
 | GET | `.../content/posts/stats/` | Stats grid |
 | GET | `.../content/posts/?status=draft` | Draft posts list |
 | GET | `.../content/posts/?exclude_status=draft&page=N&page_size=N` | Post management table |
-| GET | `.../content/posts/{id}/` | View single post |
-| POST | `.../content/posts/generate/` | Generate posts (`{ ..., writer_model? }`) |
+| POST | `.../content/posts/generate/` | Generate posts |
 | POST | `.../content/posts/suggest_prompts/` | Prompt suggestions |
 | POST | `.../content/posts/{id}/approve/` | Approve draft |
 | POST | `.../content/posts/{id}/schedule/` | Schedule post |
-| POST | `.../content/posts/{id}/upload_image/` | Upload image (FormData, `image` field) |
 | PATCH | `.../content/posts/{id}/` | Edit body / hashtags |
 | DELETE | `.../content/posts/{id}/` | Delete post |
-| POST | `.../content/posts/{id}/generate_image/` | Generate image (`{ image_prompt }`) |
+| POST | `.../content/posts/{id}/generate_image/` | Generate image |
+| POST | `.../content/posts/{id}/upload_image/` | Upload image (FormData) |
 | POST | `.../content/posts/{id}/regenerate/` | Regenerate post |
-| POST | `.../content/posts/{id}/refresh_metrics/` | Refresh engagement metrics |
 | GET | `.../websites/` | List indexed websites |
-| POST | `.../websites/` | Add website URL (no scope field) |
-| DELETE | `.../websites/{id}/` | Remove website URL |
+| POST | `.../websites/` | Add website URL |
+| DELETE | `.../websites/{id}/` | Remove website |
 | POST | `.../websites/{id}/recrawl/` | Re-crawl website |
-| GET | `.../documents/` | List all uploaded documents |
-| GET | `.../documents/?purpose=tone` | List tone reference docs (used by Generate section dropdown) |
-| GET | `.../documents/?purpose=style` | List style reference docs (used by Generate section dropdown) |
-| POST | `.../documents/` | Upload document (`file` binary + `purpose`: knowledge/tone/style) |
+| GET | `.../documents/` | List all documents |
+| GET | `.../documents/?purpose=tone\|style\|knowledge` | Filtered docs |
+| POST | `.../documents/` | Upload document |
 | DELETE | `.../documents/{id}/` | Delete document |
-| POST | `.../documents/{id}/reextract/` | Re-extract document |
+| GET/DEL | `.../linkedin/account/` | Status / disconnect |
 | GET | `.../linkedin/connect/` | Returns `{ authorize_url }` |
-| GET/DEL | `.../linkedin/account/` | Status (GET) / disconnect (DELETE) |
-
-Top-level (unchanged):
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/v1/auth/logout/` | Sign out |
-| GET | `/api/v1/linkedin/callback/` | OAuth callback (workspace from signed state) |
-
-## Agent Mode — API Endpoints
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
 | GET | `.../linkedin/profiles/` | List LinkedIn profiles |
 | POST | `.../linkedin/profiles/` | Create profile (`{ profile_url }`) |
-| GET | `.../linkedin/profiles/{id}/` | Get single profile (for polling) |
-| POST | `.../linkedin/profiles/{id}/refetch/` | Retry failed profile fetch |
+| GET | `.../linkedin/profiles/{id}/` | Get single profile |
+| POST | `.../linkedin/profiles/{id}/refetch/` | Retry failed profile |
 | DELETE | `.../linkedin/profiles/{id}/` | Delete profile |
-| POST | `.../content/plans/` | Generate marketing plans (`{ writer_model? }`) |
-| POST | `.../content/plans/{id}/generate/` | Generate posts from plan (`{ writer_model? }`) |
-| GET | `.../content/posts/?plan={id}&status=draft` | Poll for plan's draft posts |
+| GET | `.../linkedin/agent/documents/` | List agent docs |
+| POST | `.../linkedin/agent/documents/` | Upload agent doc |
+| DELETE | `.../linkedin/agent/documents/{id}/` | Delete agent doc |
+| GET | `.../linkedin/agent/websites/` | List agent websites |
+| POST | `.../linkedin/agent/websites/` | Add agent website |
+| DELETE | `.../linkedin/agent/websites/{id}/` | Delete agent website |
+| POST | `.../linkedin/agent/websites/{id}/recrawl/` | Recrawl agent website |
+| POST | `.../content/plans/` | Generate marketing plans |
+| PATCH | `.../content/plans/{id}/` | Edit marketing plan |
+| POST | `.../content/plans/{id}/generate/` | Generate posts from plan |
+| GET | `.../content/posts/?plan={id}&status=draft` | Poll plan's draft posts |
 
 Top-level:
 | Method | Endpoint | Purpose |
-| --- | --- | --- |
+|--------|----------|---------|
+| POST | `/api/v1/auth/logout/` | Sign out |
 | GET | `/api/v1/ai-models/` | List available AI models |
+| GET | `/api/v1/linkedin/callback/` | OAuth callback |
 
 ## Out of Scope (remaining)
 

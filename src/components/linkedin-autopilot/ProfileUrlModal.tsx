@@ -156,7 +156,7 @@ export default function ProfileUrlModal({ isOpen, onClose }: ProfileUrlModalProp
         <div className="mb-4 space-y-2">
           {profiles.map((p) => {
             const isPending = p.status === "pending" || p.status === "fetching";
-            const isError = p.status === "error";
+            const isError = p.status === "error" || p.status === "failed";
             const isReady = p.status === "ready";
 
             return (
@@ -190,20 +190,17 @@ export default function ProfileUrlModal({ isOpen, onClose }: ProfileUrlModalProp
 
                   {/* Info */}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-blue-600">{p.url}</p>
-                    {isReady && p.name && (
-                      <p className="text-xs font-medium text-gray-700">{p.name}</p>
-                    )}
-                    {isReady && p.headline && (
-                      <p className="truncate text-xs text-gray-400">{p.headline}</p>
-                    )}
+                    <p className="text-xs font-medium text-gray-800">
+                      {p.profile_url.match(/linkedin\.com\/in\/([^/?#]+)/)?.[1] ?? ""}
+                    </p>
+                    <p className="truncate text-xs text-blue-600">{p.profile_url}</p>
                     {isPending && (
                       <p className="text-xs text-blue-500">
                         {p.status === "fetching" ? "Fetching profile…" : "Processing…"}
                       </p>
                     )}
                     {isError && (
-                      <p className="text-xs text-red-500">{p.error_message ?? "Fetch failed."}</p>
+                      <p className="text-xs text-red-500">{p.error || "Fetch failed."}</p>
                     )}
                   </div>
 
@@ -235,7 +232,11 @@ export default function ProfileUrlModal({ isOpen, onClose }: ProfileUrlModalProp
                 {deleteTarget?.id === p.id && (
                   <div className="mt-3 rounded-lg border border-red-200 bg-white p-3">
                     <p className="text-xs font-medium text-red-700">
-                      Remove <span className="font-semibold">{p.name || p.url}</span>?
+                      Remove{" "}
+                      <span className="font-semibold">
+                        {p.profile_url.match(/linkedin\.com\/in\/([^/?#]+)/)?.[1] ?? p.profile_url}
+                      </span>
+                      ?
                     </p>
                     <p className="mt-0.5 text-[11px] text-red-400">This action cannot be undone.</p>
                     <div className="mt-2.5 flex gap-2">
