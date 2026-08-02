@@ -10,16 +10,23 @@ import PostManagementSection from "@/components/linkedin-autopilot/PostManagemen
 import AgentModeSection from "@/components/linkedin-autopilot/AgentModeSection";
 import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowSection";
 
-// Syncs ?workspace=<id> from URL into WorkspaceContext on page load
-function WorkspaceUrlSync() {
+type Mode = "agentic" | "manual";
+
+function LinkedInAutopilotContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const { workspaces, activeWorkspace, setActiveWorkspace } = useWorkspace();
 
-  // Sync URL ?workspace= → context. Only fires when URL or workspace list changes,
-  // NOT when activeWorkspace changes — avoids reverting Navbar-initiated switches
-  // where setActiveWorkspace fires before router.replace updates searchParams.
+  const mode: Mode = searchParams.get("mode") === "manual" ? "manual" : "agentic";
+
+  const setMode = (newMode: Mode) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("mode", newMode);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  // Sync ?workspace= → context
   useEffect(() => {
     const urlId = searchParams.get("workspace");
     if (!urlId || workspaces.length === 0) return;
@@ -37,29 +44,55 @@ function WorkspaceUrlSync() {
     if (!urlId) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("workspace", activeWorkspace.id);
+      if (!params.get("mode")) params.set("mode", "agentic");
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
   }, [activeWorkspace, searchParams, router, pathname]);
 
-  return null;
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      {/* Mode Tabs */}
+      <div className="flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+        <button
+          onClick={() => setMode("agentic")}
+          className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+            mode === "agentic"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Agentic
+        </button>
+        <button
+          onClick={() => setMode("manual")}
+          className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+            mode === "manual"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Manual
+        </button>
+      </div>
+
+      <SetupStepper mode={mode} />
+      {mode === "agentic" && <AgentModeSection />}
+      <AccountSection />
+      {mode === "manual" && <GeneratePostsSection />}
+      <ReviewApprovalSection />
+      <PostManagementSection />
+      <AgentWorkflowSection />
+    </div>
+  );
 }
 
 export default function LinkedInAutopilotPage() {
   return (
     <div className="flex-1 bg-[#E9ECF5] px-4 py-4 sm:px-6 sm:py-6">
-      <div className="mx-auto max-w-screen-xl space-y-4 sm:space-y-5">
+      <div className="mx-auto max-w-screen-xl">
         <Suspense fallback={null}>
-          <WorkspaceUrlSync />
+          <LinkedInAutopilotContent />
         </Suspense>
-        <SetupStepper />
-        <AgentModeSection />
-        <Suspense fallback={null}>
-          <AccountSection />
-        </Suspense>
-        <GeneratePostsSection />
-        <ReviewApprovalSection />
-        <PostManagementSection />
-        <AgentWorkflowSection />
       </div>
     </div>
   );

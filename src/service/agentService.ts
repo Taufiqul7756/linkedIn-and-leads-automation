@@ -1,4 +1,4 @@
-import { get, postRaw, del } from "@/lib/api";
+import { get, patch, postRaw, del } from "@/lib/api";
 import { LinkedInProfile, MarketingPlan } from "@/types/Agent";
 
 export const agentService = (workspaceId: string) => ({
@@ -21,6 +21,9 @@ export const agentService = (workspaceId: string) => ({
       `/workspaces/${workspaceId}/content/plans/`,
       writerModel ? { writer_model: writerModel } : undefined
     ),
+
+  updatePlan: (planId: string, data: Partial<MarketingPlan>) =>
+    patch<MarketingPlan>(`/workspaces/${workspaceId}/content/plans/${planId}/`, data),
 
   // Phase C — Generate from plan (all params optional — backend uses its own defaults)
   generateFromPlan: (planId: string, writerModel?: string) =>
