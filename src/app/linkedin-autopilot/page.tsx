@@ -11,20 +11,32 @@ import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowS
 
 type Mode = "agent" | "manual";
 
+const MODE_KEY = "linkedin-autopilot-mode";
+
+function readStoredMode(): Mode {
+  try {
+    const v = sessionStorage.getItem(MODE_KEY);
+    if (v === "manual" || v === "agent") return v;
+  } catch {}
+  // fallback: read from URL at execution time (not from stale searchParams closure)
+  return new URLSearchParams(window.location.search).get("mode") === "manual" ? "manual" : "agent";
+}
+
 function LinkedInAutopilotContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  // Initialized from URL so reload restores the correct mode.
-  // No effect — useSearchParams() returns a new object every render,
-  // which would fire an effect and reset mode back before router.replace completes.
-  const [mode, setModeState] = useState<Mode>(() =>
-    searchParams.get("mode") === "manual" ? "manual" : "agent"
-  );
+  // sessionStorage is the source of truth — immune to hydration timing issues
+  // with useSearchParams(). URL is kept in sync so child components that read
+  // ?mode= (e.g. ReviewApprovalSection) always see the correct value.
+  const [mode, setModeState] = useState<Mode>(readStoredMode);
 
   const setMode = (newMode: Mode) => {
-    setModeState(newMode); // immediate UI — no waiting for router
+    setModeState(newMode);
+    try {
+      sessionStorage.setItem(MODE_KEY, newMode);
+    } catch {}
     const params = new URLSearchParams(searchParams.toString());
     params.set("mode", newMode);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
