@@ -37,17 +37,18 @@ function LinkedInAutopilotContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, workspaces, setActiveWorkspace]);
 
-  // On mount: if no ?workspace= in URL but we have an active workspace, add it
+  // If ?workspace= is absent from URL, inject it (and default mode=agent).
+  // Reads window.location.search directly so stale searchParams closure never
+  // triggers a spurious mode reset when only the workspace changes.
   useEffect(() => {
     if (!activeWorkspace) return;
-    const urlId = searchParams.get("workspace");
-    if (!urlId) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("workspace", activeWorkspace.id);
-      if (!params.get("mode")) params.set("mode", "agent");
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    }
-  }, [activeWorkspace, searchParams, router, pathname]);
+    const liveParams = new URLSearchParams(window.location.search);
+    if (liveParams.get("workspace")) return; // already present — don't touch URL
+    liveParams.set("workspace", activeWorkspace.id);
+    if (!liveParams.get("mode")) liveParams.set("mode", "agent");
+    router.replace(`${pathname}?${liveParams.toString()}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace?.id, pathname]); // only re-run when workspace identity or route changes
 
   return (
     <div className="space-y-4 sm:space-y-5">

@@ -124,7 +124,14 @@
 - [x] Agent mode full implementation (see Agent Mode Section above)
 - [x] Setup Stepper Step 2 live via agentService
 
-## Phase 8 — Future
+## Phase 8 — Bug Fixes
+
+- [x] URL persistence conflict: workspace switch + mode switch competing `useEffect`s causing mode to reset to "agent" intermittently
+  - Effect 2 now reads `window.location.search` at execution time (not stale `searchParams` closure)
+  - Effect 2 deps narrowed to `[activeWorkspace?.id, pathname]` — never fires on URL-only changes
+  - Guard `if (liveParams.get("workspace")) return` prevents overwriting existing URL params
+
+## Phase 9 — Future
 
 - [ ] Real-time agent status polling (WebSocket)
 - [ ] Calendar view page
