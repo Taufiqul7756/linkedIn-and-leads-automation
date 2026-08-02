@@ -25,6 +25,7 @@ Two tabs at the top of the page: **Agent** (default) and **Manual**. Mode persis
 - **Agent** (default): shows `AgentModeSection` banner, hides `GeneratePostsSection`. Stepper shows all 5 steps including Profile URL.
 - **Manual**: shows `GeneratePostsSection`, hides `AgentModeSection`. Stepper shows 4 steps (Profile URL step hidden).
 - Tab state: `useSearchParams()` read from URL; `router.replace()` to update, preserving other params. Wrapped in `<Suspense>`.
+- **URL sync rules**: Two effects in page.tsx. Effect 1 (`[searchParams, workspaces]`) syncs URL→context. Effect 2 (`[activeWorkspace?.id, pathname]`) injects `?workspace=` when absent — reads `window.location.search` directly (not the stale `searchParams` closure) to avoid spurious mode resets when workspace changes.
 
 ### 1. Setup Stepper
 

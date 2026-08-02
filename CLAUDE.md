@@ -226,6 +226,25 @@ uploadImage: (id: string, file: File) => {
 - Auto-trigger upload in the `onChange` handler (no separate submit step)
 - Show spinner overlay on preview while uploading; clear on success/error
 
+## Multi-Param URL Persistence Pattern
+
+When a page manages two independently-writable URL params (e.g. `?workspace=` and `?mode=`), the "initialize missing params" effect must **not** include `searchParams` in its dependency array — stale closures cause one param to silently overwrite the other. Read `window.location.search` instead:
+
+```tsx
+// Effect: inject ?workspace= only when absent
+useEffect(() => {
+  if (!activeWorkspace) return;
+  const liveParams = new URLSearchParams(window.location.search); // live, not stale
+  if (liveParams.get("workspace")) return;                        // already present → bail
+  liveParams.set("workspace", activeWorkspace.id);
+  if (!liveParams.get("mode")) liveParams.set("mode", "agent");
+  router.replace(`${pathname}?${liveParams.toString()}`, { scroll: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [activeWorkspace?.id, pathname]); // never re-fires on URL-only changes
+```
+
+Keep the URL→context sync effect's deps narrow too: `[searchParams, workspaces]` (not `activeWorkspace`).
+
 ## Do Not
 
 - Read `process.env` directly in components
@@ -233,3 +252,4 @@ uploadImage: (id: string, file: File) => {
 - Use `any` type
 - Commit directly to `main` — always use PRs
 - Use `useEffect` to sync props into state inside a modal — use `key={item?.id}` on the modal in the parent instead
+- Include `searchParams` in an initialization `useEffect` that also calls `router.replace` — use `window.location.search` to avoid stale-closure param conflicts
