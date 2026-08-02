@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   LuPencil,
@@ -123,12 +122,10 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-export default function ReviewApprovalSection() {
+export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manual" }) {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
-  const searchParams = useSearchParams();
-  const mode = searchParams.get("mode") === "manual" ? "manual" : "agent";
 
   const [editPost, setEditPost] = useState<PostType | null>(null);
   const [rejectPost, setRejectPost] = useState<PostType | null>(null);
