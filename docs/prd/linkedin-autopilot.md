@@ -78,11 +78,15 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 
 ### 5. Post Management
 
+- Accepts `mode` prop (`"agent" | "manual"`); passes `state` to `getAllPosts` to filter posts by origin
+- Query key includes mode: `["posts","all",workspaceId,mode,activeFilter,page,pageSize]`
 - Excludes draft posts server-side via `exclude_status=draft`
 - Table with checkbox selection + select-all (indeterminate state)
 - Bulk delete when ≥ 2 rows selected
 - Page size selector (2 / 5 / 10 / 15 / 20), filter dropdown (All / Approved / Scheduled / Published / Failed)
 - Columns: ☐ · POST · CREATED · SCHEDULED · PUBLISHED · STATUS · ENGAGEMENT · ACTIONS
+- SCHEDULED column: shows `scheduled_at` if set; otherwise shows `suggested_publish_at` (greyed out, labelled "suggested") when post is approved
+- `ScheduleModal` pre-fills from `suggestedAt` prop (uses `suggested_publish_at` when scheduling, not rescheduling)
 - Per-row actions: Schedule / Reschedule / Retry / External link; three-dot: View → `ViewPostModal` · Delete → `RejectConfirmModal`
 
 ### 6. Agent Mode (Agentic mode only)
@@ -103,20 +107,25 @@ Phase states: `a-loading | a-submit | a-polling | a-ready | a-error`
 - **a-ready**: content pinned to bottom via `flex-1` spacer. Layout: profile cards (username from regex, modal delete confirm) → Knowledge Sources card (websites + docs with shimmer, purpose badges, status badges, modal delete confirms) → add-another URL input → action row (Generate Marketing Plans + ModelSwitcher dropUp)
 - **a-error**: error banner + Change URL + Retry
 
-**Phase B — Marketing Plans**
+**Phase B — Planning Brief + Marketing Plans**
 
-Phase states: `b-generating | b-select`
+Phase states: `b-brief | b-generating | b-select | b-headlines`
 
-- `b-generating`: spinner while `POST /content/plans/` runs
-- `b-select`: 3-column grid of plan cards. Each card: title, angle, target_audience, content pillars, sample_hooks[0]. Pencil icon → edit modal (`Modal width="lg"`) → `PATCH /content/plans/{id}/`. Back button returns to `a-ready`. Action row: Regenerate | ModelSwitcher | Generate Posts.
+- `b-brief`: form with three optional fields — **Target Audience** (text), **Region** (IANA timezone picker from `COMMON_TIMEZONES` list, not country dropdown), **Days** (integer 1–90, default 7). "Generate Plans" submits.
+- `b-generating`: spinner while `POST /content/plans/` runs (~5-15s). Body: `{ target_audience?, region?, days?, writer_model? }`.
+- `b-select`: 3-column grid of plan cards. Each card: title, angle, target_audience, content pillars, sample_hooks[0]. Pencil icon → edit modal (`Modal width="lg"`) → `PATCH /content/plans/{id}/`. Back button returns to `a-ready`. User picks one plan card → advances to `b-headlines`.
+- `b-headlines`: shows headlines list from `POST /content/plans/{id}/headlines/` (~5-10s). Each headline is an editable text field + checkbox. "Generate more" calls same endpoint with `exclude` = all current headlines. "Add custom" pushes empty editable row. User selects desired headlines → "Generate Posts".
 
 **Phase C — Generate Posts**
 
 Phase states: `c-generating | c-polling | c-done`
 
-- Calls `POST /content/plans/{id}/generate/`; polls drafts every 2.5s; on posts found sets `["posts-generating"]` flag; auto-closes after 2s.
+- Calls `POST /content/plans/{id}/generate/` with `{ headlines[], tone?, length?, use_emoji?, use_ai_image?, writer_model?, tone_document?, style_document? }`; polls `GET posts/?plan={id}&state=agent` every 3s; on posts found sets `["posts-generating"]` flag; auto-closes after 2s.
+- Drafts appear one by one. Each has `suggested_publish_at` (label as "Suggested", not "Scheduled") and `headline` field.
 
 **Terminal statuses for polling**: `ready`, `error`, `failed` — polling stops on any of these. `failed` shows red badge (same as `error`).
+
+**suggested_publish_at**: AI-suggested publish slot (UTC). Label as "Suggested" in UI, never "Scheduled". Editable from `ReviewApprovalSection` via `PATCH posts/{id}/` with `{ suggested_publish_at }`. Preserved across post regeneration.
 
 **Knowledge Sources (agent-level endpoints — workspace-scoped, no profile required):**
 
@@ -155,8 +164,9 @@ Phase states: `c-generating | c-polling | c-done`
 | `LinkedInProfile` | id, profile_url, status (string), facets `{ topics, summary, brand_tone, value_props }`, knowledge_items, posts_count, error, created_at |
 | `ProfileDocument` | id, file, filename, purpose, status (string), num_pages, summary, guide, facets, error, created_at |
 | `ProfileWebsite` | id, url, kind, purpose, status (string), summary, facets, error, created_at |
-| `MarketingPlan` | id, batch, linkedin_profile, title, angle, target_audience, rationale, pillars, sample_hooks, cadence, created_at |
-| `PostType` | id, body, hashtags (string[]), image_url, image_status, tone, length, content_style, use_emoji, status, scheduled_at, published_at, engagement, created_at |
+| `PlanningBrief` | id, target_audience (nullable), region (nullable, IANA tz), days |
+| `MarketingPlan` | id, batch, brief: PlanningBrief\|null, linkedin_profile: string\|null, title, angle, target_audience, rationale, pillars, sample_hooks, cadence, created_at |
+| `PostType` | id, state ("agent"\|"manual"), plan (nullable uuid), headline (nullable), body, hashtags, image_url, image_status, tone, length, use_emoji, writer_model, status, scheduled_at, suggested_publish_at (nullable), published_at, engagement (nullable), cta (nullable), created_at |
 
 **Note**: `LinkedInProfile` has `profile_url` (not `url`) and `facets` object (not `name`/`headline`). Username displayed by extracting from `profile_url` via regex `/linkedin\.com\/in\/([^/?#]+)/`.
 
@@ -207,10 +217,13 @@ All endpoints prefixed with `/api/v1/workspaces/{workspace_pk}/`
 | POST | `.../linkedin/agent/websites/` | Add agent website |
 | DELETE | `.../linkedin/agent/websites/{id}/` | Delete agent website |
 | POST | `.../linkedin/agent/websites/{id}/recrawl/` | Recrawl agent website |
-| POST | `.../content/plans/` | Generate marketing plans |
+| GET | `.../content/plans/` | List plans (paginated, brief inlined) |
+| POST | `.../content/plans/` | Generate marketing plans (body: target_audience?, region?, days?, writer_model?) |
 | PATCH | `.../content/plans/{id}/` | Edit marketing plan |
-| POST | `.../content/plans/{id}/generate/` | Generate posts from plan |
-| GET | `.../content/posts/?plan={id}&status=draft` | Poll plan's draft posts |
+| POST | `.../content/plans/{id}/headlines/` | Get headlines (body: count?, exclude?) |
+| POST | `.../content/plans/{id}/generate/` | Generate posts from plan (body: headlines[], tone?, etc.) |
+| GET | `.../content/posts/?plan={id}&state=agent` | Poll plan's draft posts |
+| POST | `.../linkedin/agent/documents/{id}/reextract/` | Re-extract agent document |
 
 Top-level:
 | Method | Endpoint | Purpose |

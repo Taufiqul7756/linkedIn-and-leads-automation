@@ -16,13 +16,14 @@ export const postsService = (workspaceId: string) => ({
     get<PaginatedPosts>(
       `/workspaces/${workspaceId}/content/posts/?status=draft${state ? `&state=${state}` : ""}`
     ),
-  getAllPosts: (status?: string, page?: number, pageSize = 10) => {
+  getAllPosts: (status?: string, page?: number, pageSize = 10, state?: "agent" | "manual") => {
     const q = new URLSearchParams();
     if (status && status !== "all") {
       q.set("status", status);
     } else {
       q.set("exclude_status", "draft");
     }
+    if (state) q.set("state", state);
     if (page && page > 1) q.set("page", String(page));
     q.set("page_size", String(pageSize));
     return get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?${q.toString()}`);
@@ -34,7 +35,9 @@ export const postsService = (workspaceId: string) => ({
   getPost: (id: string) => get<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/`),
   patchPost: (
     id: string,
-    data: { body?: string; hashtags?: string[]; image_url?: string } | FormData
+    data:
+      | { body?: string; hashtags?: string[]; image_url?: string; suggested_publish_at?: string }
+      | FormData
   ) => patch<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/`, data),
   uploadImage: (id: string, file: File) => {
     const form = new FormData();
@@ -58,7 +61,7 @@ export const postsService = (workspaceId: string) => ({
       body
     ),
   getDraftsByPlan: (planId: string) =>
-    get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?plan=${planId}&status=draft`),
+    get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?plan=${planId}&state=agent`),
   suggestPrompts: (body: SuggestPromptsBody) =>
     post<SuggestPromptsResponse>(`/workspaces/${workspaceId}/content/posts/suggest_prompts/`, body),
 });

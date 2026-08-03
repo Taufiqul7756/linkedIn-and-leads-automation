@@ -26,6 +26,10 @@ export const agentService = (workspaceId: string) => ({
   },
   deleteAgentDocument: (docId: string) =>
     del<void>(`/workspaces/${workspaceId}/linkedin/agent/documents/${docId}/`),
+  reextractAgentDocument: (docId: string) =>
+    postRaw<ProfileDocument>(
+      `/workspaces/${workspaceId}/linkedin/agent/documents/${docId}/reextract/`
+    ),
 
   // Agent — Websites
   getAgentWebsites: () =>
@@ -43,19 +47,39 @@ export const agentService = (workspaceId: string) => ({
     postRaw<ProfileWebsite>(`/workspaces/${workspaceId}/linkedin/agent/websites/${id}/recrawl/`),
 
   // Phase B — Marketing Plans
-  generatePlans: (writerModel?: string) =>
-    postRaw<MarketingPlan[] | { results: MarketingPlan[] }>(
+  generatePlans: (body: {
+    target_audience?: string;
+    region?: string;
+    days?: number;
+    writer_model?: string;
+  }) =>
+    postRaw<MarketingPlan[] | { results: MarketingPlan[] } | MarketingPlan>(
       `/workspaces/${workspaceId}/content/plans/`,
-      writerModel ? { writer_model: writerModel } : undefined
+      body
     ),
 
   updatePlan: (planId: string, data: Partial<MarketingPlan>) =>
     patch<MarketingPlan>(`/workspaces/${workspaceId}/content/plans/${planId}/`, data),
 
-  // Phase C — Generate from plan (all params optional — backend uses its own defaults)
-  generateFromPlan: (planId: string, writerModel?: string) =>
-    postRaw(
-      `/workspaces/${workspaceId}/content/plans/${planId}/generate/`,
-      writerModel ? { writer_model: writerModel } : undefined
+  // Phase B2 — Headlines
+  getHeadlines: (planId: string, req: { count?: number; exclude?: string[] }) =>
+    postRaw<{ headlines: string[] }>(
+      `/workspaces/${workspaceId}/content/plans/${planId}/headlines/`,
+      req
     ),
+
+  // Phase C — Generate from plan with selected headlines
+  generateFromPlan: (
+    planId: string,
+    req: {
+      headlines?: string[];
+      writer_model?: string;
+      tone?: string;
+      length?: string;
+      use_emoji?: boolean;
+      use_ai_image?: boolean;
+      tone_document?: string;
+      style_document?: string;
+    }
+  ) => postRaw(`/workspaces/${workspaceId}/content/plans/${planId}/generate/`, req),
 });

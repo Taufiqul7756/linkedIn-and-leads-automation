@@ -140,3 +140,25 @@
 - [ ] Refresh metrics button per post
 - [ ] Image removal via PATCH
 - [ ] Hashtag PATCH (backend fixing)
+
+## Phase 10 — Agentic Mode V2 (Brief → Headlines → Posts)
+
+- [x] New `b-brief` phase: Planning Brief form (target audience, IANA timezone picker, days 1–90)
+- [x] `generatePlans` accepts full brief body `{ target_audience?, region?, days?, writer_model? }`
+- [x] New `b-headlines` phase: headlines list from `POST plans/{id}/headlines/`; editable text fields + checkboxes
+- [x] "Generate more" button: calls headlines endpoint with `exclude` = all current headlines; appends to list
+- [x] `getHeadlines(planId, { count?, exclude? })` added to agentService
+- [x] `generateFromPlan` accepts full request `{ headlines[], tone?, length?, use_emoji?, use_ai_image?, writer_model?, tone_document?, style_document? }`
+- [x] `reextractAgentDocument(docId)` added to agentService
+- [x] StepBar updated to 4 steps: Base · Marketing Plans · Headlines · Generate Posts
+- [x] `AgentModeSection` embedded inside `AccountSection` (no longer rendered standalone in page.tsx)
+- [x] `AccountSection` and `PostManagementSection` accept `mode` prop
+- [x] `PostManagementSection` passes `state` to `getAllPosts`; query key includes mode
+- [x] `PostManagementSection` SCHEDULED column shows `suggested_publish_at` (greyed "suggested") for approved posts without `scheduled_at`
+- [x] `ScheduleModal` accepts `suggestedAt` prop; pre-fills date/time from suggestion
+- [x] `ReviewApprovalSection` can edit `suggested_publish_at` via `PATCH posts/{id}/`
+- [x] `getDraftsByPlan` updated to use `?plan={id}&state=agent`
+- [x] New types: `PlanningBrief`, `PaginatedPlans`, `HeadlinesRequest`, `HeadlinesResponse`, `GenerateFromPlanRequest`
+- [x] `PostType` updated: `state`, `plan`, `headline`, `suggested_publish_at`, `use_emoji`, `writer_model`, nullable `cta`/`engagement`/`website_profile`
+- [x] `MarketingPlan` updated: `brief: PlanningBrief|null`, `linkedin_profile: string|null`
+- [x] `Modal.tsx` extended with `"4xl"` width (`max-w-4xl`)

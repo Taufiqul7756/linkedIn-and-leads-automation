@@ -18,6 +18,8 @@ import {
   LuGlobe,
   LuFileText,
   LuUpload,
+  LuPlus,
+  LuCalendarDays,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import Modal from "@/components/ui/Modal";
@@ -36,19 +38,75 @@ type Phase =
   | "a-polling"
   | "a-ready"
   | "a-error"
+  | "b-brief"
   | "b-generating"
   | "b-select"
+  | "b-headlines"
   | "c-generating"
   | "c-polling"
   | "c-done";
 
-function StepBar({ current }: { current: "a" | "b" | "c" }) {
+const COMMON_TIMEZONES = [
+  "Africa/Cairo",
+  "Africa/Johannesburg",
+  "Africa/Lagos",
+  "Africa/Nairobi",
+  "America/Anchorage",
+  "America/Buenos_Aires",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Mexico_City",
+  "America/New_York",
+  "America/Phoenix",
+  "America/Sao_Paulo",
+  "America/Toronto",
+  "America/Vancouver",
+  "Asia/Baku",
+  "Asia/Dubai",
+  "Asia/Hong_Kong",
+  "Asia/Jakarta",
+  "Asia/Karachi",
+  "Asia/Kolkata",
+  "Asia/Kuala_Lumpur",
+  "Asia/Riyadh",
+  "Asia/Seoul",
+  "Asia/Shanghai",
+  "Asia/Singapore",
+  "Asia/Taipei",
+  "Asia/Tehran",
+  "Asia/Tokyo",
+  "Australia/Melbourne",
+  "Australia/Perth",
+  "Australia/Sydney",
+  "Europe/Amsterdam",
+  "Europe/Athens",
+  "Europe/Berlin",
+  "Europe/Helsinki",
+  "Europe/Istanbul",
+  "Europe/Lisbon",
+  "Europe/London",
+  "Europe/Madrid",
+  "Europe/Moscow",
+  "Europe/Paris",
+  "Europe/Rome",
+  "Europe/Stockholm",
+  "Europe/Warsaw",
+  "Europe/Zurich",
+  "Pacific/Auckland",
+  "Pacific/Fiji",
+  "Pacific/Honolulu",
+  "UTC",
+];
+
+function StepBar({ current }: { current: "a" | "b" | "c" | "d" }) {
   const steps = [
-    { key: "a", label: "LinkedIn Profile" },
+    { key: "a", label: "Base" },
     { key: "b", label: "Marketing Plans" },
-    { key: "c", label: "Generate Posts" },
+    { key: "c", label: "Headlines" },
+    { key: "d", label: "Generate Posts" },
   ] as const;
-  const order = ["a", "b", "c"] as const;
+  const order = ["a", "b", "c", "d"] as const;
   const currentIdx = order.indexOf(current);
 
   return (
@@ -122,6 +180,8 @@ export default function AgentModeSection() {
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
   const [deleteWebsiteTarget, setDeleteWebsiteTarget] = useState<ProfileWebsite | null>(null);
   const [isDeletingWebsite, setIsDeletingWebsite] = useState(false);
+  const [recrawlingWebsiteId, setRecrawlingWebsiteId] = useState<string | null>(null);
+  const [reextractingDocId, setReextractingDocId] = useState<string | null>(null);
   const [docUploading, setDocUploading] = useState(false);
   const [docPurpose, setDocPurpose] = useState("knowledge");
   const [websiteInput, setWebsiteInput] = useState("");
@@ -135,6 +195,19 @@ export default function AgentModeSection() {
   const [queuedDocs, setQueuedDocs] = useState<{ file: File; name: string; purpose: string }[]>([]);
   const queuedWebsitesRef = useRef<{ url: string; purpose: string }[]>([]);
   const queuedDocsRef = useRef<{ file: File; name: string; purpose: string }[]>([]);
+  // Pending doc files (selected but not yet uploaded)
+  const [pendingQueuedDoc, setPendingQueuedDoc] = useState<File | null>(null);
+  const [pendingDoc, setPendingDoc] = useState<File | null>(null);
+  // Brief form (Step B)
+  const [briefAudience, setBriefAudience] = useState("");
+  const [briefRegion, setBriefRegion] = useState("");
+  const [briefDays, setBriefDays] = useState(7);
+  // Headlines (Step C)
+  type HeadlineItem = { id: string; text: string; selected: boolean };
+  const [headlineItems, setHeadlineItems] = useState<HeadlineItem[]>([]);
+  const [headlinesLoading, setHeadlinesLoading] = useState(false);
+  const [generatingMore, setGeneratingMore] = useState(false);
+  const [headlinesSentCount, setHeadlinesSentCount] = useState(0);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const postPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -142,7 +215,7 @@ export default function AgentModeSection() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queuedFileInputRef = useRef<HTMLInputElement>(null);
 
-  const GENERATE_COUNT = 5;
+  const headlinesSentCountRef = useRef(0);
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -221,7 +294,8 @@ export default function AgentModeSection() {
     postPollRef.current = setInterval(async () => {
       attempts++;
       const data = await postsService(workspaceId).getDraftsByPlan(planId);
-      if (data && data.results.length >= GENERATE_COUNT) {
+      const expected = headlinesSentCountRef.current;
+      if (data && expected > 0 && data.results.length >= expected) {
         stopPostPolling();
         // Hand off image polling to ReviewApprovalSection via the same flag software mode uses
         queryClient.setQueryData(["posts-generating"], baselineDraftCount);
@@ -229,10 +303,10 @@ export default function AgentModeSection() {
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         setPhase("c-done");
         setTimeout(() => setOpen(false), 2000);
-      } else if (attempts >= 30) {
+      } else if (attempts >= 40) {
         stopPostPolling();
         toast.error("Post generation is taking longer than expected. Check your drafts later.");
-        setPhase("b-select");
+        setPhase("b-headlines");
       }
     }, 2500);
   };
@@ -319,17 +393,26 @@ export default function AgentModeSection() {
     }
   };
 
-  const handleQueueDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQueueDoc = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    setPendingQueuedDoc(file);
+  };
+
+  const handleAddQueuedDoc = async () => {
+    if (!pendingQueuedDoc) return;
     setDocUploading(true);
     try {
-      const doc = await agentService(workspaceId).uploadAgentDocument(file, queuedDocPurpose);
+      const doc = await agentService(workspaceId).uploadAgentDocument(
+        pendingQueuedDoc,
+        queuedDocPurpose
+      );
       if (doc) {
         setProfileDocs((prev) => [doc, ...prev]);
         startResourcePolling();
       }
+      setPendingQueuedDoc(null);
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -337,17 +420,23 @@ export default function AgentModeSection() {
     }
   };
 
-  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !profile) return;
+    if (!file) return;
     e.target.value = "";
+    setPendingDoc(file);
+  };
+
+  const handleAddDoc = async () => {
+    if (!pendingDoc) return;
     setDocUploading(true);
     try {
-      const doc = await agentService(workspaceId).uploadAgentDocument(file, docPurpose);
+      const doc = await agentService(workspaceId).uploadAgentDocument(pendingDoc, docPurpose);
       if (doc) {
         setProfileDocs((prev) => [doc, ...prev]);
         startResourcePolling();
       }
+      setPendingDoc(null);
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -403,6 +492,32 @@ export default function AgentModeSection() {
     }
   };
 
+  const handleReextractDoc = async (id: string) => {
+    setReextractingDocId(id);
+    try {
+      await agentService(workspaceId).reextractAgentDocument(id);
+      toast.success("Re-extraction started!");
+      startResourcePolling();
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setReextractingDocId(null);
+    }
+  };
+
+  const handleRecrawlWebsite = async (id: string) => {
+    setRecrawlingWebsiteId(id);
+    try {
+      await agentService(workspaceId).recrawlAgentWebsite(id);
+      toast.success("Re-crawl started!");
+      startResourcePolling();
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setRecrawlingWebsiteId(null);
+    }
+  };
+
   const handleOpen = () => {
     setOpen(true);
     setProfile(null);
@@ -427,6 +542,14 @@ export default function AgentModeSection() {
     setQueuedDocs([]);
     queuedWebsitesRef.current = [];
     queuedDocsRef.current = [];
+    setPendingQueuedDoc(null);
+    setPendingDoc(null);
+    setBriefAudience("");
+    setBriefRegion("");
+    setBriefDays(7);
+    setHeadlineItems([]);
+    setHeadlinesSentCount(0);
+    headlinesSentCountRef.current = 0;
     if (workspaceId) {
       checkProfile();
       loadAgentResources();
@@ -505,13 +628,19 @@ export default function AgentModeSection() {
     setEditDraft({});
     setPhase("b-generating");
     try {
-      const data = await agentService(workspaceId).generatePlans(selectedModelId ?? undefined);
+      const body: Parameters<ReturnType<typeof agentService>["generatePlans"]>[0] = {};
+      if (briefAudience.trim()) body.target_audience = briefAudience.trim();
+      if (briefRegion.trim()) body.region = briefRegion.trim();
+      if (briefDays >= 1 && briefDays <= 90) body.days = briefDays;
+      if (selectedModelId) body.writer_model = selectedModelId;
+      const data = await agentService(workspaceId).generatePlans(body);
       const planList = Array.isArray(data)
         ? data
-        : ((data as { results?: MarketingPlan[] }).results ?? []);
+        : ((data as { results?: MarketingPlan[] }).results ??
+          (data ? [data as MarketingPlan] : []));
       if (planList.length === 0) {
         toast.error("No plans were generated. Please try again.");
-        setPhase("a-ready");
+        setPhase("b-brief");
         return;
       }
       setPlans(planList);
@@ -519,7 +648,38 @@ export default function AgentModeSection() {
       setPhase("b-select");
     } catch (err) {
       toast.error(extractErrorMessage(err));
-      setPhase("a-ready");
+      setPhase("b-brief");
+    }
+  };
+
+  const handleFetchHeadlines = async (plan: MarketingPlan, extra?: { more: true }) => {
+    if (!extra) {
+      setHeadlineItems([]);
+      setHeadlinesLoading(true);
+    } else {
+      setGeneratingMore(true);
+    }
+    try {
+      const currentTexts = headlineItems.map((h) => h.text);
+      const req = extra ? { count: 5, exclude: currentTexts.slice(0, 50) } : {};
+      const data = await agentService(workspaceId).getHeadlines(plan.id, req);
+      const newLines = (data?.headlines ?? []).map((text, i) => ({
+        id: `${Date.now()}-${i}`,
+        text,
+        selected: !extra, // auto-select first batch, don't auto-select "more"
+      }));
+      if (extra) {
+        setHeadlineItems((prev) => [...prev, ...newLines]);
+      } else {
+        setHeadlineItems(newLines);
+        setPhase("b-headlines");
+      }
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+      if (!extra) setPhase("b-select");
+    } finally {
+      setHeadlinesLoading(false);
+      setGeneratingMore(false);
     }
   };
 
@@ -552,25 +712,34 @@ export default function AgentModeSection() {
 
   const handleGenerateFromPlan = async () => {
     if (!selectedPlan) return;
+    const selected = headlineItems.filter((h) => h.selected).map((h) => h.text);
+    // De-duplicate client-side
+    const deduped = [...new Set(selected)];
+    if (deduped.length === 0) {
+      toast.error("Select at least one headline before generating.");
+      return;
+    }
     // Capture baseline draft count before generation so ReviewApprovalSection
     // knows when new posts have appeared and images are done
     const cached = queryClient.getQueryData(["posts", "draft", workspaceId]) as
       { count?: number } | undefined;
     const baselineDraftCount = cached?.count ?? 0;
 
+    headlinesSentCountRef.current = deduped.length;
+    setHeadlinesSentCount(deduped.length);
     setPhase("c-generating");
     try {
-      await agentService(workspaceId).generateFromPlan(
-        selectedPlan.id,
-        selectedModelId ?? undefined
-      );
+      await agentService(workspaceId).generateFromPlan(selectedPlan.id, {
+        headlines: deduped,
+        writer_model: selectedModelId ?? undefined,
+      });
       // 202 queued — poll until the plan's draft posts appear
       setGeneratedPlanId(selectedPlan.id);
       setPhase("c-polling");
       startPostPolling(selectedPlan.id, baselineDraftCount);
     } catch (err) {
       toast.error(extractErrorMessage(err));
-      setPhase("b-select");
+      setPhase("b-headlines");
     }
   };
 
@@ -597,7 +766,13 @@ export default function AgentModeSection() {
     </select>
   );
 
-  const currentStep = phase.startsWith("a") ? "a" : phase.startsWith("b") ? "b" : "c";
+  const currentStep = phase.startsWith("a")
+    ? "a"
+    : phase === "b-brief" || phase === "b-generating" || phase === "b-select"
+      ? "b"
+      : phase === "b-headlines"
+        ? "c"
+        : "d";
 
   return (
     <>
@@ -625,12 +800,12 @@ export default function AgentModeSection() {
         isOpen={open}
         onClose={handleClose}
         title="Agent Mode"
-        width="3xl"
+        width="4xl"
         disableBackdropClose
         minHeight="480px"
         bodyClassName="flex flex-col"
       >
-        <StepBar current={currentStep as "a" | "b" | "c"} />
+        <StepBar current={currentStep as "a" | "b" | "c" | "d"} />
 
         {/* ── Phase A: Loading ── */}
         {phase === "a-loading" && (
@@ -736,6 +911,19 @@ export default function AgentModeSection() {
                           >
                             {site.status}
                           </span>
+                          <button
+                            onClick={() => handleRecrawlWebsite(site.id)}
+                            disabled={recrawlingWebsiteId === site.id}
+                            title="Re-crawl"
+                            className="shrink-0 text-gray-300 hover:text-blue-500 disabled:opacity-40"
+                          >
+                            <LuRefreshCw
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                recrawlingWebsiteId === site.id && "animate-spin"
+                              )}
+                            />
+                          </button>
                           <button
                             onClick={() => setDeleteWebsiteTarget(site)}
                             className="shrink-0 text-gray-300 hover:text-red-500"
@@ -854,6 +1042,19 @@ export default function AgentModeSection() {
                             {doc.status}
                           </span>
                           <button
+                            onClick={() => handleReextractDoc(doc.id)}
+                            disabled={reextractingDocId === doc.id}
+                            title="Re-extract"
+                            className="shrink-0 text-gray-300 hover:text-blue-500 disabled:opacity-40"
+                          >
+                            <LuRefreshCw
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                reextractingDocId === doc.id && "animate-spin"
+                              )}
+                            />
+                          </button>
+                          <button
                             onClick={() => setDeleteDocTarget(doc)}
                             className="shrink-0 text-gray-300 hover:text-red-500"
                           >
@@ -899,18 +1100,28 @@ export default function AgentModeSection() {
                 </ul>
               )}
               <div className="flex gap-1.5">
-                {purposeSelect(queuedDocPurpose, setQueuedDocPurpose)}
                 <button
                   onClick={() => queuedFileInputRef.current?.click()}
                   disabled={docUploading}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white py-2 text-xs font-medium text-gray-500 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+                  className="flex flex-1 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-blue-400 disabled:opacity-50"
                 >
-                  {docUploading ? (
-                    <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <LuUpload className="h-3.5 w-3.5" />
-                  )}
-                  {docUploading ? "Uploading…" : "Upload Document"}
+                  <LuUpload className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <span
+                    className={cn(
+                      "truncate",
+                      pendingQueuedDoc ? "text-gray-800" : "text-gray-400 hover:text-blue-600"
+                    )}
+                  >
+                    {pendingQueuedDoc ? pendingQueuedDoc.name : "Choose file…"}
+                  </span>
+                </button>
+                {purposeSelect(queuedDocPurpose, setQueuedDocPurpose)}
+                <button
+                  onClick={handleAddQueuedDoc}
+                  disabled={!pendingQueuedDoc || docUploading}
+                  className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {docUploading ? <LuLoader className="h-3.5 w-3.5 animate-spin" /> : "Add"}
                 </button>
               </div>
             </div>
@@ -918,7 +1129,7 @@ export default function AgentModeSection() {
             {/* Generate Marketing Plans */}
             <div className="flex items-center gap-2 pt-1">
               <button
-                onClick={handleGeneratePlans}
+                onClick={() => setPhase("b-brief")}
                 disabled={
                   !profileUrl.trim() &&
                   queuedWebsites.length === 0 &&
@@ -929,9 +1140,103 @@ export default function AgentModeSection() {
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
               >
                 <LuSparkles className="h-4 w-4" />
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Phase B: Brief form ── */}
+        {phase === "b-brief" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setPhase(profile?.status === "ready" ? "a-ready" : "a-submit")}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                <LuArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
+              <p className="text-sm text-gray-600">
+                Tell us about your content goals. These help the AI plan better posts.
+              </p>
+            </div>
+
+            {/* Target Audience */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                Target Audience
+                <span className="ml-1 font-normal text-gray-500">— optional</span>
+              </label>
+              <input
+                type="text"
+                value={briefAudience}
+                onChange={(e) => setBriefAudience(e.target.value)}
+                placeholder="e.g. B2B SaaS founders, early-stage startups"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Region / Timezone */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                Audience Timezone
+                <span className="ml-1 font-normal text-gray-500">
+                  — optional, sets suggested publish times
+                </span>
+              </label>
+              <input
+                type="text"
+                list="iana-timezones"
+                value={briefRegion}
+                onChange={(e) => setBriefRegion(e.target.value)}
+                placeholder="e.g. Europe/Berlin, America/New_York"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <datalist id="iana-timezones">
+                {COMMON_TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz} />
+                ))}
+              </datalist>
+              <p className="mt-1 text-xs text-gray-500">
+                Use an IANA timezone name like{" "}
+                <span className="font-medium text-gray-700">Europe/Berlin</span> — not a country or
+                city name.
+              </p>
+            </div>
+
+            {/* Days */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+                Planning Window
+                <span className="ml-1 font-normal text-gray-500">— number of days (1–90)</span>
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={briefDays}
+                  onChange={(e) =>
+                    setBriefDays(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))
+                  }
+                  className="h-9 w-28 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <span className="text-xs text-gray-500">
+                  Controls how many headlines are offered. Default: 7
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <ModelSwitcher dropUp />
+              <button
+                onClick={handleGeneratePlans}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                <LuSparkles className="h-4 w-4" />
                 Generate Marketing Plans
               </button>
-              <ModelSwitcher dropUp />
             </div>
           </div>
         )}
@@ -1196,6 +1501,19 @@ export default function AgentModeSection() {
                                 {site.status}
                               </span>
                               <button
+                                onClick={() => handleRecrawlWebsite(site.id)}
+                                disabled={recrawlingWebsiteId === site.id}
+                                title="Re-crawl"
+                                className="shrink-0 text-gray-300 hover:text-blue-500 disabled:opacity-40"
+                              >
+                                <LuRefreshCw
+                                  className={cn(
+                                    "h-3.5 w-3.5",
+                                    recrawlingWebsiteId === site.id && "animate-spin"
+                                  )}
+                                />
+                              </button>
+                              <button
                                 onClick={() => setDeleteWebsiteTarget(site)}
                                 className="shrink-0 text-gray-300 hover:text-red-500"
                               >
@@ -1281,6 +1599,19 @@ export default function AgentModeSection() {
                                 {doc.status}
                               </span>
                               <button
+                                onClick={() => handleReextractDoc(doc.id)}
+                                disabled={reextractingDocId === doc.id}
+                                title="Re-extract"
+                                className="shrink-0 text-gray-300 hover:text-blue-500 disabled:opacity-40"
+                              >
+                                <LuRefreshCw
+                                  className={cn(
+                                    "h-3.5 w-3.5",
+                                    reextractingDocId === doc.id && "animate-spin"
+                                  )}
+                                />
+                              </button>
+                              <button
                                 onClick={() => setDeleteDocTarget(doc)}
                                 className="shrink-0 text-gray-300 hover:text-red-500"
                               >
@@ -1293,18 +1624,28 @@ export default function AgentModeSection() {
                     </ul>
                   )}
                   <div className="flex gap-1.5">
-                    {purposeSelect(docPurpose, setDocPurpose)}
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={docUploading}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white py-2 text-xs font-medium text-gray-500 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:opacity-50"
+                      className="flex flex-1 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-blue-400 disabled:opacity-50"
                     >
-                      {docUploading ? (
-                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <LuUpload className="h-3.5 w-3.5" />
-                      )}
-                      {docUploading ? "Uploading…" : "Upload Document"}
+                      <LuUpload className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <span
+                        className={cn(
+                          "truncate",
+                          pendingDoc ? "text-gray-800" : "text-gray-400 hover:text-blue-600"
+                        )}
+                      >
+                        {pendingDoc ? pendingDoc.name : "Choose file…"}
+                      </span>
+                    </button>
+                    {purposeSelect(docPurpose, setDocPurpose)}
+                    <button
+                      onClick={handleAddDoc}
+                      disabled={!pendingDoc || docUploading}
+                      className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {docUploading ? <LuLoader className="h-3.5 w-3.5 animate-spin" /> : "Add"}
                     </button>
                   </div>
                 </div>
@@ -1341,14 +1682,13 @@ export default function AgentModeSection() {
                     </button>
                   )}
                   <button
-                    onClick={handleGeneratePlans}
+                    onClick={() => setPhase("b-brief")}
                     disabled={profileLoading}
                     className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                   >
                     <LuSparkles className="h-4 w-4" />
-                    Generate Marketing Plans
+                    Next
                   </button>
-                  <ModelSwitcher dropUp />
                 </div>
               </div>
             </div>
@@ -1490,7 +1830,7 @@ export default function AgentModeSection() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={handleGeneratePlans}
+                onClick={() => setPhase("b-brief")}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
                 <LuRefreshCw className="h-3.5 w-3.5" />
@@ -1498,16 +1838,134 @@ export default function AgentModeSection() {
               </button>
               <ModelSwitcher dropUp />
               <button
-                onClick={handleGenerateFromPlan}
-                disabled={!selectedPlan}
+                onClick={() => selectedPlan && handleFetchHeadlines(selectedPlan)}
+                disabled={!selectedPlan || headlinesLoading}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
               >
-                <LuSparkles className="h-4 w-4" />
-                Generate Posts
+                {headlinesLoading ? (
+                  <LuLoader className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LuCalendarDays className="h-4 w-4" />
+                )}
+                {headlinesLoading ? "Getting headlines…" : "Get Headlines"}
               </button>
             </div>
           </div>
         )}
+
+        {/* ── Phase B: Headlines ── */}
+        {phase === "b-headlines" &&
+          (() => {
+            const selectedCount = headlineItems.filter((h) => h.selected).length;
+            return (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setPhase("b-select")}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                  >
+                    <LuArrowLeft className="h-3.5 w-3.5" />
+                    Back
+                  </button>
+                  <p className="flex-1 text-sm text-gray-600">
+                    Select the headlines you want to turn into posts. Each becomes one post.
+                  </p>
+                  <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                    {selectedCount} selected
+                  </span>
+                </div>
+
+                {/* Headline list */}
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2">
+                  {headlineItems.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-gray-400">No headlines yet.</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {headlineItems.map((item) => (
+                        <li
+                          key={item.id}
+                          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={item.selected}
+                            onChange={(e) =>
+                              setHeadlineItems((prev) =>
+                                prev.map((h) =>
+                                  h.id === item.id ? { ...h, selected: e.target.checked } : h
+                                )
+                              )
+                            }
+                            className="h-4 w-4 shrink-0 rounded border-gray-300 accent-blue-600"
+                          />
+                          <input
+                            type="text"
+                            value={item.text}
+                            onChange={(e) =>
+                              setHeadlineItems((prev) =>
+                                prev.map((h) =>
+                                  h.id === item.id ? { ...h, text: e.target.value } : h
+                                )
+                              )
+                            }
+                            className="min-w-0 flex-1 bg-transparent text-xs text-gray-800 outline-none placeholder:text-gray-400 focus:text-gray-900"
+                          />
+                          <button
+                            onClick={() =>
+                              setHeadlineItems((prev) => prev.filter((h) => h.id !== item.id))
+                            }
+                            className="shrink-0 text-gray-300 hover:text-red-500"
+                          >
+                            <LuX className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Actions row */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setHeadlineItems((prev) => [
+                        ...prev,
+                        { id: `custom-${Date.now()}`, text: "", selected: true },
+                      ])
+                    }
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    <LuPlus className="h-3.5 w-3.5" />
+                    Add custom
+                  </button>
+                  <button
+                    onClick={() =>
+                      selectedPlan && handleFetchHeadlines(selectedPlan, { more: true })
+                    }
+                    disabled={generatingMore || !selectedPlan}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {generatingMore ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuRefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    {generatingMore ? "Generating…" : "Generate more"}
+                  </button>
+                  <div className="flex-1" />
+                  <ModelSwitcher dropUp />
+                  <button
+                    onClick={handleGenerateFromPlan}
+                    disabled={selectedCount === 0}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <LuSparkles className="h-4 w-4" />
+                    Generate Posts
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
         {/* ── Phase C: Queuing ── */}
         {phase === "c-generating" && (
@@ -1528,8 +1986,12 @@ export default function AgentModeSection() {
             </div>
 
             <div className="space-y-1 text-center">
-              <p className="text-sm font-semibold text-gray-900">Creating your posts…</p>
-              <p className="text-xs text-gray-400">Usually takes 5–10 seconds. Hang tight!</p>
+              <p className="text-sm font-semibold text-gray-900">
+                Creating {headlinesSentCount} post{headlinesSentCount !== 1 ? "s" : ""}…
+              </p>
+              <p className="text-xs text-gray-400">
+                Posts appear one by one as they&apos;re written.
+              </p>
             </div>
 
             {/* Bouncing dots */}
@@ -1556,8 +2018,8 @@ export default function AgentModeSection() {
               </div>
               <p className="text-base font-semibold text-gray-900">Posts created!</p>
               <p className="text-center text-sm text-gray-500">
-                Draft posts have been generated from your plan. Review and approve them in the
-                section below.
+                {headlinesSentCount} draft post{headlinesSentCount !== 1 ? "s" : ""} generated from
+                your selected headlines. Review, approve, and schedule them in the section below.
               </p>
             </div>
             <button

@@ -5,7 +5,6 @@ import AccountSection from "@/components/linkedin-autopilot/AccountSection";
 import GeneratePostsSection from "@/components/linkedin-autopilot/GeneratePostsSection";
 import ReviewApprovalSection from "@/components/linkedin-autopilot/ReviewApprovalSection";
 import PostManagementSection from "@/components/linkedin-autopilot/PostManagementSection";
-import AgentModeSection from "@/components/linkedin-autopilot/AgentModeSection";
 import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowSection";
 
 type Mode = "agent" | "manual";
@@ -192,11 +191,10 @@ function LinkedInAutopilotContent() {
       </div>
 
       <SetupStepper mode={mode} />
-      {mode === "agent" && <AgentModeSection />}
-      <AccountSection />
+      <AccountSection mode={mode} />
       {mode === "manual" && <GeneratePostsSection />}
       <ReviewApprovalSection mode={mode} />
-      <PostManagementSection />
+      <PostManagementSection mode={mode} />
       <AgentWorkflowSection />
     </div>
   );

@@ -292,7 +292,7 @@ type ScheduleTarget = { post: PostType; mode: "schedule" | "reschedule" } | null
 
 const PAGE_SIZE_OPTIONS = [2, 5, 10, 15, 20];
 
-export default function PostManagementSection() {
+export default function PostManagementSection({ mode }: { mode: "agent" | "manual" }) {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
@@ -308,12 +308,13 @@ export default function PostManagementSection() {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
-    ["posts", "all", workspaceId, activeFilter, page, pageSize],
+    ["posts", "all", workspaceId, mode, activeFilter, page, pageSize],
     () =>
       postsService(workspaceId).getAllPosts(
         activeFilter === "all" ? undefined : activeFilter,
         page,
-        pageSize
+        pageSize,
+        mode
       ),
     { enabled: !!workspaceId }
   );
@@ -545,6 +546,11 @@ export default function PostManagementSection() {
                           <span className="font-medium text-blue-600">
                             {formatDateTime(post.scheduled_at)}
                           </span>
+                        ) : post.suggested_publish_at && post.status === "approved" ? (
+                          <span className="text-gray-400" title="Suggested — not yet scheduled">
+                            {formatDateTime(post.suggested_publish_at)}
+                            <span className="ml-1 text-[10px] text-gray-300">suggested</span>
+                          </span>
                         ) : (
                           <span className="text-gray-300">—</span>
                         )}
@@ -671,6 +677,9 @@ export default function PostManagementSection() {
         mode={scheduleTarget?.mode ?? "schedule"}
         postExcerpt={scheduleTarget?.post.body ?? ""}
         currentScheduled={scheduleTarget?.post.scheduled_at}
+        suggestedAt={
+          scheduleTarget?.mode === "schedule" ? scheduleTarget?.post.suggested_publish_at : null
+        }
         onConfirm={handleScheduleConfirm}
         isLoading={scheduleMutation.isPending}
       />

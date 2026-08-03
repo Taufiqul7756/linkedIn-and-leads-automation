@@ -9,6 +9,7 @@ interface ScheduleModalProps {
   mode: "schedule" | "reschedule";
   postExcerpt: string;
   currentScheduled?: string | null;
+  suggestedAt?: string | null;
   onConfirm: (scheduledAt: string) => void;
   isLoading?: boolean;
 }
@@ -19,18 +20,32 @@ function formatScheduled(iso: string | null | undefined): string {
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 }
 
+function isoToLocalDate(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function isoToLocalTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function ScheduleModal({
   isOpen,
   onClose,
   mode,
   postExcerpt,
   currentScheduled,
+  suggestedAt,
   onConfirm,
   isLoading = false,
 }: ScheduleModalProps) {
   const today = new Date().toISOString().split("T")[0];
-  const [date, setDate] = useState(today);
-  const [time, setTime] = useState("09:00");
+  const prefill = suggestedAt ?? currentScheduled ?? null;
+  const [date, setDate] = useState(() => (prefill ? isoToLocalDate(prefill) : today));
+  const [time, setTime] = useState(() => (prefill ? isoToLocalTime(prefill) : "09:00"));
 
   const handleConfirm = () => {
     if (!date || !time) return;

@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
-  width?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl";
+  width?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl";
   disableBackdropClose?: boolean;
   minHeight?: string;
   bodyClassName?: string;
@@ -20,6 +20,7 @@ const widthClass = {
   xl: "max-w-xl",
   "2xl": "max-w-2xl",
   "3xl": "max-w-3xl",
+  "4xl": "max-w-4xl",
 };
 
 export default function Modal({
