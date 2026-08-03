@@ -31,6 +31,7 @@ import { postsService } from "@/service/postsService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import { LinkedInProfile, MarketingPlan, ProfileDocument, ProfileWebsite } from "@/types/Agent";
 import ModelSwitcher, { useSelectedModel } from "./ModelSwitcher";
+import Tooltip from "@/components/ui/Tooltip";
 
 type Phase =
   | "a-loading"
@@ -81,16 +82,31 @@ const COMMON_TIMEZONES = [
   "Australia/Sydney",
   "Europe/Amsterdam",
   "Europe/Athens",
+  "Europe/Belgrade",
   "Europe/Berlin",
+  "Europe/Brussels",
+  "Europe/Bucharest",
+  "Europe/Budapest",
+  "Europe/Copenhagen",
+  "Europe/Dublin",
   "Europe/Helsinki",
   "Europe/Istanbul",
+  "Europe/Kiev",
   "Europe/Lisbon",
   "Europe/London",
+  "Europe/Luxembourg",
   "Europe/Madrid",
   "Europe/Moscow",
+  "Europe/Oslo",
   "Europe/Paris",
+  "Europe/Prague",
+  "Europe/Riga",
   "Europe/Rome",
+  "Europe/Sofia",
   "Europe/Stockholm",
+  "Europe/Tallinn",
+  "Europe/Vienna",
+  "Europe/Vilnius",
   "Europe/Warsaw",
   "Europe/Zurich",
   "Pacific/Auckland",
@@ -754,16 +770,25 @@ export default function AgentModeSection() {
     style: "bg-orange-100 text-orange-700",
   };
   const purposeSelect = (value: string, onChange: (v: string) => void) => (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-    >
-      <option value="knowledge">Knowledge</option>
-      <option value="tone">Tone</option>
-      <option value="style">Style</option>
-    </select>
+    <span className="relative inline-flex items-center gap-1">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        title="Knowledge = facts · Tone = voice · Style = formatting"
+      >
+        <option value="knowledge">Knowledge</option>
+        <option value="tone">Tone</option>
+        <option value="style">Style</option>
+      </select>
+      <Tooltip
+        text="Knowledge — facts about your business. Tone — writing voice & style samples. Style — post structure & formatting guides."
+        width="w-60"
+        position="top"
+        align="right"
+      />
+    </span>
   );
 
   const currentStep = phase.startsWith("a")
@@ -832,6 +857,10 @@ export default function AgentModeSection() {
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 <LuUser className="h-3.5 w-3.5 text-blue-500" />
                 LinkedIn Profile URL
+                <Tooltip
+                  text="The AI analyses your recent posts, writing style, and expertise to make generated content sound like you."
+                  position="bottom"
+                />
               </p>
               <div className="flex gap-1.5">
                 <div className="relative flex-1">
@@ -868,6 +897,11 @@ export default function AgentModeSection() {
                 <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
                 Websites
                 <span className="font-normal text-gray-400">(optional)</span>
+                <Tooltip
+                  text="Add URLs for the AI to crawl as context. Knowledge = facts about your business. Tone = voice/style references. Style = formatting examples."
+                  position="bottom"
+                  width="w-64"
+                />
               </p>
               {profileWebsites.length > 0 && (
                 <ul className="mb-2 space-y-1">
@@ -1000,6 +1034,11 @@ export default function AgentModeSection() {
                 <LuFileText className="h-3.5 w-3.5 text-blue-500" />
                 Documents
                 <span className="font-normal text-gray-400">(optional)</span>
+                <Tooltip
+                  text="Upload PDFs as context. Knowledge = product docs or case studies. Tone = brand voice guides. Style = formatting or structure templates."
+                  position="bottom"
+                  width="w-64"
+                />
               </p>
               {profileDocs.length > 0 && (
                 <ul className="mb-2 space-y-1">
@@ -1157,16 +1196,17 @@ export default function AgentModeSection() {
                 <LuArrowLeft className="h-3.5 w-3.5" />
                 Back
               </button>
-              <p className="text-sm text-gray-600">
-                Tell us about your content goals. These help the AI plan better posts.
+              <p className="text-sm text-gray-500">
+                Help the AI plan better posts for your audience.
               </p>
             </div>
 
             {/* Target Audience */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 Target Audience
-                <span className="ml-1 font-normal text-gray-500">— optional</span>
+                <span className="font-normal text-gray-400">— optional</span>
+                <Tooltip text="Who are you writing for? Helps the AI focus on topics that resonate with your specific readers — e.g. B2B SaaS founders, early-stage startups." />
               </label>
               <input
                 type="text"
@@ -1179,18 +1219,20 @@ export default function AgentModeSection() {
 
             {/* Region / Timezone */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 Audience Timezone
-                <span className="ml-1 font-normal text-gray-500">
-                  — optional, sets suggested publish times
-                </span>
+                <span className="font-normal text-gray-400">— optional</span>
+                <Tooltip
+                  text="Sets suggested publish times for your audience. Pick their timezone, not yours — e.g. someone in Dhaka selling to US buyers picks America/New_York. Must be an IANA name, not a country or city."
+                  width="w-72"
+                />
               </label>
               <input
                 type="text"
                 list="iana-timezones"
                 value={briefRegion}
                 onChange={(e) => setBriefRegion(e.target.value)}
-                placeholder="e.g. Europe/Berlin, America/New_York"
+                placeholder="e.g. Europe/London, America/New_York"
                 className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <datalist id="iana-timezones">
@@ -1198,34 +1240,25 @@ export default function AgentModeSection() {
                   <option key={tz} value={tz} />
                 ))}
               </datalist>
-              <p className="mt-1 text-xs text-gray-500">
-                Use an IANA timezone name like{" "}
-                <span className="font-medium text-gray-700">Europe/Berlin</span> — not a country or
-                city name.
-              </p>
             </div>
 
             {/* Days */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 Planning Window
-                <span className="ml-1 font-normal text-gray-500">— number of days (1–90)</span>
+                <span className="font-normal text-gray-400">— days</span>
+                <Tooltip text="How many days ahead to plan content. Also controls how many headline options you'll see in the next step. Range: 1–90. Default: 7." />
               </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  min={1}
-                  max={90}
-                  value={briefDays}
-                  onChange={(e) =>
-                    setBriefDays(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))
-                  }
-                  className="h-9 w-28 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <span className="text-xs text-gray-500">
-                  Controls how many headlines are offered. Default: 7
-                </span>
-              </div>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={briefDays}
+                onChange={(e) =>
+                  setBriefDays(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))
+                }
+                className="h-9 w-28 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
             </div>
 
             <div className="flex items-center gap-2 pt-1">
@@ -1448,15 +1481,28 @@ export default function AgentModeSection() {
 
               {/* Knowledge Sources */}
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                  Knowledge Sources
-                </p>
+                <div className="mb-3 flex items-center gap-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Knowledge Sources
+                  </p>
+                  <Tooltip
+                    text="Add websites and documents to ground the AI in your business. Each source has a purpose — Knowledge feeds facts, Tone shapes writing voice, Style guides post structure."
+                    width="w-72"
+                    position="bottom"
+                  />
+                </div>
 
                 {/* Websites */}
                 <div className="mb-3">
                   <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
                     <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
                     Websites
+                    <Tooltip
+                      text="Crawled and indexed as context. Set purpose to: Knowledge — product/company pages; Tone — your blog or articles; Style — formatting examples."
+                      width="w-64"
+                      position="bottom"
+                      align="left"
+                    />
                   </p>
                   {profileWebsites.length > 0 && (
                     <ul className="mb-1.5 space-y-1">
@@ -1555,6 +1601,12 @@ export default function AgentModeSection() {
                   <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
                     <LuFileText className="h-3.5 w-3.5 text-blue-500" />
                     Documents
+                    <Tooltip
+                      text="Upload PDFs. Knowledge — case studies, product docs, FAQs; Tone — past posts or brand voice guide; Style — formatting or structure templates."
+                      width="w-64"
+                      position="bottom"
+                      align="left"
+                    />
                   </p>
                   {profileDocs.length > 0 && (
                     <ul className="mb-1.5 space-y-1">
@@ -1867,8 +1919,12 @@ export default function AgentModeSection() {
                     <LuArrowLeft className="h-3.5 w-3.5" />
                     Back
                   </button>
-                  <p className="flex-1 text-sm text-gray-600">
-                    Select the headlines you want to turn into posts. Each becomes one post.
+                  <p className="flex-1 text-sm text-gray-500">
+                    Pick the headlines to turn into posts.{" "}
+                    <Tooltip
+                      text="Each selected headline becomes exactly one post. The headline is used verbatim as the first line. You can edit any headline before generating."
+                      width="w-64"
+                    />
                   </p>
                   <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
                     {selectedCount} selected
@@ -1938,20 +1994,27 @@ export default function AgentModeSection() {
                     <LuPlus className="h-3.5 w-3.5" />
                     Add custom
                   </button>
-                  <button
-                    onClick={() =>
-                      selectedPlan && handleFetchHeadlines(selectedPlan, { more: true })
-                    }
-                    disabled={generatingMore || !selectedPlan}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {generatingMore ? (
-                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <LuRefreshCw className="h-3.5 w-3.5" />
-                    )}
-                    {generatingMore ? "Generating…" : "Generate more"}
-                  </button>
+                  <span className="flex items-center gap-1.5">
+                    <button
+                      onClick={() =>
+                        selectedPlan && handleFetchHeadlines(selectedPlan, { more: true })
+                      }
+                      disabled={generatingMore || !selectedPlan}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {generatingMore ? (
+                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <LuRefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      {generatingMore ? "Generating…" : "Generate more"}
+                    </button>
+                    <Tooltip
+                      text="Generates additional headlines while excluding the ones already shown. Append as many as you like before selecting."
+                      position="top"
+                      width="w-60"
+                    />
+                  </span>
                   <div className="flex-1" />
                   <ModelSwitcher dropUp />
                   <button

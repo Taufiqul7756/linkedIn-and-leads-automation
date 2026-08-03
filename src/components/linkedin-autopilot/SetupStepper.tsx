@@ -55,19 +55,37 @@ export default function SetupStepper({ mode }: { mode: Mode }) {
 
   const hasReadyProfile = profiles?.results?.some((p) => p.status === "ready") ?? false;
 
+  // Manual mode — workspace documents
   const { data: documents } = useQueryWithTokenRefresh(
     ["documents", workspaceId],
     () => documentService(workspaceId).getDocuments(),
-    { enabled: !!workspaceId }
+    { enabled: mode === "manual" && !!workspaceId }
   );
   const docs = documents?.results ?? [];
+
+  // Agent mode — agent-level documents + websites (independent APIs)
+  const { data: agentDocsData } = useQueryWithTokenRefresh(
+    ["agent-documents", workspaceId],
+    () => agentService(workspaceId).getAgentDocuments(),
+    { enabled: mode === "agent" && !!workspaceId }
+  );
+  const { data: agentWebsitesData } = useQueryWithTokenRefresh(
+    ["agent-websites", workspaceId],
+    () => agentService(workspaceId).getAgentWebsites(),
+    { enabled: mode === "agent" && !!workspaceId }
+  );
+  const agentDocs = agentDocsData?.results ?? [];
+  const agentSites = agentWebsitesData?.results ?? [];
+
+  const hasAgentSource = (purpose: string) =>
+    agentDocs.some((d) => d.purpose === purpose) || agentSites.some((s) => s.purpose === purpose);
 
   const allCompleted = [
     account?.connected === true,
     hasReadyProfile,
-    docs.some((d) => d.purpose === "knowledge"),
-    docs.some((d) => d.purpose === "tone"),
-    docs.some((d) => d.purpose === "style"),
+    mode === "agent" ? hasAgentSource("knowledge") : docs.some((d) => d.purpose === "knowledge"),
+    mode === "agent" ? hasAgentSource("tone") : docs.some((d) => d.purpose === "tone"),
+    mode === "agent" ? hasAgentSource("style") : docs.some((d) => d.purpose === "style"),
   ];
 
   // In manual mode, hide the Profile URL step (index 1)

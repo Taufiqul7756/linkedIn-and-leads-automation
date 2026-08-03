@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { LuSparkles, LuArrowRight, LuX, LuTriangleAlert, LuLink } from "react-icons/lu";
+import Tooltip from "@/components/ui/Tooltip";
 import { AxiosError } from "axios";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
@@ -153,8 +154,12 @@ export default function GeneratePostsSection() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5">
         {/* Number of posts */}
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
             Number of posts <span className="text-red-400">*</span>
+            <Tooltip
+              text="How many LinkedIn posts to generate in one batch. Max 50."
+              position="bottom"
+            />
           </label>
           <input
             type="number"
@@ -179,8 +184,9 @@ export default function GeneratePostsSection() {
 
         {/* Use Emoji */}
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
             Use Emoji
+            <Tooltip text="Whether to include emojis in the generated posts." position="bottom" />
           </label>
           <div className="flex gap-1.5">
             {(["No", "Yes"] as const).map((opt) => {
@@ -205,8 +211,12 @@ export default function GeneratePostsSection() {
 
         {/* Length */}
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
             Length
+            <Tooltip
+              text="Target post length. Short ≈ 150 words, Medium ≈ 300 words, Long ≈ 500 words."
+              position="bottom"
+            />
           </label>
           <div className="flex gap-1.5">
             {LENGTH_OPTIONS.map((l) => (
@@ -230,8 +240,9 @@ export default function GeneratePostsSection() {
       {/* Tone & Style document references */}
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
             Tone reference <span className="font-normal normal-case text-gray-400">PDF</span>
+            <Tooltip text="A PDF that guides the AI's writing voice. Upload tone references in Add Sources → Tone." />
           </label>
           <select
             value={toneDocId}
@@ -247,8 +258,9 @@ export default function GeneratePostsSection() {
           </select>
         </div>
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
             Style reference <span className="font-normal normal-case text-gray-400">PDF</span>
+            <Tooltip text="A PDF that guides post structure and formatting. Upload style references in Add Sources → Style." />
           </label>
           <select
             value={styleDocId}
@@ -267,11 +279,9 @@ export default function GeneratePostsSection() {
 
       {/* Source URL */}
       <div className="mt-4">
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Source URL{" "}
-          <span className="font-normal normal-case text-gray-400">
-            optional — generate posts from a specific page or article
-          </span>
+        <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          Source URL <span className="font-normal normal-case text-gray-400">optional</span>
+          <Tooltip text="Generate posts specifically about this URL — e.g. a blog post, product page, or case study. Leave blank to use your full knowledge base." />
         </label>
         <div className="relative">
           <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -287,11 +297,12 @@ export default function GeneratePostsSection() {
 
       {/* Custom prompt */}
       <div className="mt-4">
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Custom prompt{" "}
-          <span className="font-normal normal-case text-gray-400">
-            optional — steer the angle, topic, or offer to feature
-          </span>
+        <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          Custom prompt <span className="font-normal normal-case text-gray-400">optional</span>
+          <Tooltip
+            text="Steer the AI towards a specific topic, angle, or message. Leave blank to let it pick from your knowledge base."
+            width="w-64"
+          />
         </label>
         <textarea
           value={prompt}

@@ -85,11 +85,8 @@ export type GeneratePostsResponse = {
 };
 
 export type RegeneratePostBody = {
-  instruction: string;
-  tone: string;
-  length: string;
-  content_style: string;
-  use_emoji: boolean;
+  instruction?: string;
+  mode?: "rewrite" | "extend";
 };
 
 export type SuggestPromptsBody = {
