@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import Modal from "@/components/ui/Modal";
 import { LuUpload, LuLink, LuX, LuFileText, LuLoader, LuTrash2 } from "react-icons/lu";
+import Tooltip from "@/components/ui/Tooltip";
 import toast from "react-hot-toast";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { documentService } from "@/service/documentService";
@@ -116,20 +117,45 @@ export default function KnowledgeUploadModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Add Sources" width="lg">
       {/* Type selector */}
       <div className="mb-5">
-        <label className="mb-2 block text-sm font-medium text-gray-700">Source type</label>
+        <label className="mb-2 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          Source type
+          <Tooltip
+            text="Choose how this source will be used. You can add multiple sources of different types."
+            position="bottom"
+          />
+        </label>
         <div className="flex gap-2">
-          {(["knowledge", "tune", "style"] as SourceType[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setSelectedType(t)}
-              className={`rounded-lg border px-4 py-2 text-sm font-medium capitalize transition-colors ${
-                selectedType === t
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
-              }`}
-            >
-              {TYPE_LABELS[t]}
-            </button>
+          {(
+            [
+              {
+                type: "knowledge" as SourceType,
+                tip: "Facts about your business, products, or expertise. Grounds posts in your actual content.",
+              },
+              {
+                type: "tune" as SourceType,
+                tip: "Writing samples that define your voice — past posts, articles, or brand tone guides.",
+              },
+              {
+                type: "style" as SourceType,
+                tip: "Formatting references — how you structure posts, use line breaks, CTAs, or hashtags.",
+              },
+            ] as const
+          ).map(({ type: t, tip }) => (
+            <span key={t} className="relative flex-1">
+              <button
+                onClick={() => setSelectedType(t)}
+                className={`w-full rounded-lg border px-4 py-2 text-sm font-medium capitalize transition-colors ${
+                  selectedType === t
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                }`}
+              >
+                {TYPE_LABELS[t]}
+              </button>
+              <span className="absolute right-1.5 top-1.5">
+                <Tooltip text={tip} position="bottom" width="w-56" />
+              </span>
+            </span>
           ))}
         </div>
         <p className="mt-1.5 text-xs text-gray-400">

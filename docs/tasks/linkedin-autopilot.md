@@ -162,3 +162,17 @@
 - [x] `PostType` updated: `state`, `plan`, `headline`, `suggested_publish_at`, `use_emoji`, `writer_model`, nullable `cta`/`engagement`/`website_profile`
 - [x] `MarketingPlan` updated: `brief: PlanningBrief|null`, `linkedin_profile: string|null`
 - [x] `Modal.tsx` extended with `"4xl"` width (`max-w-4xl`)
+
+## Phase 11 — UX Refinements & Model Switcher
+
+- [x] `SetupStepper`: agent mode steps 3–5 (Knowledge/Tone/Style) now check agent-level APIs (`getAgentDocuments` + `getAgentWebsites`) independently from manual mode (`documentService`); each query only fires for the relevant mode
+- [x] `RegeneratePostConfirmModal`: stripped to two controls — Make Longer toggle (sends `mode: "extend"`) + Instructions textarea; all tone/length/content_style/emoji options removed
+- [x] `RegeneratePostBody` type simplified to `{ instruction?: string; mode?: "rewrite" | "extend" }`
+- [x] `Tooltip` component (`src/components/ui/Tooltip.tsx`): CSS-only hover tooltip with `position` (top/bottom), `align` (center/left/right) props; defaults to `LuInfo` icon; `align="right"` prevents right-edge overflow
+- [x] `AgentModeSection` b-brief: replaced verbose inline text with tooltips on Target Audience, Audience Timezone, Planning Window; COMMON_TIMEZONES expanded with 15 EU/UK entries (Belgrade, Brussels, Bucharest, Budapest, Copenhagen, Dublin, Kiev, Luxembourg, Oslo, Prague, Riga, Sofia, Tallinn, Vienna, Vilnius)
+- [x] `AgentModeSection` a-submit: tooltips on LinkedIn Profile URL, Websites, Documents section headers and purpose select dropdown
+- [x] `AgentModeSection` a-ready Knowledge Sources: tooltips on section header, Websites label (`align="left"`), Documents label (`align="left"`); purpose select tooltip (`align="right"`)
+- [x] `AgentModeSection` b-headlines: post rate warning modal — if `selectedCount / briefDays > 2` show confirmation with Adjust / Proceed anyway before generating
+- [x] `KnowledgeUploadModal`: tooltip on Source type label + per-tab tooltips (Knowledge/Tone/Style)
+- [x] `GeneratePostsSection`: tooltips on Number of posts, Use Emoji, Length, Tone reference PDF, Style reference PDF, Source URL, Custom prompt
+- [x] `ModelSwitcher`: provider tabs (Gemini / Claude) derived dynamically from API response; colored provider badge on trigger button (blue=Gemini, orange=Claude); active tab auto-syncs with selected model; models filtered per active provider tab

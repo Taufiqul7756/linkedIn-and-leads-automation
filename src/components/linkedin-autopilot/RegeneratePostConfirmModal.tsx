@@ -1,189 +1,76 @@
 "use client";
 import { useState } from "react";
-import { LuRefreshCw, LuLoader } from "react-icons/lu";
+import { LuRefreshCw, LuLoader, LuArrowDownToLine } from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import Modal from "@/components/ui/Modal";
 
-const TONE_OPTIONS = [
-  { value: "professional", label: "Professional" },
-  { value: "conversational", label: "Conversational" },
-  { value: "bold", label: "Bold / Contrarian" },
-  { value: "storytelling", label: "Storytelling" },
-];
-const LENGTH_OPTIONS = ["Short", "Medium", "Long"] as const;
-const CONTENT_STYLES = [
-  "Thought leadership",
-  "Case study",
-  "How-to",
-  "Bold take",
-  "Storytelling",
-  "Product update",
-];
-
 export interface RegeneratePostOptions {
   instruction: string;
-  tone: string;
-  length: string;
-  content_style: string;
-  use_emoji: boolean;
+  makeLonger: boolean;
 }
 
 interface RegeneratePostConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTone?: string;
-  defaultLength?: string;
-  defaultContentStyle?: string;
   isConfirming?: boolean;
   onConfirm: (opts: RegeneratePostOptions) => void;
-}
-
-function toDisplayLength(raw: string): (typeof LENGTH_OPTIONS)[number] {
-  const map: Record<string, (typeof LENGTH_OPTIONS)[number]> = {
-    short: "Short",
-    medium: "Medium",
-    long: "Long",
-  };
-  return map[raw?.toLowerCase()] ?? "Medium";
-}
-
-function toDisplayContentStyle(raw: string): string {
-  if (!raw) return "Thought leadership";
-  const fromApi = raw.replace(/_/g, " ");
-  return (
-    CONTENT_STYLES.find((s) => s.toLowerCase() === fromApi.toLowerCase()) ?? "Thought leadership"
-  );
 }
 
 export default function RegeneratePostConfirmModal({
   isOpen,
   onClose,
-  defaultTone = "professional",
-  defaultLength = "medium",
-  defaultContentStyle = "thought_leadership",
   isConfirming = false,
   onConfirm,
 }: RegeneratePostConfirmModalProps) {
-  const [tone, setTone] = useState(defaultTone);
-  const [length, setLength] = useState<(typeof LENGTH_OPTIONS)[number]>(
-    toDisplayLength(defaultLength)
-  );
-  const [contentStyle, setContentStyle] = useState(toDisplayContentStyle(defaultContentStyle));
-  const [useEmoji, setUseEmoji] = useState(false);
+  const [makeLonger, setMakeLonger] = useState(false);
   const [instruction, setInstruction] = useState("");
 
   const handleConfirm = () => {
-    onConfirm({
-      instruction,
-      tone,
-      length: length.toLowerCase(),
-      content_style: contentStyle.toLowerCase().replace(/\s+/g, "_"),
-      use_emoji: useEmoji,
-    });
+    onConfirm({ instruction, makeLonger });
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Regenerate Post" width="md">
-      <p className="mb-5 text-sm text-gray-500">
-        Adjust settings below, then regenerate. Your current version will be replaced.
-      </p>
-
+    <Modal isOpen={isOpen} onClose={onClose} title="Regenerate Post" width="sm">
       <div className="space-y-4">
-        {/* Tone */}
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Tone
-          </label>
-          <select
-            value={tone}
-            onChange={(e) => setTone(e.target.value)}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            {TONE_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Length */}
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Length
-          </label>
-          <div className="flex gap-2">
-            {LENGTH_OPTIONS.map((l) => (
-              <button
-                key={l}
-                onClick={() => setLength(l)}
-                className={cn(
-                  "flex h-9 flex-1 items-center justify-center rounded-lg border text-sm font-medium transition-colors",
-                  length === l
-                    ? "border-blue-600 bg-blue-600 text-white"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                )}
-              >
-                {l}
-              </button>
-            ))}
+        {/* Make Longer toggle */}
+        <button
+          onClick={() => setMakeLonger((v) => !v)}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+            makeLonger
+              ? "border-blue-500 bg-blue-50 text-blue-700"
+              : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+          )}
+        >
+          <LuArrowDownToLine
+            className={cn("h-4 w-4 shrink-0", makeLonger ? "text-blue-500" : "text-gray-400")}
+          />
+          <div>
+            <p className="text-sm font-medium">Make Longer</p>
+            <p className="text-xs text-gray-400">Keeps existing content and appends new material</p>
           </div>
-        </div>
+          <div
+            className={cn(
+              "ml-auto h-4 w-4 shrink-0 rounded-full border-2 transition-colors",
+              makeLonger ? "border-blue-500 bg-blue-500" : "border-gray-300"
+            )}
+          />
+        </button>
 
-        {/* Content style */}
+        {/* Instructions */}
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Content style
-          </label>
-          <select
-            value={contentStyle}
-            onChange={(e) => setContentStyle(e.target.value)}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            {CONTENT_STYLES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Use emoji */}
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Use Emoji
-          </label>
-          <div className="flex gap-2">
-            {(["No", "Yes"] as const).map((opt) => {
-              const active = opt === "Yes" ? useEmoji : !useEmoji;
-              return (
-                <button
-                  key={opt}
-                  onClick={() => setUseEmoji(opt === "Yes")}
-                  className={cn(
-                    "flex h-9 flex-1 items-center justify-center rounded-lg border text-sm font-medium transition-colors",
-                    active
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                  )}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Instruction */}
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Instruction <span className="normal-case font-normal text-gray-400">optional</span>
+            Instructions <span className="font-normal normal-case text-gray-400">optional</span>
           </label>
           <textarea
             rows={3}
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
-            placeholder="e.g. Focus on the cost-saving angle and keep it concise."
+            placeholder={
+              makeLonger
+                ? "e.g. Add a customer example at the end."
+                : "e.g. Focus on the cost-saving angle and keep it concise."
+            }
             className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>

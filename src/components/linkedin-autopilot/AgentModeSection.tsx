@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import {
   LuZap,
   LuLink,
@@ -31,6 +32,7 @@ import { postsService } from "@/service/postsService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import { LinkedInProfile, MarketingPlan, ProfileDocument, ProfileWebsite } from "@/types/Agent";
 import ModelSwitcher, { useSelectedModel } from "./ModelSwitcher";
+import Tooltip from "@/components/ui/Tooltip";
 
 type Phase =
   | "a-loading"
@@ -81,16 +83,31 @@ const COMMON_TIMEZONES = [
   "Australia/Sydney",
   "Europe/Amsterdam",
   "Europe/Athens",
+  "Europe/Belgrade",
   "Europe/Berlin",
+  "Europe/Brussels",
+  "Europe/Bucharest",
+  "Europe/Budapest",
+  "Europe/Copenhagen",
+  "Europe/Dublin",
   "Europe/Helsinki",
   "Europe/Istanbul",
+  "Europe/Kiev",
   "Europe/Lisbon",
   "Europe/London",
+  "Europe/Luxembourg",
   "Europe/Madrid",
   "Europe/Moscow",
+  "Europe/Oslo",
   "Europe/Paris",
+  "Europe/Prague",
+  "Europe/Riga",
   "Europe/Rome",
+  "Europe/Sofia",
   "Europe/Stockholm",
+  "Europe/Tallinn",
+  "Europe/Vienna",
+  "Europe/Vilnius",
   "Europe/Warsaw",
   "Europe/Zurich",
   "Pacific/Auckland",
@@ -159,6 +176,9 @@ export default function AgentModeSection() {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const didRestoreRef = useRef(false);
 
   const selectedModelId = useSelectedModel();
   const [phase, setPhase] = useState<Phase>("a-loading");
@@ -208,6 +228,7 @@ export default function AgentModeSection() {
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const [generatingMore, setGeneratingMore] = useState(false);
   const [headlinesSentCount, setHeadlinesSentCount] = useState(0);
+  const [showPostRateWarning, setShowPostRateWarning] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const postPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -216,6 +237,34 @@ export default function AgentModeSection() {
   const queuedFileInputRef = useRef<HTMLInputElement>(null);
 
   const headlinesSentCountRef = useRef(0);
+
+  // URL helpers
+  const phaseToStep = (p: Phase): number =>
+    p.startsWith("a")
+      ? 1
+      : p === "b-brief" || p === "b-generating" || p === "b-select"
+        ? 2
+        : p === "b-headlines"
+          ? 3
+          : 4;
+
+  const syncAgentUrl = (p: Phase | null) => {
+    const params = new URLSearchParams(window.location.search);
+    if (p === null) {
+      params.delete("agent");
+      params.delete("agent_step");
+    } else {
+      params.set("agent", "open");
+      params.set("agent_step", String(phaseToStep(p)));
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  // Sync phase → URL whenever modal is open and phase changes
+  useEffect(() => {
+    if (!open) return;
+    syncAgentUrl(phase);
+  }, [phase, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -302,7 +351,10 @@ export default function AgentModeSection() {
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         setPhase("c-done");
-        setTimeout(() => setOpen(false), 2000);
+        setTimeout(() => {
+          setOpen(false);
+          syncAgentUrl(null);
+        }, 2000);
       } else if (attempts >= 40) {
         stopPostPolling();
         toast.error("Post generation is taking longer than expected. Check your drafts later.");
@@ -311,7 +363,7 @@ export default function AgentModeSection() {
     }, 2500);
   };
 
-  const checkProfile = async () => {
+  const checkProfile = async (targetStep = 0) => {
     setPhase("a-loading");
     try {
       const data = await agentService(workspaceId).getProfiles();
@@ -322,7 +374,8 @@ export default function AgentModeSection() {
         setPhase("a-submit");
       } else if (latest.status === "ready") {
         setProfile(latest);
-        setPhase("a-ready");
+        // If restoring to step 2+ (marketing plans / headlines), jump straight to b-brief
+        setPhase(targetStep >= 2 ? "b-brief" : "a-ready");
         loadAgentResources();
         uploadQueuedResources();
       } else if (latest.status === "error") {
@@ -518,8 +571,7 @@ export default function AgentModeSection() {
     }
   };
 
-  const handleOpen = () => {
-    setOpen(true);
+  const resetModalState = () => {
     setProfile(null);
     setProfiles([]);
     setProfileUrl("");
@@ -550,17 +602,38 @@ export default function AgentModeSection() {
     setHeadlineItems([]);
     setHeadlinesSentCount(0);
     headlinesSentCountRef.current = 0;
+  };
+
+  const handleOpenWithStep = (targetStep: number) => {
+    setOpen(true);
+    resetModalState();
     if (workspaceId) {
-      checkProfile();
+      checkProfile(targetStep);
       loadAgentResources();
     }
   };
+
+  const handleOpen = () => handleOpenWithStep(0);
+
+  // On mount: if URL has agent=open, auto-open the modal at the right step
+  useEffect(() => {
+    if (!workspaceId || didRestoreRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("agent") === "open") {
+      didRestoreRef.current = true;
+      const step = parseInt(params.get("agent_step") ?? "1", 10);
+      // Defer to avoid calling setState synchronously within an effect
+      setTimeout(() => handleOpenWithStep(step), 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
   const handleClose = () => {
     stopPolling();
     stopPostPolling();
     stopResourcePolling();
     setOpen(false);
+    syncAgentUrl(null);
   };
 
   const handleSubmitProfile = async () => {
@@ -754,16 +827,25 @@ export default function AgentModeSection() {
     style: "bg-orange-100 text-orange-700",
   };
   const purposeSelect = (value: string, onChange: (v: string) => void) => (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-    >
-      <option value="knowledge">Knowledge</option>
-      <option value="tone">Tone</option>
-      <option value="style">Style</option>
-    </select>
+    <span className="relative inline-flex items-center gap-1">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        title="Knowledge = facts · Tone = voice · Style = formatting"
+      >
+        <option value="knowledge">Knowledge</option>
+        <option value="tone">Tone</option>
+        <option value="style">Style</option>
+      </select>
+      <Tooltip
+        text="Knowledge — facts about your business. Tone — writing voice & style samples. Style — post structure & formatting guides."
+        width="w-60"
+        position="top"
+        align="right"
+      />
+    </span>
   );
 
   const currentStep = phase.startsWith("a")
@@ -832,6 +914,10 @@ export default function AgentModeSection() {
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 <LuUser className="h-3.5 w-3.5 text-blue-500" />
                 LinkedIn Profile URL
+                <Tooltip
+                  text="The AI analyses your recent posts, writing style, and expertise to make generated content sound like you."
+                  position="bottom"
+                />
               </p>
               <div className="flex gap-1.5">
                 <div className="relative flex-1">
@@ -868,6 +954,11 @@ export default function AgentModeSection() {
                 <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
                 Websites
                 <span className="font-normal text-gray-400">(optional)</span>
+                <Tooltip
+                  text="Add URLs for the AI to crawl as context. Knowledge = facts about your business. Tone = voice/style references. Style = formatting examples."
+                  position="bottom"
+                  width="w-64"
+                />
               </p>
               {profileWebsites.length > 0 && (
                 <ul className="mb-2 space-y-1">
@@ -1000,6 +1091,11 @@ export default function AgentModeSection() {
                 <LuFileText className="h-3.5 w-3.5 text-blue-500" />
                 Documents
                 <span className="font-normal text-gray-400">(optional)</span>
+                <Tooltip
+                  text="Upload PDFs as context. Knowledge = product docs or case studies. Tone = brand voice guides. Style = formatting or structure templates."
+                  position="bottom"
+                  width="w-64"
+                />
               </p>
               {profileDocs.length > 0 && (
                 <ul className="mb-2 space-y-1">
@@ -1061,6 +1157,9 @@ export default function AgentModeSection() {
                             <LuX className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                        {(doc.status === "error" || doc.status === "failed") && doc.error && (
+                          <p className="px-2.5 pb-1.5 text-[10px] text-red-500">{doc.error}</p>
+                        )}
                       </li>
                     );
                   })}
@@ -1157,16 +1256,17 @@ export default function AgentModeSection() {
                 <LuArrowLeft className="h-3.5 w-3.5" />
                 Back
               </button>
-              <p className="text-sm text-gray-600">
-                Tell us about your content goals. These help the AI plan better posts.
+              <p className="text-sm text-gray-500">
+                Help the AI plan better posts for your audience.
               </p>
             </div>
 
             {/* Target Audience */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 Target Audience
-                <span className="ml-1 font-normal text-gray-500">— optional</span>
+                <span className="font-normal text-gray-400">— optional</span>
+                <Tooltip text="Who are you writing for? Helps the AI focus on topics that resonate with your specific readers — e.g. B2B SaaS founders, early-stage startups." />
               </label>
               <input
                 type="text"
@@ -1179,18 +1279,20 @@ export default function AgentModeSection() {
 
             {/* Region / Timezone */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 Audience Timezone
-                <span className="ml-1 font-normal text-gray-500">
-                  — optional, sets suggested publish times
-                </span>
+                <span className="font-normal text-gray-400">— optional</span>
+                <Tooltip
+                  text="Sets suggested publish times for your audience. Pick their timezone, not yours — e.g. someone in Dhaka selling to US buyers picks America/New_York. Must be an IANA name, not a country or city."
+                  width="w-72"
+                />
               </label>
               <input
                 type="text"
                 list="iana-timezones"
                 value={briefRegion}
                 onChange={(e) => setBriefRegion(e.target.value)}
-                placeholder="e.g. Europe/Berlin, America/New_York"
+                placeholder="e.g. Europe/London, America/New_York"
                 className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               <datalist id="iana-timezones">
@@ -1198,34 +1300,25 @@ export default function AgentModeSection() {
                   <option key={tz} value={tz} />
                 ))}
               </datalist>
-              <p className="mt-1 text-xs text-gray-500">
-                Use an IANA timezone name like{" "}
-                <span className="font-medium text-gray-700">Europe/Berlin</span> — not a country or
-                city name.
-              </p>
             </div>
 
             {/* Days */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 Planning Window
-                <span className="ml-1 font-normal text-gray-500">— number of days (1–90)</span>
+                <span className="font-normal text-gray-400">— days</span>
+                <Tooltip text="How many days ahead to plan content. Also controls how many headline options you'll see in the next step. Range: 1–90. Default: 7." />
               </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  min={1}
-                  max={90}
-                  value={briefDays}
-                  onChange={(e) =>
-                    setBriefDays(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))
-                  }
-                  className="h-9 w-28 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <span className="text-xs text-gray-500">
-                  Controls how many headlines are offered. Default: 7
-                </span>
-              </div>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={briefDays}
+                onChange={(e) =>
+                  setBriefDays(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))
+                }
+                className="h-9 w-28 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
             </div>
 
             <div className="flex items-center gap-2 pt-1">
@@ -1448,15 +1541,28 @@ export default function AgentModeSection() {
 
               {/* Knowledge Sources */}
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                <p className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                  Knowledge Sources
-                </p>
+                <div className="mb-3 flex items-center gap-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Knowledge Sources
+                  </p>
+                  <Tooltip
+                    text="Add websites and documents to ground the AI in your business. Each source has a purpose — Knowledge feeds facts, Tone shapes writing voice, Style guides post structure."
+                    width="w-72"
+                    position="bottom"
+                  />
+                </div>
 
                 {/* Websites */}
                 <div className="mb-3">
                   <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
                     <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
                     Websites
+                    <Tooltip
+                      text="Crawled and indexed as context. Set purpose to: Knowledge — product/company pages; Tone — your blog or articles; Style — formatting examples."
+                      width="w-64"
+                      position="bottom"
+                      align="left"
+                    />
                   </p>
                   {profileWebsites.length > 0 && (
                     <ul className="mb-1.5 space-y-1">
@@ -1555,6 +1661,12 @@ export default function AgentModeSection() {
                   <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
                     <LuFileText className="h-3.5 w-3.5 text-blue-500" />
                     Documents
+                    <Tooltip
+                      text="Upload PDFs. Knowledge — case studies, product docs, FAQs; Tone — past posts or brand voice guide; Style — formatting or structure templates."
+                      width="w-64"
+                      position="bottom"
+                      align="left"
+                    />
                   </p>
                   {profileDocs.length > 0 && (
                     <ul className="mb-1.5 space-y-1">
@@ -1618,6 +1730,9 @@ export default function AgentModeSection() {
                                 <LuX className="h-3.5 w-3.5" />
                               </button>
                             </div>
+                            {(doc.status === "error" || doc.status === "failed") && doc.error && (
+                              <p className="px-2.5 pb-1.5 text-[10px] text-red-500">{doc.error}</p>
+                            )}
                           </li>
                         );
                       })}
@@ -1867,8 +1982,12 @@ export default function AgentModeSection() {
                     <LuArrowLeft className="h-3.5 w-3.5" />
                     Back
                   </button>
-                  <p className="flex-1 text-sm text-gray-600">
-                    Select the headlines you want to turn into posts. Each becomes one post.
+                  <p className="flex-1 text-sm text-gray-500">
+                    Pick the headlines to turn into posts.{" "}
+                    <Tooltip
+                      text="Each selected headline becomes exactly one post. The headline is used verbatim as the first line. You can edit any headline before generating."
+                      width="w-64"
+                    />
                   </p>
                   <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
                     {selectedCount} selected
@@ -1938,24 +2057,37 @@ export default function AgentModeSection() {
                     <LuPlus className="h-3.5 w-3.5" />
                     Add custom
                   </button>
-                  <button
-                    onClick={() =>
-                      selectedPlan && handleFetchHeadlines(selectedPlan, { more: true })
-                    }
-                    disabled={generatingMore || !selectedPlan}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {generatingMore ? (
-                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <LuRefreshCw className="h-3.5 w-3.5" />
-                    )}
-                    {generatingMore ? "Generating…" : "Generate more"}
-                  </button>
+                  <span className="flex items-center gap-1.5">
+                    <button
+                      onClick={() =>
+                        selectedPlan && handleFetchHeadlines(selectedPlan, { more: true })
+                      }
+                      disabled={generatingMore || !selectedPlan}
+                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {generatingMore ? (
+                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <LuRefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      {generatingMore ? "Generating…" : "Generate more"}
+                    </button>
+                    <Tooltip
+                      text="Generates additional headlines while excluding the ones already shown. Append as many as you like before selecting."
+                      position="top"
+                      width="w-60"
+                    />
+                  </span>
                   <div className="flex-1" />
                   <ModelSwitcher dropUp />
                   <button
-                    onClick={handleGenerateFromPlan}
+                    onClick={() => {
+                      if (selectedCount / briefDays > 2) {
+                        setShowPostRateWarning(true);
+                      } else {
+                        handleGenerateFromPlan();
+                      }
+                    }}
                     disabled={selectedCount === 0}
                     className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                   >
@@ -2032,6 +2164,54 @@ export default function AgentModeSection() {
           </div>
         )}
       </Modal>
+
+      {/* ── Post Rate Warning Modal ── */}
+      {(() => {
+        const selectedCount = headlineItems.filter((h) => h.selected).length;
+        const postsPerDay = briefDays > 0 ? (selectedCount / briefDays).toFixed(1) : "—";
+        return (
+          <Modal
+            isOpen={showPostRateWarning}
+            onClose={() => setShowPostRateWarning(false)}
+            title="High posting frequency"
+            width="sm"
+            disableBackdropClose
+          >
+            <p className="text-sm text-gray-600">
+              You selected{" "}
+              <span className="font-semibold text-gray-900">{selectedCount} posts</span> over{" "}
+              <span className="font-semibold text-gray-900">
+                {briefDays} day{briefDays !== 1 ? "s" : ""}
+              </span>{" "}
+              - that&apos;s{" "}
+              <span className="font-semibold text-amber-600">{postsPerDay} posts/day</span> on
+              average.
+            </p>
+            <p className="mt-2 text-sm text-gray-500">
+              Most audiences engage better with{" "}
+              <span className="font-medium text-gray-700">≤ 2 posts per day</span>. You can adjust
+              your selection or proceed anyway.
+            </p>
+            <div className="mt-5 flex gap-2.5">
+              <button
+                onClick={() => setShowPostRateWarning(false)}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                Adjust
+              </button>
+              <button
+                onClick={() => {
+                  setShowPostRateWarning(false);
+                  handleGenerateFromPlan();
+                }}
+                className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                Proceed anyway
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* ── Edit Plan Modal ── */}
       <Modal

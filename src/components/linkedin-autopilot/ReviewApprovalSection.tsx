@@ -20,7 +20,7 @@ import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
-import type { PostType } from "@/types/Post";
+import type { PostType, RegeneratePostBody } from "@/types/Post";
 import EditPostModal from "./EditPostModal";
 import RejectConfirmModal from "./RejectConfirmModal";
 import RegeneratePostConfirmModal, {
@@ -228,7 +228,7 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
   );
 
   const regeneratePostMutation = useMutationWithTokenRefresh(
-    ({ id, opts }: { id: string; opts: RegeneratePostOptions }) =>
+    ({ id, opts }: { id: string; opts: RegeneratePostBody }) =>
       postsService(workspaceId).regeneratePost(id, opts),
     {
       onSuccess: () => {
@@ -521,14 +521,14 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
         onClose={() => {
           if (!regeneratingId) setRegenerateTarget(null);
         }}
-        defaultTone={regenerateTarget?.tone}
-        defaultLength={regenerateTarget?.length}
-        defaultContentStyle={regenerateTarget?.content_style}
         isConfirming={regeneratingId === regenerateTarget?.id}
-        onConfirm={(opts) => {
+        onConfirm={(opts: RegeneratePostOptions) => {
           if (!regenerateTarget) return;
           setRegeneratingId(regenerateTarget.id);
-          regeneratePostMutation.mutate({ id: regenerateTarget.id, opts });
+          const body: RegeneratePostBody = {};
+          if (opts.makeLonger) body.mode = "extend";
+          if (opts.instruction.trim()) body.instruction = opts.instruction.trim();
+          regeneratePostMutation.mutate({ id: regenerateTarget.id, opts: body });
         }}
       />
 
