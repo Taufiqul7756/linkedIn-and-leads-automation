@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import {
   LuZap,
   LuLink,
@@ -175,6 +176,9 @@ export default function AgentModeSection() {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const didRestoreRef = useRef(false);
 
   const selectedModelId = useSelectedModel();
   const [phase, setPhase] = useState<Phase>("a-loading");
@@ -233,6 +237,34 @@ export default function AgentModeSection() {
   const queuedFileInputRef = useRef<HTMLInputElement>(null);
 
   const headlinesSentCountRef = useRef(0);
+
+  // URL helpers
+  const phaseToStep = (p: Phase): number =>
+    p.startsWith("a")
+      ? 1
+      : p === "b-brief" || p === "b-generating" || p === "b-select"
+        ? 2
+        : p === "b-headlines"
+          ? 3
+          : 4;
+
+  const syncAgentUrl = (p: Phase | null) => {
+    const params = new URLSearchParams(window.location.search);
+    if (p === null) {
+      params.delete("agent");
+      params.delete("agent_step");
+    } else {
+      params.set("agent", "open");
+      params.set("agent_step", String(phaseToStep(p)));
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  // Sync phase → URL whenever modal is open and phase changes
+  useEffect(() => {
+    if (!open) return;
+    syncAgentUrl(phase);
+  }, [phase, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -319,7 +351,10 @@ export default function AgentModeSection() {
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         setPhase("c-done");
-        setTimeout(() => setOpen(false), 2000);
+        setTimeout(() => {
+          setOpen(false);
+          syncAgentUrl(null);
+        }, 2000);
       } else if (attempts >= 40) {
         stopPostPolling();
         toast.error("Post generation is taking longer than expected. Check your drafts later.");
@@ -328,7 +363,7 @@ export default function AgentModeSection() {
     }, 2500);
   };
 
-  const checkProfile = async () => {
+  const checkProfile = async (targetStep = 0) => {
     setPhase("a-loading");
     try {
       const data = await agentService(workspaceId).getProfiles();
@@ -339,7 +374,8 @@ export default function AgentModeSection() {
         setPhase("a-submit");
       } else if (latest.status === "ready") {
         setProfile(latest);
-        setPhase("a-ready");
+        // If restoring to step 2+ (marketing plans / headlines), jump straight to b-brief
+        setPhase(targetStep >= 2 ? "b-brief" : "a-ready");
         loadAgentResources();
         uploadQueuedResources();
       } else if (latest.status === "error") {
@@ -535,8 +571,7 @@ export default function AgentModeSection() {
     }
   };
 
-  const handleOpen = () => {
-    setOpen(true);
+  const resetModalState = () => {
     setProfile(null);
     setProfiles([]);
     setProfileUrl("");
@@ -567,17 +602,38 @@ export default function AgentModeSection() {
     setHeadlineItems([]);
     setHeadlinesSentCount(0);
     headlinesSentCountRef.current = 0;
+  };
+
+  const handleOpenWithStep = (targetStep: number) => {
+    setOpen(true);
+    resetModalState();
     if (workspaceId) {
-      checkProfile();
+      checkProfile(targetStep);
       loadAgentResources();
     }
   };
+
+  const handleOpen = () => handleOpenWithStep(0);
+
+  // On mount: if URL has agent=open, auto-open the modal at the right step
+  useEffect(() => {
+    if (!workspaceId || didRestoreRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("agent") === "open") {
+      didRestoreRef.current = true;
+      const step = parseInt(params.get("agent_step") ?? "1", 10);
+      // Defer to avoid calling setState synchronously within an effect
+      setTimeout(() => handleOpenWithStep(step), 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
 
   const handleClose = () => {
     stopPolling();
     stopPostPolling();
     stopResourcePolling();
     setOpen(false);
+    syncAgentUrl(null);
   };
 
   const handleSubmitProfile = async () => {
@@ -1101,6 +1157,9 @@ export default function AgentModeSection() {
                             <LuX className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                        {(doc.status === "error" || doc.status === "failed") && doc.error && (
+                          <p className="px-2.5 pb-1.5 text-[10px] text-red-500">{doc.error}</p>
+                        )}
                       </li>
                     );
                   })}
@@ -1671,6 +1730,9 @@ export default function AgentModeSection() {
                                 <LuX className="h-3.5 w-3.5" />
                               </button>
                             </div>
+                            {(doc.status === "error" || doc.status === "failed") && doc.error && (
+                              <p className="px-2.5 pb-1.5 text-[10px] text-red-500">{doc.error}</p>
+                            )}
                           </li>
                         );
                       })}
@@ -2121,7 +2183,7 @@ export default function AgentModeSection() {
               <span className="font-semibold text-gray-900">
                 {briefDays} day{briefDays !== 1 ? "s" : ""}
               </span>{" "}
-              — that&apos;s{" "}
+              - that&apos;s{" "}
               <span className="font-semibold text-amber-600">{postsPerDay} posts/day</span> on
               average.
             </p>
