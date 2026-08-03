@@ -11,7 +11,10 @@ import {
 } from "@/types/Post";
 
 export const postsService = (workspaceId: string) => ({
-  getPostStats: () => get<PostStatsType>(`/workspaces/${workspaceId}/content/posts/stats/`),
+  getPostStats: (state?: "agent" | "manual") =>
+    get<PostStatsType>(
+      `/workspaces/${workspaceId}/content/posts/stats/${state ? `?state=${state}` : ""}`
+    ),
   getDraftPosts: (state?: "agent" | "manual") =>
     get<PaginatedPosts>(
       `/workspaces/${workspaceId}/content/posts/?status=draft${state ? `&state=${state}` : ""}`

@@ -12,6 +12,7 @@ import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import LinkedInManageModal from "./LinkedInManageModal";
 import ProfileUrlModal from "./ProfileUrlModal";
 import KnowledgeUploadModal from "./KnowledgeUploadModal";
+import AgentKnowledgeUploadModal from "./AgentKnowledgeUploadModal";
 
 type KnowledgeType = "knowledge" | "tune" | "style";
 
@@ -198,8 +199,17 @@ export default function SetupStepper({ mode }: { mode: Mode }) {
         onClose={() => setModal({ type: "none" })}
       />
 
-      {modal.type === "knowledge" && (
+      {modal.type === "knowledge" && mode === "manual" && (
         <KnowledgeUploadModal
+          key={modal.initialType}
+          isOpen
+          onClose={() => setModal({ type: "none" })}
+          initialType={modal.initialType}
+        />
+      )}
+
+      {modal.type === "knowledge" && mode === "agent" && (
+        <AgentKnowledgeUploadModal
           key={modal.initialType}
           isOpen
           onClose={() => setModal({ type: "none" })}
