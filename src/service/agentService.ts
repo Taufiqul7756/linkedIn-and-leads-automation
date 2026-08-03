@@ -68,6 +68,10 @@ export const agentService = (workspaceId: string) => ({
       req
     ),
 
+  // Follow-up — continue an existing plan into a new chapter
+  followUpPlan: (planId: string) =>
+    postRaw<MarketingPlan[]>(`/workspaces/${workspaceId}/content/plans/${planId}/follow-up/`, {}),
+
   // Phase C — Generate from plan with selected headlines
   generateFromPlan: (
     planId: string,

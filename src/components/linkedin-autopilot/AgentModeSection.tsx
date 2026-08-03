@@ -194,6 +194,7 @@ export default function AgentModeSection() {
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<MarketingPlan>>({});
   const [isSavingPlan, setIsSavingPlan] = useState(false);
+  const [isFollowingUp, setIsFollowingUp] = useState(false);
   const [profileDocs, setProfileDocs] = useState<ProfileDocument[]>([]);
   const [profileWebsites, setProfileWebsites] = useState<ProfileWebsite[]>([]);
   const [deleteDocTarget, setDeleteDocTarget] = useState<ProfileDocument | null>(null);
@@ -351,10 +352,6 @@ export default function AgentModeSection() {
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         setPhase("c-done");
-        setTimeout(() => {
-          setOpen(false);
-          syncAgentUrl(null);
-        }, 2000);
       } else if (attempts >= 40) {
         stopPostPolling();
         toast.error("Post generation is taking longer than expected. Check your drafts later.");
@@ -793,10 +790,13 @@ export default function AgentModeSection() {
       return;
     }
     // Capture baseline draft count before generation so ReviewApprovalSection
-    // knows when new posts have appeared and images are done
-    const cached = queryClient.getQueryData(["posts", "draft", workspaceId]) as
-      { count?: number } | undefined;
-    const baselineDraftCount = cached?.count ?? 0;
+    // knows when new posts have appeared and images are done.
+    // Must use the same query key (with "agent" mode) that ReviewApprovalSection
+    // polls — otherwise baselineCount is always 0 and stale pre-generation
+    // results satisfy the stop condition immediately, killing polling early.
+    const cached = queryClient.getQueryData(["posts", "draft", workspaceId, "agent"]) as
+      { results?: unknown[] } | undefined;
+    const baselineDraftCount = cached?.results?.length ?? 0;
 
     headlinesSentCountRef.current = deduped.length;
     setHeadlinesSentCount(deduped.length);
@@ -813,6 +813,29 @@ export default function AgentModeSection() {
     } catch (err) {
       toast.error(extractErrorMessage(err));
       setPhase("b-headlines");
+    }
+  };
+
+  const handleFollowUp = async () => {
+    if (!selectedPlan) return;
+    setIsFollowingUp(true);
+    try {
+      const data = await agentService(workspaceId).followUpPlan(selectedPlan.id);
+      const planList = Array.isArray(data)
+        ? data
+        : ((data as { results?: MarketingPlan[] }).results ??
+          (data ? [data as MarketingPlan] : []));
+      if (planList.length === 0) {
+        toast.error("No follow-up plans were generated. Please try again.");
+        return;
+      }
+      setPlans(planList);
+      setSelectedPlan(planList[0]);
+      setPhase("b-select");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsFollowingUp(false);
     }
   };
 
@@ -1861,6 +1884,16 @@ export default function AgentModeSection() {
                         {isSelected ? <LuCheck className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
                       </span>
                       <div className="flex items-center gap-2">
+                        {plan.has_follow_up && (
+                          <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
+                            Continued ✓
+                          </span>
+                        )}
+                        {!plan.has_follow_up && plan.post_count > 0 && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            Used
+                          </span>
+                        )}
                         {isSelected && (
                           <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                             Selected
@@ -2160,6 +2193,18 @@ export default function AgentModeSection() {
             >
               <LuCheck className="h-4 w-4" />
               View Drafts
+            </button>
+            <button
+              onClick={handleFollowUp}
+              disabled={isFollowingUp}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            >
+              {isFollowingUp ? (
+                <LuLoader className="h-4 w-4 animate-spin" />
+              ) : (
+                <LuSparkles className="h-4 w-4" />
+              )}
+              {isFollowingUp ? "Generating follow-up plans…" : "Make more posts with this plan"}
             </button>
           </div>
         )}

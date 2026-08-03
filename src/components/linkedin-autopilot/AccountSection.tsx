@@ -168,10 +168,10 @@ export default function AccountSection({ mode }: { mode: "agent" | "manual" }) {
   );
   const docCount = documents?.results?.length ?? 0;
 
-  // Fetch post stats
+  // Fetch post stats scoped to the current mode (agent / manual)
   const { data: postStats } = useQueryWithTokenRefresh(
-    ["post-stats", workspaceId],
-    () => postsService(workspaceId).getPostStats(),
+    ["post-stats", workspaceId, mode],
+    () => postsService(workspaceId).getPostStats(mode),
     { enabled: !!workspaceId }
   );
 

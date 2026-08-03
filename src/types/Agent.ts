@@ -3,6 +3,7 @@ export type PlanningBrief = {
   target_audience: string | null;
   region: string | null; // IANA timezone e.g. "Europe/Berlin"
   days: number;
+  parent_plan: string | null;
 };
 
 export type LinkedInProfile = {
@@ -59,6 +60,8 @@ export type MarketingPlan = {
   pillars: string[];
   sample_hooks: string[];
   cadence: string;
+  post_count: number;
+  has_follow_up: boolean;
   created_at: string;
 };
 
