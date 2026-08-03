@@ -74,6 +74,7 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 - Polls every 5s after Generate fires (via `["posts-generating"]` flag); stops when all drafts have `image_status !== "pending"`
 - Two-column card grid: author avatar, Draft badge, post body, image area, hashtags
 - Actions per card: Edit → `EditPostModal` · Regenerate Post · Regenerate Image · Delete → `RejectConfirmModal` · Approve → `POST .../approve/`
+- **Regenerate modal** (`RegeneratePostConfirmModal`): simplified to two controls only — Make Longer toggle (sends `mode: "extend"`, keeps body and appends) + Instructions textarea (optional); sends `POST .../regenerate/` with `{ mode?, instruction? }`
 - Approve invalidates `["posts","draft",workspaceId]` (partial match, `exact: false`) + `["posts","all"]`
 
 ### 5. Post Management
@@ -127,6 +128,10 @@ Phase states: `c-generating | c-polling | c-done`
 
 **suggested_publish_at**: AI-suggested publish slot (UTC). Label as "Suggested" in UI, never "Scheduled". Editable from `ReviewApprovalSection` via `PATCH posts/{id}/` with `{ suggested_publish_at }`. Preserved across post regeneration.
 
+**Post rate warning**: When user clicks Generate Posts in b-headlines, if `selectedHeadlines / briefDays > 2`, show a confirmation modal — "X posts over Y days = Z posts/day. Most audiences engage better with ≤ 2/day." Buttons: Adjust (close) / Proceed anyway.
+
+**Tooltips**: `Tooltip` component (`src/components/ui/Tooltip.tsx`) used throughout — b-brief fields, a-submit section headers, purpose select, Knowledge Sources card, b-headlines generate-more, KnowledgeUploadModal source types, GeneratePostsSection fields. Supports `position` (top/bottom) and `align` (center/left/right) to prevent modal-edge overflow.
+
 **Knowledge Sources (agent-level endpoints — workspace-scoped, no profile required):**
 
 | Method | Endpoint | Purpose |
@@ -144,12 +149,16 @@ Phase states: `c-generating | c-polling | c-done`
 
 ### 7. Model Switcher
 
-`ModelSwitcher` component — fetches `GET /ai-models/`, stores selection in `["selected-model"]` cache.
+`ModelSwitcher` component — fetches `GET /ai-models/` (global, not workspace-scoped), stores selection in `["selected-model"]` cache.
 
 - `useSelectedModel()` hook exported from `ModelSwitcher.tsx`
-- Appears in: GeneratePostsSection bottom bar, AgentModeSection a-ready phase, AgentModeSection b-select action row
+- Appears in: GeneratePostsSection bottom bar, AgentModeSection a-ready phase, AgentModeSection b-select + b-headlines action rows
 - `writer_model` sent to: `POST /content/posts/generate/`, `POST /content/plans/`, `POST /content/plans/{id}/generate/`
 - `dropUp` prop opens dropdown upward (used inside modal to avoid clipping)
+- **Provider tabs**: Gemini | Claude (anthropic) — derived dynamically from API response; models filtered per active tab
+- Trigger button shows colored provider badge: blue=Gemini, orange=Claude
+- Active tab auto-syncs with the currently selected model's provider
+- Pass `?provider=gemini|anthropic` to filter server-side (not currently used — client filters instead)
 
 ### 8. Autopilot Agent Workflow (UI-only)
 

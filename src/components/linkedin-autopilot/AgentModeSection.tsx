@@ -224,6 +224,7 @@ export default function AgentModeSection() {
   const [headlinesLoading, setHeadlinesLoading] = useState(false);
   const [generatingMore, setGeneratingMore] = useState(false);
   const [headlinesSentCount, setHeadlinesSentCount] = useState(0);
+  const [showPostRateWarning, setShowPostRateWarning] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const postPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -2018,7 +2019,13 @@ export default function AgentModeSection() {
                   <div className="flex-1" />
                   <ModelSwitcher dropUp />
                   <button
-                    onClick={handleGenerateFromPlan}
+                    onClick={() => {
+                      if (selectedCount / briefDays > 2) {
+                        setShowPostRateWarning(true);
+                      } else {
+                        handleGenerateFromPlan();
+                      }
+                    }}
                     disabled={selectedCount === 0}
                     className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                   >
@@ -2095,6 +2102,54 @@ export default function AgentModeSection() {
           </div>
         )}
       </Modal>
+
+      {/* ── Post Rate Warning Modal ── */}
+      {(() => {
+        const selectedCount = headlineItems.filter((h) => h.selected).length;
+        const postsPerDay = briefDays > 0 ? (selectedCount / briefDays).toFixed(1) : "—";
+        return (
+          <Modal
+            isOpen={showPostRateWarning}
+            onClose={() => setShowPostRateWarning(false)}
+            title="High posting frequency"
+            width="sm"
+            disableBackdropClose
+          >
+            <p className="text-sm text-gray-600">
+              You selected{" "}
+              <span className="font-semibold text-gray-900">{selectedCount} posts</span> over{" "}
+              <span className="font-semibold text-gray-900">
+                {briefDays} day{briefDays !== 1 ? "s" : ""}
+              </span>{" "}
+              — that&apos;s{" "}
+              <span className="font-semibold text-amber-600">{postsPerDay} posts/day</span> on
+              average.
+            </p>
+            <p className="mt-2 text-sm text-gray-500">
+              Most audiences engage better with{" "}
+              <span className="font-medium text-gray-700">≤ 2 posts per day</span>. You can adjust
+              your selection or proceed anyway.
+            </p>
+            <div className="mt-5 flex gap-2.5">
+              <button
+                onClick={() => setShowPostRateWarning(false)}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                Adjust
+              </button>
+              <button
+                onClick={() => {
+                  setShowPostRateWarning(false);
+                  handleGenerateFromPlan();
+                }}
+                className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                Proceed anyway
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* ── Edit Plan Modal ── */}
       <Modal
