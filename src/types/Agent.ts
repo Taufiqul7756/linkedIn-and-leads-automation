@@ -1,3 +1,10 @@
+export type PlanningBrief = {
+  id: string;
+  target_audience: string | null;
+  region: string | null; // IANA timezone e.g. "Europe/Berlin"
+  days: number;
+};
+
 export type LinkedInProfile = {
   id: string;
   profile_url: string;
@@ -43,7 +50,8 @@ export type ProfileWebsite = {
 export type MarketingPlan = {
   id: string;
   batch: string;
-  linkedin_profile: string;
+  brief: PlanningBrief | null;
+  linkedin_profile: string | null;
   title: string;
   angle: string;
   target_audience: string;
@@ -52,4 +60,34 @@ export type MarketingPlan = {
   sample_hooks: string[];
   cadence: string;
   created_at: string;
+};
+
+export type PaginatedPlans = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: MarketingPlan[];
+};
+
+export type HeadlinesRequest = {
+  count?: number;
+  exclude?: string[];
+};
+
+export type HeadlinesResponse = {
+  headlines: string[];
+};
+
+export type GenerateFromPlanRequest = {
+  count?: number;
+  headlines?: string[];
+  tone?: string;
+  length?: string;
+  use_emoji?: boolean;
+  use_ai_image?: boolean;
+  writer_model?: string;
+  tone_document?: string;
+  style_document?: string;
+  tone_text?: string;
+  style_text?: string;
 };

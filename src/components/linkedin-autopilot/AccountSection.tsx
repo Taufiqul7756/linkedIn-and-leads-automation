@@ -15,6 +15,7 @@ import { useWorkspace } from "@/context/WorkspaceContext";
 import { PostStatsType } from "@/types/Post";
 import LinkedInManageModal from "./LinkedInManageModal";
 import KnowledgeUploadModal from "./KnowledgeUploadModal";
+import AgentModeSection from "./AgentModeSection";
 
 function formatNextScheduled(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -55,7 +56,7 @@ function buildStatCards(stats: PostStatsType | undefined) {
   ];
 }
 
-export default function AccountSection() {
+export default function AccountSection({ mode }: { mode: "agent" | "manual" }) {
   const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
   const [sourcesModalOpen, setSourcesModalOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -252,66 +253,70 @@ export default function AccountSection() {
           </button>
         </div>
 
-        {/* Knowledge base */}
-        <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100">
-            <LuGlobe className="h-5 w-5 text-violet-600" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-900">Knowledge base</span>
-              {websiteStatusBadge()}
+        {/* Knowledge base (manual) or Agent Mode (agent) */}
+        {mode === "agent" ? (
+          <AgentModeSection />
+        ) : (
+          <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100">
+              <LuGlobe className="h-5 w-5 text-violet-600" />
             </div>
-            <p className="mt-0.5 text-xs text-gray-500">
-              {websitesLoading ? (
-                "Loading..."
-              ) : website ? (
-                <>
-                  <span className="text-blue-600">{website.url}</span>
-                  {docCount > 0 && (
-                    <span className="ml-2 text-gray-400">
-                      · {docCount} document{docCount > 1 ? "s" : ""} uploaded
-                    </span>
-                  )}
-                </>
-              ) : docCount > 0 ? (
-                <span className="text-violet-600">
-                  {docCount} document{docCount > 1 ? "s" : ""} uploaded
-                </span>
-              ) : null}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <button
-              onClick={() => setSourcesModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <LuUpload className="h-3.5 w-3.5" />
-              Add sources
-            </button>
-            <button
-              onClick={() => recrawl.mutate(undefined)}
-              disabled={
-                !website ||
-                recrawl.isPending ||
-                website?.status === "crawling" ||
-                website?.status === "pending"
-              }
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
-            >
-              <LuRefreshCw
-                className={`h-3.5 w-3.5 ${
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-900">Knowledge base</span>
+                {websiteStatusBadge()}
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {websitesLoading ? (
+                  "Loading..."
+                ) : website ? (
+                  <>
+                    <span className="text-blue-600">{website.url}</span>
+                    {docCount > 0 && (
+                      <span className="ml-2 text-gray-400">
+                        · {docCount} document{docCount > 1 ? "s" : ""} uploaded
+                      </span>
+                    )}
+                  </>
+                ) : docCount > 0 ? (
+                  <span className="text-violet-600">
+                    {docCount} document{docCount > 1 ? "s" : ""} uploaded
+                  </span>
+                ) : null}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                onClick={() => setSourcesModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <LuUpload className="h-3.5 w-3.5" />
+                Add sources
+              </button>
+              <button
+                onClick={() => recrawl.mutate(undefined)}
+                disabled={
+                  !website ||
                   recrawl.isPending ||
                   website?.status === "crawling" ||
                   website?.status === "pending"
-                    ? "animate-spin"
-                    : ""
-                }`}
-              />
-              Re-crawl
-            </button>
+                }
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40"
+              >
+                <LuRefreshCw
+                  className={`h-3.5 w-3.5 ${
+                    recrawl.isPending ||
+                    website?.status === "crawling" ||
+                    website?.status === "pending"
+                      ? "animate-spin"
+                      : ""
+                  }`}
+                />
+                Re-crawl
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Stats grid — 2 rows × 4 cards */}

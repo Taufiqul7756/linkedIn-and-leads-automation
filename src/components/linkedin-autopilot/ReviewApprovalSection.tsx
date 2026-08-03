@@ -10,8 +10,10 @@ import {
   LuLoader,
   LuSparkles,
   LuX,
+  LuCalendarClock,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
+import Modal from "@/components/ui/Modal";
 import { postsService } from "@/service/postsService";
 import { linkedinService } from "@/service/linkedinService";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
@@ -265,6 +267,65 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
     generateImageMutation.mutate({ id: postId, prompt });
   };
 
+  const [publishModalPost, setPublishModalPost] = useState<PostType | null>(null);
+  const [publishDraft, setPublishDraft] = useState("");
+  const [savingPublish, setSavingPublish] = useState(false);
+
+  const formatSuggested = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  const isoToLocal = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  };
+
+  const openPublishModal = (post: PostType) => {
+    setPublishModalPost(post);
+    setPublishDraft(post.suggested_publish_at ? isoToLocal(post.suggested_publish_at) : "");
+  };
+
+  const savePublishTime = async () => {
+    if (!publishModalPost || !publishDraft) return;
+    const newIso = new Date(publishDraft).toISOString();
+    const postId = publishModalPost.id;
+    setSavingPublish(true);
+    try {
+      await postsService(workspaceId).patchPost(postId, { suggested_publish_at: newIso });
+      queryClient.setQueryData(
+        ["posts", "draft", workspaceId, mode],
+        (
+          old:
+            | { count: number; next: string | null; previous: string | null; results: PostType[] }
+            | undefined
+        ) => {
+          if (!old) return old;
+          return {
+            ...old,
+            results: old.results.map((p) =>
+              p.id === postId ? { ...p, suggested_publish_at: newIso } : p
+            ),
+          };
+        }
+      );
+      toast.success("Suggested time updated.");
+      setPublishModalPost(null);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setSavingPublish(false);
+    }
+  };
+
   const handleApprove = (id: string) => {
     setApprovingId(id);
     approveMutation.mutate(id);
@@ -371,6 +432,40 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
                   </div>
                 )}
 
+                {/* Suggested publish time */}
+                <div className="mb-3 flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                  <LuCalendarClock className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  {post.suggested_publish_at ? (
+                    <div className="flex flex-1 items-center justify-between gap-2">
+                      <div>
+                        <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                          Suggested
+                        </span>
+                        <span className="text-xs text-gray-700">
+                          {formatSuggested(post.suggested_publish_at)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => openPublishModal(post)}
+                        className="shrink-0 text-gray-400 hover:text-blue-500"
+                        title="Edit suggested time"
+                      >
+                        <LuPencil className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-1 items-center justify-between gap-2">
+                      <span className="text-xs text-gray-400">No suggested publish time</span>
+                      <button
+                        onClick={() => openPublishModal(post)}
+                        className="text-xs font-medium text-blue-500 hover:text-blue-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -455,6 +550,46 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
         onConfirm={handleRejectConfirm}
         isConfirming={rejectingId !== null}
       />
+
+      <Modal
+        isOpen={publishModalPost !== null}
+        onClose={() => setPublishModalPost(null)}
+        title="Edit Suggested Publish Time"
+        width="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Date &amp; Time (local)
+            </label>
+            <input
+              type="datetime-local"
+              value={publishDraft}
+              onChange={(e) => setPublishDraft(e.target.value)}
+              className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          {publishDraft && (
+            <p className="text-xs text-gray-400">UTC: {new Date(publishDraft).toISOString()}</p>
+          )}
+        </div>
+        <div className="mt-6 flex items-center justify-end gap-2.5">
+          <button
+            onClick={() => setPublishModalPost(null)}
+            disabled={savingPublish}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={savePublishTime}
+            disabled={!publishDraft || savingPublish}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {savingPublish ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

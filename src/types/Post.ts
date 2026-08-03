@@ -19,24 +19,35 @@ export type PostEngagement = {
 
 export type PostType = {
   id: string;
-  website_profile: string;
-  prompt: string;
+  state: "agent" | "manual";
+  plan: string | null;
+  website_profile: string | null;
+  reference_link: string | null;
+  tone_document: string | null;
+  style_document: string | null;
+  tone_text: string;
+  style_text: string;
+  prompt?: string;
   tone: string;
   length: string;
   content_style: string;
+  use_emoji: boolean;
+  writer_model: string;
+  headline: string | null;
   body: string;
   hashtags: string | string[];
-  cta: string;
+  cta: string | null;
   image_query: string;
   image_url: string;
   image_file: null | string;
   image_status: string;
-  scope: "corporate" | "personal";
+  scope?: "corporate" | "personal";
   status: "draft" | "approved" | "scheduled" | "published" | "failed";
   scheduled_at: string | null;
+  suggested_publish_at: string | null;
   published_at: string | null;
   linkedin_urn: string;
-  engagement: PostEngagement;
+  engagement: PostEngagement | null;
   created_at: string;
 };
 
