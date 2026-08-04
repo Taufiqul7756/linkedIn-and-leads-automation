@@ -1,30 +1,34 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   LuEye,
   LuThumbsUp,
   LuMessageSquare,
   LuExternalLink,
-  LuEllipsisVertical,
   LuTrash2,
   LuListFilter,
   LuCheck,
   LuChevronLeft,
   LuChevronRight,
   LuPlay,
+  LuList,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
 import { postsService } from "@/service/postsService";
+import { agentService } from "@/service/agentService";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import type { PostType, PostEngagement } from "@/types/Post";
+import type { MarketingPlan } from "@/types/Agent";
 import ScheduleModal from "./ScheduleModal";
 import ViewPostModal from "./ViewPostModal";
 import RejectConfirmModal from "./RejectConfirmModal";
+import PlansHistoryModal from "./PlansHistoryModal";
+import PlanDetailModal from "./PlanDetailModal";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDate(iso: string | null | undefined): string {
@@ -122,69 +126,6 @@ function EngagementCell({
   if (status === "failed")
     return <span className="text-xs font-medium text-red-600">Publishing failed</span>;
   return null;
-}
-
-// ── Row three-dot dropdown ────────────────────────────────────────────────────
-function RowDropdown({
-  post,
-  onView,
-  onDelete,
-}: {
-  post: PostType;
-  onView: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "rounded p-1 transition-colors hover:bg-gray-100 hover:text-gray-700",
-          open ? "bg-gray-100 text-gray-700" : "text-gray-400"
-        )}
-      >
-        <LuEllipsisVertical className="h-4 w-4" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
-          <button
-            onClick={() => {
-              setOpen(false);
-              onView(post.id);
-            }}
-            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            <LuEye className="h-4 w-4 text-gray-400" />
-            View
-          </button>
-          <div className="mx-3 border-t border-gray-100" />
-          <button
-            onClick={() => {
-              setOpen(false);
-              onDelete(post.id);
-            }}
-            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 transition-colors hover:bg-red-50"
-          >
-            <LuTrash2 className="h-4 w-4" />
-            Delete
-          </button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ── Filter dropdown ───────────────────────────────────────────────────────────
@@ -306,6 +247,8 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PostType | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [planDetailTarget, setPlanDetailTarget] = useState<MarketingPlan | null>(null);
+  const [plansHistoryOpen, setPlansHistoryOpen] = useState(false);
 
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
     ["posts", "all", workspaceId, mode, activeFilter, page, pageSize],
@@ -323,6 +266,20 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
   const totalCount = postsData?.count ?? 0;
   const hasNext = !!postsData?.next;
   const hasPrev = !!postsData?.previous;
+
+  const { data: plansData } = useQueryWithTokenRefresh(
+    ["plans", "all", workspaceId],
+    () => agentService(workspaceId).getAllPlans("all"),
+    { enabled: !!workspaceId && mode === "agent" }
+  );
+
+  const planMap = useMemo(() => {
+    const m = new Map<string, MarketingPlan>();
+    (plansData?.results ?? []).forEach((p) => m.set(p.id, p));
+    return m;
+  }, [plansData]);
+
+  const colCount = mode === "agent" ? 9 : 8;
 
   const allIds = posts.map((p) => p.id);
   const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
@@ -438,6 +395,15 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
           <span className="hidden text-xs text-gray-400 md:inline">
             {totalCount > 0 && `${totalCount} posts`}
           </span>
+          {mode === "agent" && (
+            <button
+              onClick={() => setPlansHistoryOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              <LuList className="h-4 w-4" />
+              Plans
+            </button>
+          )}
           <select
             value={pageSize}
             onChange={(e) => handlePageSizeChange(Number(e.target.value))}
@@ -468,6 +434,7 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
                 </th>
                 {[
                   "POST",
+                  ...(mode === "agent" ? ["PLAN"] : []),
                   "CREATED",
                   "SCHEDULED",
                   "PUBLISHED",
@@ -488,7 +455,7 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
               {isLoading &&
                 [0, 1, 2, 3].map((i) => (
                   <tr key={i}>
-                    <td colSpan={8} className="px-4 py-4">
+                    <td colSpan={colCount} className="px-4 py-4">
                       <div className="h-5 animate-pulse rounded bg-gray-100" />
                     </td>
                   </tr>
@@ -496,7 +463,7 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
 
               {!isLoading && posts.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-sm text-gray-400">
+                  <td colSpan={colCount} className="py-12 text-center text-sm text-gray-400">
                     No posts found.
                   </td>
                 </tr>
@@ -510,12 +477,13 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
                   return (
                     <tr
                       key={post.id}
+                      onClick={() => setViewPostId(post.id)}
                       className={cn(
-                        "group transition-colors",
+                        "group cursor-pointer transition-colors",
                         isSelected ? "bg-blue-50" : "hover:bg-gray-50"
                       )}
                     >
-                      <td className="w-10 px-4 py-4">
+                      <td className="w-10 px-4 py-4" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -538,6 +506,24 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
                           )}
                         </div>
                       </td>
+                      {mode === "agent" && (
+                        <td className="px-5 py-4">
+                          {post.plan && planMap.has(post.plan) ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPlanDetailTarget(planMap.get(post.plan!)!);
+                              }}
+                              title={planMap.get(post.plan)?.title}
+                              className="max-w-[130px] truncate rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
+                            >
+                              {planMap.get(post.plan)?.title}
+                            </button>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-500">
                         {formatDate(post.created_at)}
                       </td>
@@ -578,7 +564,10 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
                       <td className="px-5 py-4">
                         <EngagementCell status={post.status} engagement={post.engagement} />
                       </td>
-                      <td className="whitespace-nowrap px-5 py-4">
+                      <td
+                        className="whitespace-nowrap px-5 py-4"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="flex items-center gap-2">
                           {post.status === "published" && post.linkedin_urn && (
                             <a
@@ -616,11 +605,12 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
                               Retry
                             </button>
                           )}
-                          <RowDropdown
-                            post={post}
-                            onView={setViewPostId}
-                            onDelete={handleDeletePost}
-                          />
+                          <button
+                            onClick={() => handleDeletePost(post.id)}
+                            className="rounded p-1 text-gray-400 transition-colors hover:text-red-500"
+                          >
+                            <LuTrash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -668,6 +658,14 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
         isOpen={viewPostId !== null}
         onClose={() => setViewPostId(null)}
         postId={viewPostId}
+      />
+
+      <PlansHistoryModal isOpen={plansHistoryOpen} onClose={() => setPlansHistoryOpen(false)} />
+
+      <PlanDetailModal
+        key={planDetailTarget?.id ?? "no-plan"}
+        plan={planDetailTarget}
+        onClose={() => setPlanDetailTarget(null)}
       />
 
       <ScheduleModal

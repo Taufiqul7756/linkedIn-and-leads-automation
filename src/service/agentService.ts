@@ -1,5 +1,11 @@
 import { get, patch, postRaw, del } from "@/lib/api";
-import { LinkedInProfile, MarketingPlan, ProfileDocument, ProfileWebsite } from "@/types/Agent";
+import {
+  LinkedInProfile,
+  MarketingPlan,
+  PaginatedPlans,
+  ProfileDocument,
+  ProfileWebsite,
+} from "@/types/Agent";
 
 export const agentService = (workspaceId: string) => ({
   // Phase A — LinkedIn Profile
@@ -45,6 +51,14 @@ export const agentService = (workspaceId: string) => ({
     del<void>(`/workspaces/${workspaceId}/linkedin/agent/websites/${id}/`),
   recrawlAgentWebsite: (id: string) =>
     postRaw<ProfileWebsite>(`/workspaces/${workspaceId}/linkedin/agent/websites/${id}/recrawl/`),
+
+  // Plans — all batches history
+  getAllPlans: (batch?: string) => {
+    const q = new URLSearchParams();
+    if (batch) q.set("batch", batch);
+    q.set("page_size", "50");
+    return get<PaginatedPlans>(`/workspaces/${workspaceId}/content/plans/?${q.toString()}`);
+  },
 
   // Phase B — Marketing Plans
   generatePlans: (body: {

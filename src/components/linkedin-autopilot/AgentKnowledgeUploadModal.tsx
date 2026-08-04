@@ -218,7 +218,12 @@ export default function AgentKnowledgeUploadModal({
                 {PURPOSE_LABELS[p]}
               </button>
               <span className="absolute right-1.5 top-1.5">
-                <Tooltip text={TIPS[p]} position="bottom" width="w-56" />
+                <Tooltip
+                  text={TIPS[p]}
+                  position="bottom"
+                  width="w-56"
+                  align={p === "style" ? "right" : p === "knowledge" ? "left" : "center"}
+                />
               </span>
             </span>
           ))}
