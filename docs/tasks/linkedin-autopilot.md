@@ -141,6 +141,26 @@
 - [ ] Image removal via PATCH
 - [ ] Hashtag PATCH (backend fixing)
 
+## Phase 11 — UI Refinement v4 (branch: v4/ui-refinement)
+
+### Plans History & Plan Detail
+- [x] `PlansHistoryModal.tsx` — fetches `getAllPlans("all")`, groups by batch, 3-col grid of plan cards with Used/Continued/Unused badges
+- [x] `PlanDetailModal.tsx` — blue-bordered plan card + numbered post timeline (ring-2 circles + flex connecting lines); loading skeletons + empty state
+- [x] `getAllPlans(batch?: string)` added to `agentService.ts`
+
+### Post Management Table
+- [x] PLAN column added (agent mode only); column count = 9 agent / 8 manual
+- [x] Indigo plan-title chips; clicking chip opens `PlanDetailModal` (stopPropagation)
+- [x] "Plans" button in section header → `PlansHistoryModal`
+- [x] Shared `planMap` (Map<string, MarketingPlan>) from `getAllPlans("all")`; cache shared with PlansHistoryModal
+- [x] Clickable rows: `<tr onClick>` opens `ViewPostModal`; stopPropagation on checkbox + actions cells
+- [x] Removed `RowDropdown` — actions column now has only `LuTrash2` delete button
+
+### Source Modal Improvements
+- [x] `AgentKnowledgeUploadModal`: `refetchInterval` on docs + sites queries (3s while non-terminal); status badge per row; shimmer; modal stays open after save; Cancel → Close
+- [x] `KnowledgeUploadModal`: same polling + badge + shimmer + stay-open treatment
+- [x] Tooltip alignment fix (knowledge=left / tone=center / style=right) in both source modals
+
 ## Phase 10 — Agentic Mode V2 (Brief → Headlines → Posts)
 
 - [x] New `b-brief` phase: Planning Brief form (target audience, IANA timezone picker, days 1–90)

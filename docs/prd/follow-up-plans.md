@@ -155,8 +155,70 @@ followUpPlan: (planId: string) =>
 
 ---
 
-## Scope
+## Scope (V1)
 
-- No history view (GET plans/?batch=all) — out of scope for this task
-- No chapter detail screen — out of scope
 - No override of `target_audience` / `region` / `days` in the follow-up call — always send empty body (inherit all)
+
+---
+
+## V2 — Plans History, Plan Detail & Source Modal Improvements
+
+Shipped in `v4/ui-refinement` branch.
+
+### Plans History Modal
+
+A "Plans" button in the PostManagementSection header (agent mode only) opens `PlansHistoryModal`:
+
+- Fetches `GET /content/plans/?batch=all&page_size=50` — returns all plans across all batches.
+- Groups plans by `batch` field using `useMemo`; newest batch first.
+- Shows "Batch N · Date" label per group, each with a 3-column grid of plan cards.
+- Plan cards show: Used / Continued ✓ / Unused badge, title, post count.
+- Clicking a plan opens `PlanDetailModal` (nested modal, `key={selectedPlan?.id}`).
+
+New service method: `agentService(workspaceId).getAllPlans(batch?: string)` — appends `?batch=X&page_size=50`.
+
+### Plan Detail Modal (`PlanDetailModal`)
+
+Opens from PlansHistoryModal or from the PLAN column chip in PostManagementSection.
+
+Layout:
+- Blue-bordered plan card at top (`border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white`): Used/Continued/Unused badge, audience/region/days meta, angle text, pillars chips.
+- Thin connector line (`ml-[19px] h-5 w-px bg-gray-200`) from card to posts.
+- Posts section header (count).
+- Numbered timeline: left column = numbered circle (ring-2 colored by `STATUS_RING[post.status]`) + `w-px flex-1 bg-gray-200` connector between items; right column = post card with headline, body preview, status badge, date.
+- Loading skeletons while fetching.
+- Empty state when no posts yet.
+
+Uses `postsService(workspaceId).getDraftsByPlan(planId)` (which queries `?plan={id}&state=agent`). Query key: `["posts", "by-plan", planId, workspaceId]`.
+
+### PLAN Column in Post Management Table (agent mode)
+
+- An additional PLAN column is shown when `mode === "agent"`.
+- Each row shows an indigo chip with the plan title (or nothing if no plan).
+- Clicking the chip opens `PlanDetailModal` for that plan (`e.stopPropagation()` prevents row-click).
+- Plans are fetched once via `getAllPlans("all")` and stored in a `Map<string, MarketingPlan>` for O(1) per-row lookup. Cache key `["plans","all",workspaceId]` is shared with PlansHistoryModal.
+- Column count: agent mode = 9, manual mode = 8.
+
+### Clickable Rows & Simplified Actions
+
+- Every `<tr>` in PostManagementSection is now `cursor-pointer` with `onClick={() => setViewPostId(post.id)}`.
+- `e.stopPropagation()` added to the checkbox `<td>` and actions `<td>` to prevent unintended view-post triggers.
+- The three-dot dropdown (`RowDropdown`) is removed. Actions column now shows only a single `LuTrash2` delete button.
+- View post is accessed by clicking anywhere on the row.
+
+### Source Modal Live Status Polling
+
+Both `AgentKnowledgeUploadModal` and `KnowledgeUploadModal` now:
+
+1. **Poll while processing**: `refetchInterval: (query) => results.some(d => !isTerminal(d.status)) ? 3000 : false` — polls every 3 s until all items reach `ready`, `error`, or `failed`.
+2. **Status badge per row**: teal=ready, red=error/failed, amber=pending/processing.
+3. **Shimmer animation** (`animate-shimmer-card`) on rows that are not yet terminal.
+4. **Modal stays open** after Save — user sees the live status update in real time.
+5. **Button label**: "Cancel" renamed to "Close".
+
+### Tooltip Alignment Fix
+
+Tooltips in both source modals fixed to prevent overflow at modal edges:
+- Knowledge (leftmost button): `align="left"` — expands rightward
+- Tone (middle button): `align="center"`
+- Style (rightmost button): `align="right"` — expands leftward

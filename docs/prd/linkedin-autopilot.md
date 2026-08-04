@@ -35,9 +35,9 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 |---|-------|---------|--------|-----------|-------|
 | 1 | LinkedIn Connect | ✓ | ✓ | `account.connected === true` | `LinkedInManageModal` |
 | 2 | Profile URL | ✓ (agent) | — | any profile `status === "ready"` via `GET /linkedin/profiles/` | `ProfileUrlModal` |
-| 3 | Knowledge | ✓ | ✓ | any doc `purpose === "knowledge"` via `GET /documents/` | `KnowledgeUploadModal` |
-| 4 | Tone | ✓ | ✓ | any doc `purpose === "tone"` | `KnowledgeUploadModal` |
-| 5 | Style Upload | ✓ | ✓ | any doc `purpose === "style"` | `KnowledgeUploadModal` |
+| 3 | Knowledge | ✓ | ✓ | agent: any agent doc `purpose=knowledge`; manual: any doc `purpose=knowledge` | agent: `AgentKnowledgeUploadModal`; manual: `KnowledgeUploadModal` |
+| 4 | Tone | ✓ | ✓ | agent: any agent doc `purpose=tone`; manual: any doc `purpose=tone` | agent: `AgentKnowledgeUploadModal`; manual: `KnowledgeUploadModal` |
+| 5 | Style Upload | ✓ | ✓ | agent: any agent doc `purpose=style`; manual: any doc `purpose=style` | agent: `AgentKnowledgeUploadModal`; manual: `KnowledgeUploadModal` |
 
 - Done → teal filled circle with checkmark + teal connector line
 - Active (first incomplete) → blue outlined circle
@@ -46,7 +46,8 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 
 **Modals:**
 - `ProfileUrlModal` — lists existing profiles (teal=ready, blue+spinner=pending/fetching, red=error+Retry button), modal delete confirm per profile (username extracted from `profile_url` via regex `/linkedin\.com\/in\/([^/?#]+)/`), add URL input, per-profile polling via list endpoint. On `ready`, invalidates `["linkedin-profiles", workspaceId]`.
-- `KnowledgeUploadModal` — type selector (Knowledge/Tone/Style), PDF upload, URL input, existing docs list (filename + purpose badge + delete), items-to-upload list; wires `POST /documents/` with `purpose` field; `DELETE /documents/{id}/` per existing doc.
+- `KnowledgeUploadModal` (manual) — type selector (Knowledge/Tone/Style), PDF upload, URL input, existing docs list with live status polling (3s interval while any doc is non-terminal), status badge per row (teal=ready/red=error|failed/amber=processing), shimmer on processing rows, modal stays open after save. Tooltip alignment: knowledge=left, tone=center, style=right (prevents modal-edge overflow).
+- `AgentKnowledgeUploadModal` (agent) — same layout as KnowledgeUploadModal but uses agent-level endpoints (`/linkedin/agent/documents/` + `/linkedin/agent/websites/`); URL add calls API immediately; same live polling + status badge + shimmer pattern.
 
 ### 2. Account & Knowledge Base
 
@@ -85,10 +86,15 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 - Table with checkbox selection + select-all (indeterminate state)
 - Bulk delete when ≥ 2 rows selected
 - Page size selector (2 / 5 / 10 / 15 / 20), filter dropdown (All / Approved / Scheduled / Published / Failed)
-- Columns: ☐ · POST · CREATED · SCHEDULED · PUBLISHED · STATUS · ENGAGEMENT · ACTIONS
+- Columns (agent mode): ☐ · POST · PLAN · CREATED · SCHEDULED · PUBLISHED · STATUS · ENGAGEMENT · ACTIONS (9 cols)
+- Columns (manual mode): ☐ · POST · CREATED · SCHEDULED · PUBLISHED · STATUS · ENGAGEMENT · ACTIONS (8 cols)
 - SCHEDULED column: shows `scheduled_at` if set; otherwise shows `suggested_publish_at` (greyed out, labelled "suggested") when post is approved
 - `ScheduleModal` pre-fills from `suggestedAt` prop (uses `suggested_publish_at` when scheduling, not rescheduling)
-- Per-row actions: Schedule / Reschedule / Retry / External link; three-dot: View → `ViewPostModal` · Delete → `RejectConfirmModal`
+- **Clickable rows**: every `<tr>` opens `ViewPostModal`; `e.stopPropagation()` on checkbox and actions cells prevents bubbling
+- **PLAN column** (agent mode): indigo chip showing plan title; clicking opens `PlanDetailModal` for that plan
+- **Plans History button** in section header (agent mode): opens `PlansHistoryModal` listing all batches of marketing plans
+- Per-row actions: Schedule / Reschedule / Retry / External link; delete icon (`LuTrash2`) only — no three-dot dropdown
+- Plans loaded once via `getAllPlans("all")`; stored in `Map<string, MarketingPlan>` (O(1) per-row lookup); shared cache key `["plans","all",workspaceId]` with PlansHistoryModal
 
 ### 6. Agent Mode (Agentic mode only)
 
@@ -173,8 +179,8 @@ Phase states: `c-generating | c-polling | c-done`
 | `LinkedInProfile` | id, profile_url, status (string), facets `{ topics, summary, brand_tone, value_props }`, knowledge_items, posts_count, error, created_at |
 | `ProfileDocument` | id, file, filename, purpose, status (string), num_pages, summary, guide, facets, error, created_at |
 | `ProfileWebsite` | id, url, kind, purpose, status (string), summary, facets, error, created_at |
-| `PlanningBrief` | id, target_audience (nullable), region (nullable, IANA tz), days |
-| `MarketingPlan` | id, batch, brief: PlanningBrief\|null, linkedin_profile: string\|null, title, angle, target_audience, rationale, pillars, sample_hooks, cadence, created_at |
+| `PlanningBrief` | id, target_audience (nullable), region (nullable, IANA tz), days, parent_plan (nullable uuid — null when planned from scratch) |
+| `MarketingPlan` | id, batch, brief: PlanningBrief\|null, linkedin_profile: string\|null, title, angle, target_audience, rationale, pillars, sample_hooks, cadence, post_count (number), has_follow_up (boolean), created_at |
 | `PostType` | id, state ("agent"\|"manual"), plan (nullable uuid), headline (nullable), body, hashtags, image_url, image_status, tone, length, use_emoji, writer_model, status, scheduled_at, suggested_publish_at (nullable), published_at, engagement (nullable), cta (nullable), created_at |
 
 **Note**: `LinkedInProfile` has `profile_url` (not `url`) and `facets` object (not `name`/`headline`). Username displayed by extracting from `profile_url` via regex `/linkedin\.com\/in\/([^/?#]+)/`.
@@ -227,8 +233,10 @@ All endpoints prefixed with `/api/v1/workspaces/{workspace_pk}/`
 | DELETE | `.../linkedin/agent/websites/{id}/` | Delete agent website |
 | POST | `.../linkedin/agent/websites/{id}/recrawl/` | Recrawl agent website |
 | GET | `.../content/plans/` | List plans (paginated, brief inlined) |
+| GET | `.../content/plans/?batch=all&page_size=50` | All plans across all batches (plans history) |
 | POST | `.../content/plans/` | Generate marketing plans (body: target_audience?, region?, days?, writer_model?) |
 | PATCH | `.../content/plans/{id}/` | Edit marketing plan |
+| POST | `.../content/plans/{id}/follow-up/` | Create 3 follow-up plans (inherits brief; empty body) |
 | POST | `.../content/plans/{id}/headlines/` | Get headlines (body: count?, exclude?) |
 | POST | `.../content/plans/{id}/generate/` | Generate posts from plan (body: headlines[], tone?, etc.) |
 | GET | `.../content/posts/?plan={id}&state=agent` | Poll plan's draft posts |

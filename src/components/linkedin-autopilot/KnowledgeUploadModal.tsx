@@ -56,10 +56,18 @@ export default function KnowledgeUploadModal({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isTerminal = (s: string) => s === "ready" || s === "error" || s === "failed";
+
   const { data: existingDocs, isLoading: docsLoading } = useQueryWithTokenRefresh(
     ["documents", workspaceId],
     () => documentService(workspaceId).getDocuments(),
-    { enabled: !!workspaceId && isOpen }
+    {
+      enabled: !!workspaceId && isOpen,
+      refetchInterval: (query) => {
+        const results = query.state.data?.results ?? [];
+        return results.some((d) => !isTerminal(d.status)) ? 3000 : false;
+      },
+    }
   );
 
   const deleteMutation = useMutationWithTokenRefresh(
@@ -153,7 +161,12 @@ export default function KnowledgeUploadModal({
                 {TYPE_LABELS[t]}
               </button>
               <span className="absolute right-1.5 top-1.5">
-                <Tooltip text={tip} position="bottom" width="w-56" />
+                <Tooltip
+                  text={tip}
+                  position="bottom"
+                  width="w-56"
+                  align={t === "style" ? "right" : t === "knowledge" ? "left" : "center"}
+                />
               </span>
             </span>
           ))}
@@ -238,10 +251,15 @@ export default function KnowledgeUploadModal({
             <ul className="space-y-2">
               {existingDocs!.results.map((doc) => {
                 const purposeKey = doc.purpose === "tone" ? "tune" : doc.purpose;
+                const processing = !isTerminal(doc.status);
                 return (
                   <li
                     key={doc.id}
-                    className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+                    className={`flex items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 ${
+                      processing
+                        ? "animate-shimmer-card border-blue-200"
+                        : "border-gray-100 bg-gray-50"
+                    }`}
                   >
                     <LuFileText className="h-4 w-4 shrink-0 text-gray-400" />
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
@@ -251,6 +269,17 @@ export default function KnowledgeUploadModal({
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${TYPE_STYLES[purposeKey as SourceType]}`}
                     >
                       {TYPE_LABELS[purposeKey as SourceType]}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        doc.status === "ready"
+                          ? "bg-teal-100 text-teal-700"
+                          : doc.status === "error" || doc.status === "failed"
+                            ? "bg-red-100 text-red-600"
+                            : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {doc.status}
                     </span>
                     {deletingId === doc.id ? (
                       <LuLoader className="h-4 w-4 shrink-0 animate-spin text-gray-400" />
@@ -311,7 +340,7 @@ export default function KnowledgeUploadModal({
           onClick={onClose}
           className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
         >
-          Cancel
+          Close
         </button>
         <button
           onClick={async () => {
@@ -345,7 +374,6 @@ export default function KnowledgeUploadModal({
                   : "Sources saved."
               );
               setItems([]);
-              onClose();
             } catch (err) {
               toast.error(extractErrorMessage(err));
             } finally {
