@@ -99,9 +99,11 @@ export default function GeneratePostsSection() {
         setPrompt("");
         setSuggestions([]);
         setPromptError(null);
-        const cached = queryClient.getQueryData(["posts", "draft", workspaceId]) as
-          { count?: number } | undefined;
-        queryClient.setQueryData(["posts-generating"], cached?.count ?? 0);
+        const draftQueries = queryClient.getQueriesData<{ count?: number }>({
+          queryKey: ["posts", "draft", workspaceId, "manual"],
+        });
+        const baseline = draftQueries.reduce((max, [, data]) => Math.max(max, data?.count ?? 0), 0);
+        queryClient.setQueryData(["posts-generating"], baseline);
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
       },

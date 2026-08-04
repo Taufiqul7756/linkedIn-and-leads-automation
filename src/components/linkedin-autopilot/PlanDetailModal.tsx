@@ -1,7 +1,13 @@
 "use client";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { LuLoader } from "react-icons/lu";
+import toast from "react-hot-toast";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { postsService } from "@/service/postsService";
+import { agentService } from "@/service/agentService";
+import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import type { MarketingPlan } from "@/types/Agent";
 import Modal from "@/components/ui/Modal";
 import { cn } from "@/utils/cn";
@@ -30,12 +36,34 @@ const STATUS_BADGE: Record<string, string> = {
 export default function PlanDetailModal({
   plan,
   onClose,
+  onFollowUpSuccess,
 }: {
   plan: MarketingPlan | null;
   onClose: () => void;
+  onFollowUpSuccess?: () => void;
 }) {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
+  const queryClient = useQueryClient();
+  const [isFollowingUp, setIsFollowingUp] = useState(false);
+
+  const handleFollowUp = async () => {
+    if (!plan || isFollowingUp) return;
+    setIsFollowingUp(true);
+    try {
+      const newPlans = await agentService(workspaceId).followUpPlan(plan.id);
+      const plans = Array.isArray(newPlans) ? newPlans : [];
+      queryClient.setQueryData(["agent-follow-up-signal"], plans);
+      queryClient.invalidateQueries({ queryKey: ["plans", "all", workspaceId] });
+      toast.success("3 follow-up plans created.");
+      onFollowUpSuccess?.();
+      onClose();
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsFollowingUp(false);
+    }
+  };
 
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
     ["posts", "by-plan", plan?.id, workspaceId],
@@ -113,6 +141,25 @@ export default function PlanDetailModal({
                 {pillar}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Continue action */}
+        {plan.post_count > 0 && (
+          <div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3">
+            <span className="text-[11px] text-blue-400">
+              {plan.has_follow_up
+                ? "Already continued — you can branch again"
+                : "Ready to extend this strategy"}
+            </span>
+            <button
+              onClick={handleFollowUp}
+              disabled={isFollowingUp}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+            >
+              {isFollowingUp && <LuLoader className="h-3 w-3 animate-spin" />}
+              {isFollowingUp ? "Creating…" : "Continue with this plan"}
+            </button>
           </div>
         )}
       </div>

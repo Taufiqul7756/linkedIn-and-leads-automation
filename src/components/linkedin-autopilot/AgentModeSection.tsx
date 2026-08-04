@@ -26,7 +26,7 @@ import toast from "react-hot-toast";
 import Modal from "@/components/ui/Modal";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { agentService } from "@/service/agentService";
 import { postsService } from "@/service/postsService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
@@ -624,6 +624,27 @@ export default function AgentModeSection() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
+
+  // Follow-up signal: open modal at b-select with new plans when triggered from PlanDetailModal
+  const { data: followUpSignal } = useQuery<MarketingPlan[] | null>({
+    queryKey: ["agent-follow-up-signal"],
+    queryFn: () => null,
+    enabled: false,
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    if (!followUpSignal || followUpSignal.length === 0) return;
+    const incoming = followUpSignal;
+    queryClient.setQueryData(["agent-follow-up-signal"], null);
+    setTimeout(() => {
+      setPlans(incoming);
+      setSelectedPlan(incoming[0]);
+      setPhase("b-select");
+      setOpen(true);
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [followUpSignal]);
 
   const handleClose = () => {
     stopPolling();
