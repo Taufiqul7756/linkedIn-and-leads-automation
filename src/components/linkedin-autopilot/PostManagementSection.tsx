@@ -11,7 +11,6 @@ import {
   LuCheck,
   LuChevronLeft,
   LuChevronRight,
-  LuPlay,
   LuList,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
@@ -588,17 +587,12 @@ export default function PostManagementSection({ mode }: { mode: "agent" | "manua
                             </button>
                           )}
                           {post.status === "scheduled" && (
-                            <>
-                              <button
-                                onClick={() => setScheduleTarget({ post, mode: "reschedule" })}
-                                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                              >
-                                Reschedule
-                              </button>
-                              <button className="flex h-7 w-7 items-center justify-center rounded-full bg-green-500 text-white transition-colors hover:bg-green-600">
-                                <LuPlay className="h-3.5 w-3.5" />
-                              </button>
-                            </>
+                            <button
+                              onClick={() => setScheduleTarget({ post, mode: "reschedule" })}
+                              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                            >
+                              Reschedule
+                            </button>
                           )}
                           {post.status === "failed" && (
                             <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100">
