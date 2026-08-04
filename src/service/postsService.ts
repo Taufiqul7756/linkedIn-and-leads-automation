@@ -15,9 +15,9 @@ export const postsService = (workspaceId: string) => ({
     get<PostStatsType>(
       `/workspaces/${workspaceId}/content/posts/stats/${state ? `?state=${state}` : ""}`
     ),
-  getDraftPosts: (state?: "agent" | "manual") =>
+  getDraftPosts: (state?: "agent" | "manual", page?: number, pageSize = 10) =>
     get<PaginatedPosts>(
-      `/workspaces/${workspaceId}/content/posts/?status=draft${state ? `&state=${state}` : ""}`
+      `/workspaces/${workspaceId}/content/posts/?status=draft${state ? `&state=${state}` : ""}${page && page > 1 ? `&page=${page}` : ""}&page_size=${pageSize}`
     ),
   getAllPosts: (status?: string, page?: number, pageSize = 10, state?: "agent" | "manual") => {
     const q = new URLSearchParams();

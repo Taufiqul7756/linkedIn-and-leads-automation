@@ -34,10 +34,9 @@ export default function PlansHistoryModal({
     { enabled: isOpen && !!workspaceId }
   );
 
-  const plans = data?.results ?? [];
-
   // Group by batch, newest batch first
   const batches = useMemo(() => {
+    const plans = data?.results ?? [];
     const map = new Map<string, MarketingPlan[]>();
     plans.forEach((p) => {
       const arr = map.get(p.batch) ?? [];
@@ -49,7 +48,7 @@ export default function PlansHistoryModal({
       const bTime = Math.max(...b[1].map((p) => new Date(p.created_at).getTime()));
       return bTime - aTime;
     });
-  }, [plans]);
+  }, [data?.results]);
 
   return (
     <>
@@ -134,6 +133,7 @@ export default function PlansHistoryModal({
         key={selectedPlan?.id ?? "no-plan"}
         plan={selectedPlan}
         onClose={() => setSelectedPlan(null)}
+        onFollowUpSuccess={onClose}
       />
     </>
   );

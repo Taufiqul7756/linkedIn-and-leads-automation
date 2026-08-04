@@ -11,6 +11,8 @@ import {
   LuSparkles,
   LuX,
   LuCalendarClock,
+  LuChevronLeft,
+  LuChevronRight,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import Modal from "@/components/ui/Modal";
@@ -124,11 +126,14 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
+const PAGE_SIZE = 10;
+
 export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manual" }) {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
 
+  const [page, setPage] = useState(1);
   const [editPost, setEditPost] = useState<PostType | null>(null);
   const [rejectPost, setRejectPost] = useState<PostType | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -156,16 +161,17 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
   const baselineCount = typeof baseline === "number" ? baseline : 0;
 
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
-    ["posts", "draft", workspaceId, mode],
-    () => postsService(workspaceId).getDraftPosts(mode),
+    ["posts", "draft", workspaceId, mode, page],
+    () => postsService(workspaceId).getDraftPosts(mode, page, PAGE_SIZE),
     {
       enabled: !!workspaceId,
       refetchInterval: isPolling
         ? (query) => {
-            const results =
-              (query.state.data as { results?: PostType[] } | undefined)?.results ?? [];
+            const data = query.state.data as { count?: number; results?: PostType[] } | undefined;
+            const count = data?.count ?? 0;
+            const results = data?.results ?? [];
             const done =
-              results.length > baselineCount && results.every((p) => p.image_status !== "pending");
+              count > baselineCount && results.every((p) => p.image_status !== "pending");
             return done ? false : 5000;
           }
         : false,
@@ -173,15 +179,15 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
   );
 
   const posts = postsData?.results ?? [];
-  const isGenerating = isPolling && posts.length <= baselineCount;
+  const totalCount = postsData?.count ?? 0;
+  const hasNext = !!postsData?.next;
+  const hasPrev = !!postsData?.previous;
+  const isGenerating = isPolling && totalCount <= baselineCount;
 
   useEffect(() => {
+    const count = postsData?.count ?? 0;
     const results = postsData?.results ?? [];
-    if (
-      isPolling &&
-      results.length > baselineCount &&
-      results.every((p) => p.image_status !== "pending")
-    ) {
+    if (isPolling && count > baselineCount && results.every((p) => p.image_status !== "pending")) {
       queryClient.setQueryData(["posts-generating"], null);
     }
   }, [postsData, isPolling, baselineCount, queryClient]);
@@ -302,7 +308,7 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
     try {
       await postsService(workspaceId).patchPost(postId, { suggested_publish_at: newIso });
       queryClient.setQueryData(
-        ["posts", "draft", workspaceId, mode],
+        ["posts", "draft", workspaceId, mode, page],
         (
           old:
             | { count: number; next: string | null; previous: string | null; results: PostType[] }
@@ -342,12 +348,33 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <h2 className="text-base font-semibold text-gray-900">Review &amp; Approval</h2>
-          {!isLoading && (
+          {!isLoading && totalCount > 0 && (
             <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-              {postsData?.count ?? 0} awaiting
+              {totalCount} awaiting
             </span>
           )}
         </div>
+        {totalCount > PAGE_SIZE && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">
+              Page {page} of {Math.ceil(totalCount / PAGE_SIZE)}
+            </span>
+            <button
+              onClick={() => setPage((p) => p - 1)}
+              disabled={!hasPrev}
+              className="flex items-center rounded-lg border border-gray-200 p-1.5 text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
+            >
+              <LuChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!hasNext}
+              className="flex items-center rounded-lg border border-gray-200 p-1.5 text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
+            >
+              <LuChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {isLoading && (
