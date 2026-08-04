@@ -18,6 +18,11 @@ Claude reads this file every session. Use these exact terms consistently.
 | Knowledge Base | Crawled website content used to generate on-brand posts |
 | Add Sources | User action to upload files (PDF, DOC, DOCX) or paste text into the Knowledge Base |
 | Run Agent | Bulk action that triggers the agentic swarm for selected leads; appears in the Leads table header when ≥ 1 rows are selected |
+| Marketing Plan | AI-generated content strategy with title, angle, pillars, and sample hooks; created in batches of 3 via `POST /content/plans/` |
+| Plan Batch | Group of 3 Marketing Plans produced from a single generation call; identified by a shared `batch` UUID |
+| Follow-up Plan | A new batch of 3 plans that continues an existing plan's strategy; created via `POST /content/plans/{id}/follow-up/` |
+| Plans History | The full list of all Marketing Plan batches ever created; accessed from PostManagementSection header (agent mode) |
+| Plan Detail | Modal showing a single Marketing Plan's metadata and the posts generated from it as a numbered timeline |
 | Engagement Rate | (reactions + comments) / impressions expressed as a percentage |
 | Lead Status | Validation state of a lead: Valid (green), Invalid (red), Risky (amber) |
 | Outreach | Channel/state of outreach for a lead: Replied · Email sent · WhatsApp sent · LinkedIn sent · Not contacted |

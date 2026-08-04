@@ -47,7 +47,7 @@ PRD: `docs/prd/follow-up-plans.md`
 
 ---
 
-## Acceptance Criteria
+## Acceptance Criteria (V1)
 
 - [x] At c-done, "Make more posts with this plan" button is visible; modal does not auto-close
 - [x] Clicking it shows a spinner and calls `POST plans/{id}/follow-up/`
@@ -61,3 +61,53 @@ PRD: `docs/prd/follow-up-plans.md`
 - [x] Agent modal can upload PDFs and add URLs using agent APIs
 - [x] Manual stepper steps still open original KnowledgeUploadModal (unchanged)
 - [x] Post stats dashboard shows mode-specific counts (agent tab ≠ manual tab)
+
+---
+
+## Phase 2 — UI Refinement v4 (branch: v4/ui-refinement)
+
+PRD addition: `docs/prd/follow-up-plans.md` V2 section
+
+### T5 — Plans History Modal `src/components/linkedin-autopilot/PlansHistoryModal.tsx`
+- [x] New file — fetches `getAllPlans("all")`, groups by `batch` (newest first), renders batch headers + 3-col grid of plan cards
+- [x] Plan cards show Used/Continued ✓/Unused badge, title, post count
+- [x] Clicking a plan opens nested `PlanDetailModal` with `key={selectedPlan?.id ?? "no-plan"}`
+
+### T6 — Plan Detail Modal `src/components/linkedin-autopilot/PlanDetailModal.tsx`
+- [x] New file — blue-bordered plan card at top with audience/region/days/angle/pillars
+- [x] Numbered timeline posts using flex column layout (numbered ring circle + w-px flex-1 connecting line)
+- [x] STATUS_RING + STATUS_BADGE records for post status colours
+- [x] Loading skeletons + empty state
+- [x] Uses `getDraftsByPlan(plan.id)`, query key `["posts","by-plan",plan.id,workspaceId]`
+
+### T7 — getAllPlans service method `src/service/agentService.ts`
+- [x] `getAllPlans(batch?: string)` — `GET .../content/plans/?batch=X&page_size=50`
+- [x] Uses `PaginatedPlans` return type
+
+### T8 — PLAN column + Plans History button `src/components/linkedin-autopilot/PostManagementSection.tsx`
+- [x] Plans fetched via `getAllPlans("all")`; stored in `Map<string, MarketingPlan>` for O(1) lookup
+- [x] PLAN column header added (agent mode only); column count `colCount` = 9 agent / 8 manual
+- [x] Per-row indigo chip with plan title; clicking opens `setPlanDetailTarget` (stopPropagation)
+- [x] "Plans" button in header (agent mode) opens `PlansHistoryModal`
+- [x] Shared cache key `["plans","all",workspaceId]` with PlansHistoryModal
+
+### T9 — Clickable rows & simplified actions `PostManagementSection.tsx`
+- [x] `<tr onClick={() => setViewPostId(post.id)}>` — every row opens ViewPostModal
+- [x] `e.stopPropagation()` on checkbox `<td>` and actions `<td>`
+- [x] Removed `RowDropdown` component entirely; actions column now has only `LuTrash2` delete button
+
+### T10 — Live status polling in AgentKnowledgeUploadModal
+- [x] `refetchInterval` on both docs and sites queries (3000ms while any item is non-terminal)
+- [x] Status badge per row (teal/red/amber); shimmer on processing rows
+- [x] Modal stays open after save (removed `onClose()` from save handler)
+- [x] Cancel → Close label
+
+### T11 — Live status polling in KnowledgeUploadModal
+- [x] `refetchInterval` on documents query (3000ms while any item is non-terminal)
+- [x] Status badge per row (teal/red/amber); shimmer on processing rows
+- [x] Modal stays open after save
+- [x] Cancel → Close label
+
+### T12 — Tooltip alignment fix
+- [x] `AgentKnowledgeUploadModal`: knowledge=`align="left"`, tone=`align="center"`, style=`align="right"`
+- [x] `KnowledgeUploadModal`: same alignment pattern

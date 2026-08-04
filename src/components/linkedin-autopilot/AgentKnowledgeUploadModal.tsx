@@ -80,19 +80,33 @@ export default function AgentKnowledgeUploadModal({
   const [deletingSiteId, setDeletingSiteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Agent docs
+  const isTerminal = (s: string) => s === "ready" || s === "error" || s === "failed";
+
+  // Agent docs — poll every 3 s while any item is non-terminal
   const { data: agentDocsData, isLoading: docsLoading } = useQueryWithTokenRefresh(
     ["agent-documents", workspaceId],
     () => agentService(workspaceId).getAgentDocuments(),
-    { enabled: !!workspaceId && isOpen }
+    {
+      enabled: !!workspaceId && isOpen,
+      refetchInterval: (query) => {
+        const results = query.state.data?.results ?? [];
+        return results.some((d) => !isTerminal(d.status)) ? 3000 : false;
+      },
+    }
   );
   const agentDocs = agentDocsData?.results ?? [];
 
-  // Agent websites
+  // Agent websites — poll every 3 s while any item is non-terminal
   const { data: agentSitesData, isLoading: sitesLoading } = useQueryWithTokenRefresh(
     ["agent-websites", workspaceId],
     () => agentService(workspaceId).getAgentWebsites(),
-    { enabled: !!workspaceId && isOpen }
+    {
+      enabled: !!workspaceId && isOpen,
+      refetchInterval: (query) => {
+        const results = query.state.data?.results ?? [];
+        return results.some((s) => !isTerminal(s.status)) ? 3000 : false;
+      },
+    }
   );
   const agentSites = agentSitesData?.results ?? [];
 
@@ -182,7 +196,6 @@ export default function AgentKnowledgeUploadModal({
       toast.success(`${parts.join(" and ")} added.`);
 
       setPending([]);
-      onClose();
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -218,7 +231,12 @@ export default function AgentKnowledgeUploadModal({
                 {PURPOSE_LABELS[p]}
               </button>
               <span className="absolute right-1.5 top-1.5">
-                <Tooltip text={TIPS[p]} position="bottom" width="w-56" />
+                <Tooltip
+                  text={TIPS[p]}
+                  position="bottom"
+                  width="w-56"
+                  align={p === "style" ? "right" : p === "knowledge" ? "left" : "center"}
+                />
               </span>
             </span>
           ))}
@@ -296,10 +314,15 @@ export default function AgentKnowledgeUploadModal({
             <ul className="space-y-2">
               {agentDocs.map((doc) => {
                 const p = (doc.purpose === "tone" ? "tone" : doc.purpose) as AgentPurpose;
+                const processing = !isTerminal(doc.status);
                 return (
                   <li
                     key={doc.id}
-                    className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+                    className={`flex items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 ${
+                      processing
+                        ? "animate-shimmer-card border-blue-200"
+                        : "border-gray-100 bg-gray-50"
+                    }`}
                   >
                     <LuFileText className="h-4 w-4 shrink-0 text-gray-400" />
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
@@ -309,6 +332,17 @@ export default function AgentKnowledgeUploadModal({
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${PURPOSE_STYLES[p] ?? "bg-gray-100 text-gray-600"}`}
                     >
                       {PURPOSE_LABELS[p] ?? doc.purpose}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        doc.status === "ready"
+                          ? "bg-teal-100 text-teal-700"
+                          : doc.status === "error" || doc.status === "failed"
+                            ? "bg-red-100 text-red-600"
+                            : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {doc.status}
                     </span>
                     {deletingDocId === doc.id ? (
                       <LuLoader className="h-4 w-4 shrink-0 animate-spin text-gray-400" />
@@ -329,10 +363,15 @@ export default function AgentKnowledgeUploadModal({
 
               {agentSites.map((site) => {
                 const p = (site.purpose ?? "knowledge") as AgentPurpose;
+                const crawling = !isTerminal(site.status);
                 return (
                   <li
                     key={site.id}
-                    className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+                    className={`flex items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 ${
+                      crawling
+                        ? "animate-shimmer-card border-blue-200"
+                        : "border-gray-100 bg-gray-50"
+                    }`}
                   >
                     <LuGlobe className="h-4 w-4 shrink-0 text-gray-400" />
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
@@ -342,6 +381,17 @@ export default function AgentKnowledgeUploadModal({
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${PURPOSE_STYLES[p] ?? "bg-gray-100 text-gray-600"}`}
                     >
                       {PURPOSE_LABELS[p] ?? site.purpose}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        site.status === "ready"
+                          ? "bg-teal-100 text-teal-700"
+                          : site.status === "error" || site.status === "failed"
+                            ? "bg-red-100 text-red-600"
+                            : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {site.status}
                     </span>
                     {deletingSiteId === site.id ? (
                       <LuLoader className="h-4 w-4 shrink-0 animate-spin text-gray-400" />
@@ -402,7 +452,7 @@ export default function AgentKnowledgeUploadModal({
           onClick={onClose}
           className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
         >
-          Cancel
+          Close
         </button>
         <button
           onClick={handleSave}

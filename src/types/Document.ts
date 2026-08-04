@@ -4,7 +4,7 @@ export type DocumentType = {
   scope: "corporate" | "personal";
   filename: string;
   purpose: "knowledge" | "tone" | "style";
-  status: "pending" | "processing" | "extracting" | "ready" | "error";
+  status: "pending" | "processing" | "extracting" | "ready" | "error" | "failed";
   num_pages: number | null;
   summary: string;
   facets: Record<string, unknown> | string;
