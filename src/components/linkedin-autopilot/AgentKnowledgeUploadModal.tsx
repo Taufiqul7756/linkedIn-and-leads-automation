@@ -1,7 +1,16 @@
 "use client";
 import { useState, useRef } from "react";
 import Modal from "@/components/ui/Modal";
-import { LuUpload, LuLink, LuX, LuFileText, LuLoader, LuTrash2, LuGlobe } from "react-icons/lu";
+import {
+  LuUpload,
+  LuLink,
+  LuX,
+  LuFileText,
+  LuLoader,
+  LuTrash2,
+  LuGlobe,
+  LuStar,
+} from "react-icons/lu";
 import Tooltip from "@/components/ui/Tooltip";
 import toast from "react-hot-toast";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -20,6 +29,7 @@ interface PendingItem {
   name: string;
   kind: "file" | "url";
   purpose: AgentPurpose;
+  is_default: boolean;
   file?: File;
 }
 
@@ -143,7 +153,14 @@ export default function AgentKnowledgeUploadModal({
   const addFile = (file: File) => {
     setPending((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), name: file.name, kind: "file", purpose: selectedPurpose, file },
+      {
+        id: crypto.randomUUID(),
+        name: file.name,
+        kind: "file",
+        purpose: selectedPurpose,
+        is_default: false,
+        file,
+      },
     ]);
   };
 
@@ -152,7 +169,13 @@ export default function AgentKnowledgeUploadModal({
     if (!trimmed) return;
     setPending((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), name: trimmed, kind: "url", purpose: selectedPurpose },
+      {
+        id: crypto.randomUUID(),
+        name: trimmed,
+        kind: "url",
+        purpose: selectedPurpose,
+        is_default: false,
+      },
     ]);
     setUrlInput("");
   };
@@ -179,9 +202,17 @@ export default function AgentKnowledgeUploadModal({
       await Promise.all(
         pending.map((item) => {
           if (item.kind === "file" && item.file) {
-            return agentService(workspaceId).uploadAgentDocument(item.file, item.purpose);
+            return agentService(workspaceId).uploadAgentDocument(
+              item.file,
+              item.purpose,
+              item.is_default
+            );
           }
-          return agentService(workspaceId).addAgentWebsite(item.name, item.purpose);
+          return agentService(workspaceId).addAgentWebsite(
+            item.name,
+            item.purpose,
+            item.is_default
+          );
         })
       );
 
@@ -328,6 +359,12 @@ export default function AgentKnowledgeUploadModal({
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
                       {doc.filename}
                     </span>
+                    {doc.is_default && (
+                      <span className="shrink-0 flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                        <LuStar className="h-3 w-3" />
+                        Default
+                      </span>
+                    )}
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${PURPOSE_STYLES[p] ?? "bg-gray-100 text-gray-600"}`}
                     >
@@ -377,6 +414,12 @@ export default function AgentKnowledgeUploadModal({
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
                       {site.url}
                     </span>
+                    {site.is_default && (
+                      <span className="shrink-0 flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                        <LuStar className="h-3 w-3" />
+                        Default
+                      </span>
+                    )}
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${PURPOSE_STYLES[p] ?? "bg-gray-100 text-gray-600"}`}
                     >
@@ -435,6 +478,23 @@ export default function AgentKnowledgeUploadModal({
                 >
                   {PURPOSE_LABELS[item.purpose]}
                 </span>
+                {item.purpose === "knowledge" && (
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={item.is_default}
+                      onChange={(e) =>
+                        setPending((prev) =>
+                          prev.map((p) =>
+                            p.id === item.id ? { ...p, is_default: e.target.checked } : p
+                          )
+                        )
+                      }
+                      className="h-3.5 w-3.5 rounded accent-amber-500"
+                    />
+                    Default
+                  </label>
+                )}
                 <button
                   onClick={() => removePending(item.id)}
                   className="shrink-0 text-gray-300 transition-colors hover:text-red-400"

@@ -24,10 +24,11 @@ export const agentService = (workspaceId: string) => ({
   // Agent — Documents
   getAgentDocuments: () =>
     get<{ results: ProfileDocument[] }>(`/workspaces/${workspaceId}/linkedin/agent/documents/`),
-  uploadAgentDocument: (file: File, purpose = "knowledge") => {
+  uploadAgentDocument: (file: File, purpose = "knowledge", is_default = false) => {
     const form = new FormData();
     form.append("file", file);
     form.append("purpose", purpose);
+    form.append("is_default", String(is_default));
     return postRaw<ProfileDocument>(`/workspaces/${workspaceId}/linkedin/agent/documents/`, form);
   },
   deleteAgentDocument: (docId: string) =>
@@ -40,10 +41,11 @@ export const agentService = (workspaceId: string) => ({
   // Agent — Websites
   getAgentWebsites: () =>
     get<{ results: ProfileWebsite[] }>(`/workspaces/${workspaceId}/linkedin/agent/websites/`),
-  addAgentWebsite: (url: string, purpose = "knowledge") =>
+  addAgentWebsite: (url: string, purpose = "knowledge", is_default = false) =>
     postRaw<ProfileWebsite>(`/workspaces/${workspaceId}/linkedin/agent/websites/`, {
       url,
       purpose,
+      is_default,
     }),
   getAgentWebsite: (id: string) =>
     get<ProfileWebsite>(`/workspaces/${workspaceId}/linkedin/agent/websites/${id}/`),
@@ -65,6 +67,11 @@ export const agentService = (workspaceId: string) => ({
     target_audience?: string;
     region?: string;
     days?: number;
+    plan_count?: number;
+    instruction?: string;
+    agent_documents?: string[];
+    agent_websites?: string[];
+    include_profile?: boolean;
     writer_model?: string;
   }) =>
     postRaw<MarketingPlan[] | { results: MarketingPlan[] } | MarketingPlan>(

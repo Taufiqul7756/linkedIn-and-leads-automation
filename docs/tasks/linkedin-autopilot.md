@@ -131,6 +131,14 @@
   - Effect 2 deps narrowed to `[activeWorkspace?.id, pathname]` — never fires on URL-only changes
   - Guard `if (liveParams.get("workspace")) return` prevents overwriting existing URL params
 
+## Phase 12 — Agentic Mode Refactor (branch: refactor/agentic-mode-update)
+
+- [x] `PlanningBrief` type expanded: added `plan_count`, `instruction`, `agent_documents`, `agent_websites` fields (now matches full API response)
+- [x] `agentService.getAgentWebsite(id)` — new `GET /linkedin/agent/websites/{id}/` endpoint
+- [x] `uploadAgentDocument` FormData field renamed to `"file"` (was `"image"`); `is_default` passed as `String(is_default)`
+- [x] `AgentKnowledgeUploadModal` distinct purpose color scheme: knowledge=blue · tone=violet · style=teal (AgentModeSection retains gray/purple/orange)
+- [x] `is_default` checkbox in "Ready to add" list restricted to `knowledge` purpose items only
+
 ## Phase 9 — Future
 
 - [ ] Real-time agent status polling (WebSocket)

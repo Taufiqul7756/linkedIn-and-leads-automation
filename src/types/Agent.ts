@@ -3,6 +3,11 @@ export type PlanningBrief = {
   target_audience: string | null;
   region: string | null; // IANA timezone e.g. "Europe/Berlin"
   days: number;
+  plan_count: number;
+  instruction: string | null;
+  agent_documents: string[];
+  agent_websites: string[];
+  include_profile: boolean;
   parent_plan: string | null;
 };
 
@@ -27,6 +32,7 @@ export type ProfileDocument = {
   file: string;
   filename: string;
   purpose: string;
+  is_default: boolean;
   status: string;
   num_pages: number;
   summary: string;
@@ -41,6 +47,7 @@ export type ProfileWebsite = {
   url: string;
   kind: string;
   purpose: string;
+  is_default: boolean;
   status: string;
   summary: string;
   facets: string;
