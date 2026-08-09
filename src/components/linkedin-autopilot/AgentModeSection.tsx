@@ -20,7 +20,6 @@ import {
   LuFileText,
   LuUpload,
   LuPlus,
-  LuCalendarDays,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import Modal from "@/components/ui/Modal";
@@ -47,74 +46,6 @@ type Phase =
   | "c-generating"
   | "c-polling"
   | "c-done";
-
-const COMMON_TIMEZONES = [
-  "Africa/Cairo",
-  "Africa/Johannesburg",
-  "Africa/Lagos",
-  "Africa/Nairobi",
-  "America/Anchorage",
-  "America/Buenos_Aires",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Mexico_City",
-  "America/New_York",
-  "America/Phoenix",
-  "America/Sao_Paulo",
-  "America/Toronto",
-  "America/Vancouver",
-  "Asia/Baku",
-  "Asia/Dubai",
-  "Asia/Hong_Kong",
-  "Asia/Jakarta",
-  "Asia/Karachi",
-  "Asia/Kolkata",
-  "Asia/Kuala_Lumpur",
-  "Asia/Riyadh",
-  "Asia/Seoul",
-  "Asia/Shanghai",
-  "Asia/Singapore",
-  "Asia/Taipei",
-  "Asia/Tehran",
-  "Asia/Tokyo",
-  "Australia/Melbourne",
-  "Australia/Perth",
-  "Australia/Sydney",
-  "Europe/Amsterdam",
-  "Europe/Athens",
-  "Europe/Belgrade",
-  "Europe/Berlin",
-  "Europe/Brussels",
-  "Europe/Bucharest",
-  "Europe/Budapest",
-  "Europe/Copenhagen",
-  "Europe/Dublin",
-  "Europe/Helsinki",
-  "Europe/Istanbul",
-  "Europe/Kiev",
-  "Europe/Lisbon",
-  "Europe/London",
-  "Europe/Luxembourg",
-  "Europe/Madrid",
-  "Europe/Moscow",
-  "Europe/Oslo",
-  "Europe/Paris",
-  "Europe/Prague",
-  "Europe/Riga",
-  "Europe/Rome",
-  "Europe/Sofia",
-  "Europe/Stockholm",
-  "Europe/Tallinn",
-  "Europe/Vienna",
-  "Europe/Vilnius",
-  "Europe/Warsaw",
-  "Europe/Zurich",
-  "Pacific/Auckland",
-  "Pacific/Fiji",
-  "Pacific/Honolulu",
-  "UTC",
-];
 
 function StepBar({ current }: { current: "a" | "b" | "c" | "d" }) {
   const steps = [
@@ -204,14 +135,10 @@ export default function AgentModeSection() {
   const [recrawlingWebsiteId, setRecrawlingWebsiteId] = useState<string | null>(null);
   const [reextractingDocId, setReextractingDocId] = useState<string | null>(null);
   const [docUploading, setDocUploading] = useState(false);
-  const [docPurpose, setDocPurpose] = useState("knowledge");
   const [websiteInput, setWebsiteInput] = useState("");
-  const [websitePurpose, setWebsitePurpose] = useState("knowledge");
   const [websiteAdding, setWebsiteAdding] = useState(false);
   // Pre-profile queue — collected in a-submit, uploaded once profile is ready
   const [queuedWebsiteInput, setQueuedWebsiteInput] = useState("");
-  const [queuedWebsitePurpose, setQueuedWebsitePurpose] = useState("knowledge");
-  const [queuedDocPurpose, setQueuedDocPurpose] = useState("knowledge");
   const [queuedWebsites, setQueuedWebsites] = useState<{ url: string; purpose: string }[]>([]);
   const [queuedDocs, setQueuedDocs] = useState<{ file: File; name: string; purpose: string }[]>([]);
   const queuedWebsitesRef = useRef<{ url: string; purpose: string }[]>([]);
@@ -219,10 +146,11 @@ export default function AgentModeSection() {
   // Pending doc files (selected but not yet uploaded)
   const [pendingQueuedDoc, setPendingQueuedDoc] = useState<File | null>(null);
   const [pendingDoc, setPendingDoc] = useState<File | null>(null);
-  // Brief form (Step B)
-  const [briefAudience, setBriefAudience] = useState("");
-  const [briefRegion, setBriefRegion] = useState("");
-  const [briefDays, setBriefDays] = useState(7);
+  // Plan generation inputs
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+  const [selectedWebsiteIds, setSelectedWebsiteIds] = useState<Set<string>>(new Set());
+  const [instruction, setInstruction] = useState("");
+  const [includeProfile, setIncludeProfile] = useState(true);
   // Headlines (Step C)
   type HeadlineItem = { id: string; text: string; selected: boolean };
   const [headlineItems, setHeadlineItems] = useState<HeadlineItem[]>([]);
@@ -300,6 +228,8 @@ export default function AgentModeSection() {
         const sites = sitesData?.results ?? [];
         setProfileDocs(docs);
         setProfileWebsites(sites);
+        setSelectedDocIds(new Set(docs.filter((d) => d.is_default).map((d) => d.id)));
+        setSelectedWebsiteIds(new Set(sites.filter((s) => s.is_default).map((s) => s.id)));
         const isTerminal = (s: string) => s === "ready" || s === "error" || s === "failed";
         const stillPending =
           docs.some((d) => !isTerminal(d.status)) || sites.some((s) => !isTerminal(s.status));
@@ -360,7 +290,7 @@ export default function AgentModeSection() {
     }, 2500);
   };
 
-  const checkProfile = async (targetStep = 0) => {
+  const checkProfile = async (_targetStep = 0) => {
     setPhase("a-loading");
     try {
       const data = await agentService(workspaceId).getProfiles();
@@ -371,8 +301,7 @@ export default function AgentModeSection() {
         setPhase("a-submit");
       } else if (latest.status === "ready") {
         setProfile(latest);
-        // If restoring to step 2+ (marketing plans / headlines), jump straight to b-brief
-        setPhase(targetStep >= 2 ? "b-brief" : "a-ready");
+        setPhase("a-ready");
         loadAgentResources();
         uploadQueuedResources();
       } else if (latest.status === "error") {
@@ -394,8 +323,12 @@ export default function AgentModeSection() {
         agentService(workspaceId).getAgentDocuments(),
         agentService(workspaceId).getAgentWebsites(),
       ]);
-      setProfileDocs(docsData?.results ?? []);
-      setProfileWebsites(sitesData?.results ?? []);
+      const docs = docsData?.results ?? [];
+      const sites = sitesData?.results ?? [];
+      setProfileDocs(docs);
+      setProfileWebsites(sites);
+      setSelectedDocIds(new Set(docs.filter((d) => d.is_default).map((d) => d.id)));
+      setSelectedWebsiteIds(new Set(sites.filter((s) => s.is_default).map((s) => s.id)));
     } catch {
       // silently ignore — resources are optional
     }
@@ -430,7 +363,7 @@ export default function AgentModeSection() {
     if (!url) return;
     setWebsiteAdding(true);
     try {
-      const site = await agentService(workspaceId).addAgentWebsite(url, queuedWebsitePurpose);
+      const site = await agentService(workspaceId).addAgentWebsite(url, "knowledge");
       if (site) {
         setProfileWebsites((prev) => [site, ...prev]);
         startResourcePolling();
@@ -456,7 +389,7 @@ export default function AgentModeSection() {
     try {
       const doc = await agentService(workspaceId).uploadAgentDocument(
         pendingQueuedDoc,
-        queuedDocPurpose
+        "knowledge"
       );
       if (doc) {
         setProfileDocs((prev) => [doc, ...prev]);
@@ -481,7 +414,7 @@ export default function AgentModeSection() {
     if (!pendingDoc) return;
     setDocUploading(true);
     try {
-      const doc = await agentService(workspaceId).uploadAgentDocument(pendingDoc, docPurpose);
+      const doc = await agentService(workspaceId).uploadAgentDocument(pendingDoc, "knowledge");
       if (doc) {
         setProfileDocs((prev) => [doc, ...prev]);
         startResourcePolling();
@@ -500,6 +433,11 @@ export default function AgentModeSection() {
     try {
       await agentService(workspaceId).deleteAgentDocument(deleteDocTarget.id);
       setProfileDocs((prev) => prev.filter((d) => d.id !== deleteDocTarget.id));
+      setSelectedDocIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteDocTarget.id);
+        return next;
+      });
       setDeleteDocTarget(null);
     } catch (err) {
       toast.error(extractErrorMessage(err));
@@ -514,7 +452,7 @@ export default function AgentModeSection() {
     try {
       const site = await agentService(workspaceId).addAgentWebsite(
         websiteInput.trim(),
-        websitePurpose
+        "knowledge"
       );
       if (site) {
         setProfileWebsites((prev) => [site, ...prev]);
@@ -534,6 +472,11 @@ export default function AgentModeSection() {
     try {
       await agentService(workspaceId).deleteAgentWebsite(deleteWebsiteTarget.id);
       setProfileWebsites((prev) => prev.filter((s) => s.id !== deleteWebsiteTarget.id));
+      setSelectedWebsiteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteWebsiteTarget.id);
+        return next;
+      });
       setDeleteWebsiteTarget(null);
     } catch (err) {
       toast.error(extractErrorMessage(err));
@@ -582,20 +525,17 @@ export default function AgentModeSection() {
     setProfileDocs([]);
     setProfileWebsites([]);
     setWebsiteInput("");
-    setWebsitePurpose("knowledge");
-    setDocPurpose("knowledge");
     setQueuedWebsiteInput("");
-    setQueuedWebsitePurpose("knowledge");
-    setQueuedDocPurpose("knowledge");
     setQueuedWebsites([]);
     setQueuedDocs([]);
     queuedWebsitesRef.current = [];
     queuedDocsRef.current = [];
     setPendingQueuedDoc(null);
     setPendingDoc(null);
-    setBriefAudience("");
-    setBriefRegion("");
-    setBriefDays(7);
+    setSelectedDocIds(new Set());
+    setSelectedWebsiteIds(new Set());
+    setInstruction("");
+    setIncludeProfile(true);
     setHeadlineItems([]);
     setHeadlinesSentCount(0);
     headlinesSentCountRef.current = 0;
@@ -720,10 +660,11 @@ export default function AgentModeSection() {
     setPhase("b-generating");
     try {
       const body: Parameters<ReturnType<typeof agentService>["generatePlans"]>[0] = {};
-      if (briefAudience.trim()) body.target_audience = briefAudience.trim();
-      if (briefRegion.trim()) body.region = briefRegion.trim();
-      if (briefDays >= 1 && briefDays <= 90) body.days = briefDays;
       if (selectedModelId) body.writer_model = selectedModelId;
+      if (instruction.trim()) body.instruction = instruction.trim();
+      if (selectedDocIds.size > 0) body.agent_documents = [...selectedDocIds];
+      if (selectedWebsiteIds.size > 0) body.agent_websites = [...selectedWebsiteIds];
+      body.include_profile = includeProfile;
       const data = await agentService(workspaceId).generatePlans(body);
       const planList = Array.isArray(data)
         ? data
@@ -731,7 +672,7 @@ export default function AgentModeSection() {
           (data ? [data as MarketingPlan] : []));
       if (planList.length === 0) {
         toast.error("No plans were generated. Please try again.");
-        setPhase("b-brief");
+        setPhase("a-ready");
         return;
       }
       setPlans(planList);
@@ -739,7 +680,7 @@ export default function AgentModeSection() {
       setPhase("b-select");
     } catch (err) {
       toast.error(extractErrorMessage(err));
-      setPhase("b-brief");
+      setPhase("a-ready");
     }
   };
 
@@ -870,27 +811,6 @@ export default function AgentModeSection() {
     tone: "bg-purple-100 text-purple-700",
     style: "bg-orange-100 text-orange-700",
   };
-  const purposeSelect = (value: string, onChange: (v: string) => void) => (
-    <span className="relative inline-flex items-center gap-1">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
-        className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        title="Knowledge = facts · Tone = voice · Style = formatting"
-      >
-        <option value="knowledge">Knowledge</option>
-        <option value="tone">Tone</option>
-        <option value="style">Style</option>
-      </select>
-      <Tooltip
-        text="Knowledge — facts about your business. Tone — writing voice & style samples. Style — post structure & formatting guides."
-        width="w-60"
-        position="top"
-        align="right"
-      />
-    </span>
-  );
 
   const currentStep = phase.startsWith("a")
     ? "a"
@@ -992,6 +912,37 @@ export default function AgentModeSection() {
               </div>
             </div>
 
+            {/* Include profile toggle */}
+            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <div className="flex items-center gap-1.5">
+                <LuUser className="h-3.5 w-3.5 text-blue-500" />
+                <span className="text-xs font-semibold text-gray-600">
+                  Include profile in plans
+                </span>
+                <Tooltip
+                  text="When on, your LinkedIn profile data (writing style, topics, expertise) is used to personalise the marketing plans."
+                  position="bottom"
+                  width="w-64"
+                />
+              </div>
+              <button
+                role="switch"
+                aria-checked={includeProfile}
+                onClick={() => setIncludeProfile((v) => !v)}
+                className={cn(
+                  "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors",
+                  includeProfile ? "bg-blue-600" : "bg-gray-300"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
+                    includeProfile ? "translate-x-4" : "translate-x-0.5"
+                  )}
+                />
+              </button>
+            </div>
+
             {/* Websites */}
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
@@ -1022,6 +973,19 @@ export default function AgentModeSection() {
                         )}
                       >
                         <div className="flex items-center gap-2 px-2.5 py-1.5">
+                          <input
+                            type="checkbox"
+                            checked={selectedWebsiteIds.has(site.id)}
+                            onChange={(e) => {
+                              setSelectedWebsiteIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(site.id);
+                                else next.delete(site.id);
+                                return next;
+                              });
+                            }}
+                            className="h-3.5 w-3.5 shrink-0 rounded accent-blue-600"
+                          />
                           <LuGlobe className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                           <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
                             {site.url}
@@ -1118,7 +1082,6 @@ export default function AgentModeSection() {
                     className="h-8 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
-                {purposeSelect(queuedWebsitePurpose, setQueuedWebsitePurpose)}
                 <button
                   onClick={handleAddQueuedWebsite}
                   disabled={!queuedWebsiteInput.trim() || websiteAdding}
@@ -1157,6 +1120,19 @@ export default function AgentModeSection() {
                         )}
                       >
                         <div className="flex items-center gap-2 px-2.5 py-1.5">
+                          <input
+                            type="checkbox"
+                            checked={selectedDocIds.has(doc.id)}
+                            onChange={(e) => {
+                              setSelectedDocIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(doc.id);
+                                else next.delete(doc.id);
+                                return next;
+                              });
+                            }}
+                            className="h-3.5 w-3.5 shrink-0 rounded accent-blue-600"
+                          />
                           <LuFileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                           <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
                             {doc.filename}
@@ -1258,7 +1234,6 @@ export default function AgentModeSection() {
                     {pendingQueuedDoc ? pendingQueuedDoc.name : "Choose file…"}
                   </span>
                 </button>
-                {purposeSelect(queuedDocPurpose, setQueuedDocPurpose)}
                 <button
                   onClick={handleAddQueuedDoc}
                   disabled={!pendingQueuedDoc || docUploading}
@@ -1269,102 +1244,27 @@ export default function AgentModeSection() {
               </div>
             </div>
 
-            {/* Generate Marketing Plans */}
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={() => setPhase("b-brief")}
-                disabled={
-                  !profileUrl.trim() &&
-                  queuedWebsites.length === 0 &&
-                  queuedDocs.length === 0 &&
-                  profileWebsites.length === 0 &&
-                  profileDocs.length === 0
-                }
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-              >
-                <LuSparkles className="h-4 w-4" />
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Phase B: Brief form ── */}
-        {phase === "b-brief" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setPhase(profile?.status === "ready" ? "a-ready" : "a-submit")}
-                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
-              >
-                <LuArrowLeft className="h-3.5 w-3.5" />
-                Back
-              </button>
-              <p className="text-sm text-gray-500">
-                Help the AI plan better posts for your audience.
-              </p>
-            </div>
-
-            {/* Target Audience */}
+            {/* Instruction */}
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
-                Target Audience
-                <span className="font-normal text-gray-400">— optional</span>
-                <Tooltip text="Who are you writing for? Helps the AI focus on topics that resonate with your specific readers — e.g. B2B SaaS founders, early-stage startups." />
-              </label>
-              <input
-                type="text"
-                value={briefAudience}
-                onChange={(e) => setBriefAudience(e.target.value)}
-                placeholder="e.g. B2B SaaS founders, early-stage startups"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Region / Timezone */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
-                Audience Timezone
+                Instruction
                 <span className="font-normal text-gray-400">— optional</span>
                 <Tooltip
-                  text="Sets suggested publish times for your audience. Pick their timezone, not yours — e.g. someone in Dhaka selling to US buyers picks America/New_York. Must be an IANA name, not a country or city."
-                  width="w-72"
+                  text="Give the AI extra guidance for planning — e.g. 'Focus on product updates' or 'Write for a technical audience'."
+                  width="w-64"
+                  position="top"
                 />
               </label>
-              <input
-                type="text"
-                list="iana-timezones"
-                value={briefRegion}
-                onChange={(e) => setBriefRegion(e.target.value)}
-                placeholder="e.g. Europe/London, America/New_York"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <datalist id="iana-timezones">
-                {COMMON_TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz} />
-                ))}
-              </datalist>
-            </div>
-
-            {/* Days */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
-                Planning Window
-                <span className="font-normal text-gray-400">— days</span>
-                <Tooltip text="How many days ahead to plan content. Also controls how many headline options you'll see in the next step. Range: 1–90. Default: 7." />
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={90}
-                value={briefDays}
-                onChange={(e) =>
-                  setBriefDays(Math.max(1, Math.min(90, parseInt(e.target.value) || 7)))
-                }
-                className="h-9 w-28 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              <textarea
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder="e.g. Focus on thought leadership and industry trends…"
+                rows={2}
+                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
+            {/* Generate Marketing Plans */}
             <div className="flex items-center gap-2 pt-1">
               <ModelSwitcher dropUp />
               <button
@@ -1464,6 +1364,37 @@ export default function AgentModeSection() {
                   </div>
                 </div>
               ))}
+
+              {/* Include profile toggle */}
+              <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+                <div className="flex items-center gap-1.5">
+                  <LuUser className="h-3.5 w-3.5 text-blue-500" />
+                  <span className="text-xs font-semibold text-gray-600">
+                    Include profile in plans
+                  </span>
+                  <Tooltip
+                    text="When on, your LinkedIn profile data (writing style, topics, expertise) is used to personalise the marketing plans."
+                    position="bottom"
+                    width="w-64"
+                  />
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={includeProfile}
+                  onClick={() => setIncludeProfile((v) => !v)}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors",
+                    includeProfile ? "bg-blue-600" : "bg-gray-300"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
+                      includeProfile ? "translate-x-4" : "translate-x-0.5"
+                    )}
+                  />
+                </button>
+              </div>
 
               {/* Delete website confirm modal */}
               <Modal
@@ -1626,6 +1557,19 @@ export default function AgentModeSection() {
                             )}
                           >
                             <div className="flex items-center gap-2 px-2.5 py-1.5">
+                              <input
+                                type="checkbox"
+                                checked={selectedWebsiteIds.has(site.id)}
+                                onChange={(e) => {
+                                  setSelectedWebsiteIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(site.id);
+                                    else next.delete(site.id);
+                                    return next;
+                                  });
+                                }}
+                                className="h-3.5 w-3.5 shrink-0 rounded accent-blue-600"
+                              />
                               <LuGlobe className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                               <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
                                 {site.url}
@@ -1689,7 +1633,6 @@ export default function AgentModeSection() {
                         className="h-8 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
-                    {purposeSelect(websitePurpose, setWebsitePurpose)}
                     <button
                       onClick={handleAddWebsite}
                       disabled={!websiteInput.trim() || websiteAdding}
@@ -1730,6 +1673,19 @@ export default function AgentModeSection() {
                             )}
                           >
                             <div className="flex items-center gap-2 px-2.5 py-1.5">
+                              <input
+                                type="checkbox"
+                                checked={selectedDocIds.has(doc.id)}
+                                onChange={(e) => {
+                                  setSelectedDocIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(doc.id);
+                                    else next.delete(doc.id);
+                                    return next;
+                                  });
+                                }}
+                                className="h-3.5 w-3.5 shrink-0 rounded accent-blue-600"
+                              />
                               <LuFileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                               <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
                                 {doc.filename}
@@ -1798,7 +1754,6 @@ export default function AgentModeSection() {
                         {pendingDoc ? pendingDoc.name : "Choose file…"}
                       </span>
                     </button>
-                    {purposeSelect(docPurpose, setDocPurpose)}
                     <button
                       onClick={handleAddDoc}
                       disabled={!pendingDoc || docUploading}
@@ -1825,28 +1780,51 @@ export default function AgentModeSection() {
                     className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  {profileUrl.trim() && (
-                    <button
-                      onClick={handleSubmitProfile}
-                      disabled={profileLoading}
-                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      {profileLoading ? (
-                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <LuArrowRight className="h-3.5 w-3.5" />
-                      )}
-                      Add
-                    </button>
-                  )}
+                {profileUrl.trim() && (
                   <button
-                    onClick={() => setPhase("b-brief")}
+                    onClick={handleSubmitProfile}
+                    disabled={profileLoading}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {profileLoading ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuArrowRight className="h-3.5 w-3.5" />
+                    )}
+                    Add
+                  </button>
+                )}
+              </div>
+
+              {/* Instruction + Generate */}
+              <div className="space-y-2">
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                    Instruction
+                    <span className="font-normal text-gray-400">— optional</span>
+                    <Tooltip
+                      text="Give the AI extra guidance for planning — e.g. 'Focus on product updates' or 'Write for a technical audience'."
+                      width="w-64"
+                      position="top"
+                    />
+                  </label>
+                  <textarea
+                    value={instruction}
+                    onChange={(e) => setInstruction(e.target.value)}
+                    placeholder="e.g. Focus on thought leadership and industry trends…"
+                    rows={5}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <ModelSwitcher dropUp />
+                  <button
+                    onClick={handleGeneratePlans}
                     disabled={profileLoading}
                     className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                   >
                     <LuSparkles className="h-4 w-4" />
-                    Next
+                    Generate Marketing Plans
                   </button>
                 </div>
               </div>
@@ -1999,7 +1977,7 @@ export default function AgentModeSection() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setPhase("b-brief")}
+                onClick={() => setPhase("a-ready")}
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
                 <LuRefreshCw className="h-3.5 w-3.5" />
@@ -2014,7 +1992,7 @@ export default function AgentModeSection() {
                 {headlinesLoading ? (
                   <LuLoader className="h-4 w-4 animate-spin" />
                 ) : (
-                  <LuCalendarDays className="h-4 w-4" />
+                  <LuSparkles className="h-4 w-4" />
                 )}
                 {headlinesLoading ? "Getting headlines…" : "Get Headlines"}
               </button>
@@ -2136,7 +2114,8 @@ export default function AgentModeSection() {
                   <ModelSwitcher dropUp />
                   <button
                     onClick={() => {
-                      if (selectedCount / briefDays > 2) {
+                      const planDays = selectedPlan?.brief?.days ?? 7;
+                      if (planDays > 0 && selectedCount / planDays > 2) {
                         setShowPostRateWarning(true);
                       } else {
                         handleGenerateFromPlan();
@@ -2234,7 +2213,8 @@ export default function AgentModeSection() {
       {/* ── Post Rate Warning Modal ── */}
       {(() => {
         const selectedCount = headlineItems.filter((h) => h.selected).length;
-        const postsPerDay = briefDays > 0 ? (selectedCount / briefDays).toFixed(1) : "—";
+        const planDays = selectedPlan?.brief?.days ?? 7;
+        const postsPerDay = planDays > 0 ? (selectedCount / planDays).toFixed(1) : "—";
         return (
           <Modal
             isOpen={showPostRateWarning}
@@ -2247,7 +2227,7 @@ export default function AgentModeSection() {
               You selected{" "}
               <span className="font-semibold text-gray-900">{selectedCount} posts</span> over{" "}
               <span className="font-semibold text-gray-900">
-                {briefDays} day{briefDays !== 1 ? "s" : ""}
+                {planDays} day{planDays !== 1 ? "s" : ""}
               </span>{" "}
               - that&apos;s{" "}
               <span className="font-semibold text-amber-600">{postsPerDay} posts/day</span> on

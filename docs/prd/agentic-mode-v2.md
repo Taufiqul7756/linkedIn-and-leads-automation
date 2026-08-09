@@ -384,6 +384,11 @@ interface PlanningBrief {
   target_audience: string | null;
   region: string | null;          // IANA timezone e.g. "Europe/Berlin"
   days: number;                   // 1–90, default 7
+  plan_count: number;
+  instruction: string | null;
+  agent_documents: string[];      // doc UUIDs included in generation
+  agent_websites: string[];       // website UUIDs included in generation
+  parent_plan: string | null;
 }
 ```
 
