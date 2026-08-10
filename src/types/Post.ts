@@ -41,6 +41,9 @@ export type PostType = {
   image_url: string;
   image_file: null | string;
   image_status: string;
+  video_url: string;
+  video_file: null | string;
+  media_type: string;
   scope?: "corporate" | "personal";
   status: "draft" | "approved" | "scheduled" | "published" | "failed";
   scheduled_at: string | null;
