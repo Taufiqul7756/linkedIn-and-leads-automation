@@ -39,13 +39,24 @@ export const postsService = (workspaceId: string) => ({
   patchPost: (
     id: string,
     data:
-      | { body?: string; hashtags?: string[]; image_url?: string; suggested_publish_at?: string }
+      | {
+          body?: string;
+          hashtags?: string[];
+          image_url?: string;
+          video_url?: string;
+          suggested_publish_at?: string;
+        }
       | FormData
   ) => patch<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/`, data),
   uploadImage: (id: string, file: File) => {
     const form = new FormData();
     form.append("image", file);
     return post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/upload_image/`, form);
+  },
+  uploadVideo: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("video", file);
+    return post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/upload_video/`, form);
   },
   approvePost: (id: string) =>
     post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/approve/`),

@@ -447,6 +447,13 @@ export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manua
                     className="mb-3 w-full rounded-lg object-cover"
                     style={{ maxHeight: 220 }}
                   />
+                ) : post.video_url ? (
+                  <video
+                    src={post.video_url}
+                    controls
+                    className="mb-3 w-full rounded-lg"
+                    style={{ maxHeight: 220 }}
+                  />
                 ) : null}
 
                 {hashtags.length > 0 && (
