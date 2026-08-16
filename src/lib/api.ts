@@ -1,12 +1,6 @@
 import axios from "axios";
 import { Config } from "@/config/config";
 
-declare module "axios" {
-  interface InternalAxiosRequestConfig {
-    _retry?: boolean;
-  }
-}
-
 const AUTH_KEY = "auth";
 
 function getStoredToken(): string | null {
@@ -33,30 +27,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-let refreshPromise: Promise<void> | null = null;
-
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    const isRefreshEndpoint = originalRequest.url?.includes("/auth/refresh");
-
-    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshEndpoint) {
-      originalRequest._retry = true;
-      try {
-        if (!refreshPromise) {
-          refreshPromise = api
-            .post("/auth/refresh")
-            .then(() => undefined)
-            .finally(() => {
-              refreshPromise = null;
-            });
-        }
-        await refreshPromise;
-        return api(originalRequest);
-      } catch {
-        return Promise.reject(error);
-      }
+  (error) => {
+    if (error.response?.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("auth");
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   }
