@@ -118,6 +118,7 @@ export default function AgentModeSection() {
   const [profileUrl, setProfileUrl] = useState("");
   const [profileLoading, setProfileLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<LinkedInProfile | null>(null);
+  const [showInputError, setShowInputError] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [plans, setPlans] = useState<MarketingPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<MarketingPlan | null>(null);
@@ -256,6 +257,7 @@ export default function AgentModeSection() {
       const p = await agentService(workspaceId).getProfile(id);
       if (!p) return;
       setProfile(p);
+      setProfiles((prev) => prev.map((x) => (x.id === p.id ? p : x)));
       if (p.status === "ready") {
         stopPolling();
         setPhase("a-ready");
@@ -655,6 +657,18 @@ export default function AgentModeSection() {
   };
 
   const handleGeneratePlans = async () => {
+    const hasProfile = includeProfile && profiles.length > 0;
+    const hasKnowledge =
+      selectedDocIds.size > 0 ||
+      selectedWebsiteIds.size > 0 ||
+      queuedWebsites.length > 0 ||
+      queuedDocs.length > 0;
+    const hasInstruction = instruction.trim().length > 0;
+    if (!hasProfile && !hasKnowledge && !hasInstruction) {
+      setShowInputError(true);
+      return;
+    }
+    setShowInputError(false);
     setEditingPlanId(null);
     setEditDraft({});
     setPhase("b-generating");
@@ -664,7 +678,7 @@ export default function AgentModeSection() {
       if (instruction.trim()) body.instruction = instruction.trim();
       if (selectedDocIds.size > 0) body.agent_documents = [...selectedDocIds];
       if (selectedWebsiteIds.size > 0) body.agent_websites = [...selectedWebsiteIds];
-      body.include_profile = includeProfile;
+      if (profiles.length > 0) body.include_profile = includeProfile;
       const data = await agentService(workspaceId).generatePlans(body);
       const planList = Array.isArray(data)
         ? data
@@ -874,7 +888,12 @@ export default function AgentModeSection() {
             />
 
             {/* LinkedIn Profile URL */}
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div
+              className={cn(
+                "rounded-xl border p-3",
+                showInputError ? "border-red-400 bg-red-50" : "border-gray-200 bg-gray-50"
+              )}
+            >
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 <LuUser className="h-3.5 w-3.5 text-blue-500" />
                 LinkedIn Profile URL
@@ -912,39 +931,15 @@ export default function AgentModeSection() {
               </div>
             </div>
 
-            {/* Include profile toggle */}
-            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
-              <div className="flex items-center gap-1.5">
-                <LuUser className="h-3.5 w-3.5 text-blue-500" />
-                <span className="text-xs font-semibold text-gray-600">
-                  Include profile in plans
-                </span>
-                <Tooltip
-                  text="When on, your LinkedIn profile data (writing style, topics, expertise) is used to personalise the marketing plans."
-                  position="bottom"
-                  width="w-64"
-                />
-              </div>
-              <button
-                role="switch"
-                aria-checked={includeProfile}
-                onClick={() => setIncludeProfile((v) => !v)}
-                className={cn(
-                  "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors",
-                  includeProfile ? "bg-blue-600" : "bg-gray-300"
-                )}
-              >
-                <span
-                  className={cn(
-                    "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
-                    includeProfile ? "translate-x-4" : "translate-x-0.5"
-                  )}
-                />
-              </button>
-            </div>
-
             {/* Websites */}
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div
+              className={cn(
+                "rounded-xl border p-3",
+                showInputError && selectedWebsiteIds.size === 0 && queuedWebsites.length === 0
+                  ? "border-red-400 bg-red-50"
+                  : "border-gray-200 bg-gray-50"
+              )}
+            >
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
                 Websites
@@ -1093,7 +1088,14 @@ export default function AgentModeSection() {
             </div>
 
             {/* Documents */}
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div
+              className={cn(
+                "rounded-xl border p-3",
+                showInputError && selectedDocIds.size === 0 && queuedDocs.length === 0
+                  ? "border-red-400 bg-red-50"
+                  : "border-gray-200 bg-gray-50"
+              )}
+            >
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
                 <LuFileText className="h-3.5 w-3.5 text-blue-500" />
                 Documents
@@ -1257,12 +1259,27 @@ export default function AgentModeSection() {
               </label>
               <textarea
                 value={instruction}
-                onChange={(e) => setInstruction(e.target.value)}
+                onChange={(e) => {
+                  setInstruction(e.target.value);
+                  if (showInputError) setShowInputError(false);
+                }}
                 placeholder="e.g. Focus on thought leadership and industry trends…"
-                rows={2}
-                className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                rows={6}
+                className={cn(
+                  "w-full resize-none rounded-lg border px-3 py-2 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1",
+                  showInputError && !instruction.trim()
+                    ? "border-red-400 bg-red-50 focus:border-red-400 focus:ring-red-100"
+                    : "border-gray-200 bg-white focus:border-blue-500 focus:ring-blue-500"
+                )}
               />
             </div>
+
+            {showInputError && (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-red-500">
+                <LuTriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                You must provide at least one: profile, knowledge source, or instruction.
+              </p>
+            )}
 
             {/* Generate Marketing Plans */}
             <div className="flex items-center gap-2 pt-1">
@@ -1366,7 +1383,14 @@ export default function AgentModeSection() {
               ))}
 
               {/* Include profile toggle */}
-              <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <div
+                className={cn(
+                  "flex items-center justify-between rounded-xl border bg-gray-50 px-3 py-2.5",
+                  showInputError && !(includeProfile && profiles.length > 0)
+                    ? "border-red-400 bg-red-50"
+                    : "border-gray-200"
+                )}
+              >
                 <div className="flex items-center gap-1.5">
                   <LuUser className="h-3.5 w-3.5 text-blue-500" />
                   <span className="text-xs font-semibold text-gray-600">
@@ -1381,7 +1405,10 @@ export default function AgentModeSection() {
                 <button
                   role="switch"
                   aria-checked={includeProfile}
-                  onClick={() => setIncludeProfile((v) => !v)}
+                  onClick={() => {
+                    setIncludeProfile((v) => !v);
+                    if (showInputError) setShowInputError(false);
+                  }}
                   className={cn(
                     "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors",
                     includeProfile ? "bg-blue-600" : "bg-gray-300"
@@ -1528,7 +1555,14 @@ export default function AgentModeSection() {
                 </div>
 
                 {/* Websites */}
-                <div className="mb-3">
+                <div
+                  className={cn(
+                    "mb-3 rounded-lg p-2 transition-colors",
+                    showInputError && selectedWebsiteIds.size === 0
+                      ? "border border-red-400 bg-red-50"
+                      : "border border-transparent"
+                  )}
+                >
                   <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
                     <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
                     Websites
@@ -1644,7 +1678,14 @@ export default function AgentModeSection() {
                 </div>
 
                 {/* Documents */}
-                <div>
+                <div
+                  className={cn(
+                    "rounded-lg p-2 transition-colors",
+                    showInputError && selectedDocIds.size === 0
+                      ? "border border-red-400 bg-red-50"
+                      : "border border-transparent"
+                  )}
+                >
                   <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
                     <LuFileText className="h-3.5 w-3.5 text-blue-500" />
                     Documents
@@ -1765,37 +1806,6 @@ export default function AgentModeSection() {
                 </div>
               </div>
 
-              {/* Add another profile URL */}
-              <div className="space-y-2 pt-1">
-                <div className="relative">
-                  <LuLink className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="url"
-                    value={profileUrl}
-                    onChange={(e) => setProfileUrl(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSubmitProfile();
-                    }}
-                    placeholder="Add another profile URL (optional)"
-                    className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                {profileUrl.trim() && (
-                  <button
-                    onClick={handleSubmitProfile}
-                    disabled={profileLoading}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {profileLoading ? (
-                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <LuArrowRight className="h-3.5 w-3.5" />
-                    )}
-                    Add
-                  </button>
-                )}
-              </div>
-
               {/* Instruction + Generate */}
               <div className="space-y-2">
                 <div>
@@ -1810,12 +1820,26 @@ export default function AgentModeSection() {
                   </label>
                   <textarea
                     value={instruction}
-                    onChange={(e) => setInstruction(e.target.value)}
+                    onChange={(e) => {
+                      setInstruction(e.target.value);
+                      if (showInputError) setShowInputError(false);
+                    }}
                     placeholder="e.g. Focus on thought leadership and industry trends…"
-                    rows={5}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    rows={6}
+                    className={cn(
+                      "w-full rounded-lg border px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-1",
+                      showInputError && !instruction.trim()
+                        ? "border-red-400 bg-red-50 focus:border-red-400 focus:ring-red-100"
+                        : "border-gray-200 bg-white focus:border-blue-500 focus:ring-blue-500"
+                    )}
                   />
                 </div>
+                {showInputError && (
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-red-500">
+                    <LuTriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                    You must provide at least one: profile, knowledge source, or instruction.
+                  </p>
+                )}
                 <div className="flex items-center gap-2">
                   <ModelSwitcher dropUp />
                   <button
