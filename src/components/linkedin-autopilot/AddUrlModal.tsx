@@ -23,6 +23,7 @@ function WebsiteStatusDot({ status }: { status: WebsiteType["status"] }) {
     crawling: "bg-amber-400",
     pending: "bg-gray-300",
     error: "bg-red-400",
+    failed: "bg-red-400",
   };
   return (
     <span className={cn("mt-0.5 h-2 w-2 shrink-0 rounded-full", colors[status] ?? "bg-gray-300")} />
