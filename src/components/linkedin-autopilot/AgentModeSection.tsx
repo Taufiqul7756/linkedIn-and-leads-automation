@@ -102,7 +102,13 @@ function StepBar({ current }: { current: "a" | "b" | "c" | "d" }) {
   );
 }
 
-export default function AgentModeSection() {
+export default function AgentModeSection({
+  showCard = true,
+  triggerOpen,
+}: {
+  showCard?: boolean;
+  triggerOpen?: number;
+} = {}) {
   const [open, setOpen] = useState(false);
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
@@ -554,6 +560,13 @@ export default function AgentModeSection() {
 
   const handleOpen = () => handleOpenWithStep(0);
 
+  // External trigger — from mode cards in page.tsx
+  useEffect(() => {
+    if (!triggerOpen) return;
+    setTimeout(() => handleOpen(), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerOpen]);
+
   // On mount: if URL has agent=open, auto-open the modal at the right step
   useEffect(() => {
     if (!workspaceId || didRestoreRef.current) return;
@@ -836,25 +849,27 @@ export default function AgentModeSection() {
 
   return (
     <>
-      <div className="flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600">
-          <LuZap className="h-4 w-4 text-white" />
+      {showCard && (
+        <div className="flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600">
+            <LuZap className="h-4 w-4 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-gray-900">Agent Mode</p>
+            <p className="text-xs text-gray-500">
+              Analyze your LinkedIn profile, build a content plan, and generate posts automatically.
+            </p>
+          </div>
+          <button
+            onClick={handleOpen}
+            disabled={!workspaceId}
+            className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          >
+            <LuSparkles className="h-3.5 w-3.5" />
+            Run Agent
+          </button>
         </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-gray-900">Agent Mode</p>
-          <p className="text-xs text-gray-500">
-            Analyze your LinkedIn profile, build a content plan, and generate posts automatically.
-          </p>
-        </div>
-        <button
-          onClick={handleOpen}
-          disabled={!workspaceId}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-        >
-          <LuSparkles className="h-3.5 w-3.5" />
-          Run Agent
-        </button>
-      </div>
+      )}
 
       <Modal
         isOpen={open}
