@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function LeadsPage() {
-  redirect("/leads/outreach");
+  redirect("/leads/collect");
 }

@@ -20,9 +20,11 @@ import { authService } from "@/service/authService";
 const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
 
 const leadsSubItems = [
-  { label: "Leads Outreach", href: "/leads/outreach" },
-  { label: "Leads by Niche", href: "/leads/niche" },
-  { label: "Inbox", href: "/leads/inbox" },
+  { label: "Leads Collect", href: "/leads/collect", live: true },
+  { label: "Leads Generate", href: "/leads/generate", live: true },
+  { label: "Leads Outreach", href: "/leads/outreach", live: false },
+  { label: "Leads by Niche", href: "/leads/niche", live: false },
+  { label: "Inbox", href: "/leads/inbox", live: false },
 ];
 
 const LEADS_ROOT = "/leads";
@@ -170,19 +172,35 @@ export default function Sidebar() {
 
           {!collapsed && leadsOpen && (
             <div className="mt-0.5 space-y-0.5 pl-3">
-              {leadsSubItems.map(({ label, href }) => (
-                <span
-                  key={href}
-                  title="Coming soon"
-                  className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-400"
-                >
-                  <span className="text-xs text-gray-300">•</span>
-                  <span className="flex-1">{label}</span>
-                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-400">
-                    Soon
+              {leadsSubItems.map(({ label, href, live }) =>
+                live ? (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
+                      pathname === href || pathname.startsWith(href + "/")
+                        ? "bg-blue-50 text-blue-700 font-medium"
+                        : "text-gray-600 hover:bg-gray-50"
+                    )}
+                  >
+                    <span className="text-xs text-gray-300">•</span>
+                    <span className="flex-1">{label}</span>
+                  </Link>
+                ) : (
+                  <span
+                    key={href}
+                    title="Coming soon"
+                    className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-400"
+                  >
+                    <span className="text-xs text-gray-300">•</span>
+                    <span className="flex-1">{label}</span>
+                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-400">
+                      Soon
+                    </span>
                   </span>
-                </span>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
