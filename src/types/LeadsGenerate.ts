@@ -4,9 +4,6 @@ export type { CompanySizeOption };
 
 export type EmailQuality = "verified" | "guessed";
 
-// Kept for future use — not sent in the current simplified flow.
-export { SENIORITY_OPTIONS } from "@/types/LeadsCollect";
-
 export interface GenerateRequest {
   keywords: string[];
   locations: string[];
@@ -25,6 +22,8 @@ export interface GenerateLead {
   title: string | null;
   company_name: string | null;
   company_domain: string | null;
+  company_location: string | null;
+  company_email: string | null;
   industry: string | null;
   company_size: string | null;
   location: string | null;
@@ -82,7 +81,74 @@ export interface OrganizationListResponse {
   count: number;
 }
 
-// Open-ended email status badge helper — never throws on unknown values.
+// ── Enrich response (POST /api/leads/{external_id}/enrich/) ──────────────────
+
+export interface EnrichLeadOrganization {
+  id: number;
+  name: string;
+  primary_domain: string | null;
+  website_url: string | null;
+  linkedin_url: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  industry: string | null;
+  estimated_num_employees: number | null;
+  founded_year: number | null;
+}
+
+export interface EnrichLeadData {
+  id: number;
+  external_id: string;
+  source: string;
+  organization: EnrichLeadOrganization | null;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  title: string | null;
+  seniority: string | null;
+  company_name: string | null;
+  company_domain: string | null;
+  company_size: string | null;
+  industry: string | null;
+  location: string | null;
+  linkedin_url: string | null;
+  email: string | null;
+  phone: string | null;
+  email_status: string;
+  is_enriched: boolean;
+  enriched_at: string | null;
+}
+
+export interface EnrichLeadResponse {
+  data: EnrichLeadData;
+}
+
+// Maps the enrich API response shape → the GenerateLead shape used by the table
+export function enrichedToGenerateLead(d: EnrichLeadData): GenerateLead {
+  return {
+    external_id: d.external_id,
+    first_name: d.first_name,
+    last_name: d.last_name,
+    full_name: d.full_name,
+    seniority: d.seniority,
+    title: d.title,
+    company_name: d.company_name ?? d.organization?.name ?? null,
+    company_domain: d.company_domain ?? d.organization?.primary_domain ?? null,
+    company_location: null,
+    company_email: null,
+    industry: d.industry ?? d.organization?.industry ?? null,
+    company_size: d.company_size,
+    location: d.location,
+    linkedin_url: d.linkedin_url,
+    email: d.email,
+    email_status: d.email_status,
+    phone: d.phone,
+  };
+}
+
+// ── Open-ended email status badge helper — never throws on unknown values. ────
 export const EMAIL_STATUS_STYLES: Record<string, { label: string; className: string }> = {
   verified: { label: "Verified", className: "bg-green-100 text-green-700" },
   guessed: { label: "Guessed", className: "bg-amber-100 text-amber-700" },

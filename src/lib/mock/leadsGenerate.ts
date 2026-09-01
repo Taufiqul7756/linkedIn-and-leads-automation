@@ -1,0 +1,45 @@
+import type { GenerateLead } from "@/types/LeadsGenerate";
+
+// AI will fill in: last_name, full_name, company_name, company_location, company_email,
+//                  email, location, seniority, linkedin_url.
+// AI will NOT generate phone numbers or fabricate linkedin URLs unless found.
+export const MOCK_LEADS: GenerateLead[] = [
+  {
+    external_id: "mock-001",
+    first_name: "Taufiqul",
+    last_name: null,
+    full_name: null,
+    seniority: "mid_level",
+    title: "Software Engineer",
+    company_name: null,
+    company_domain: "codefusion.ai",
+    company_location: null,
+    company_email: null,
+    industry: "SaaS",
+    company_size: "1-10",
+    location: null,
+    linkedin_url: null,
+    email: null,
+    email_status: "unknown",
+    phone: null,
+  },
+  {
+    external_id: "mock-002",
+    first_name: "Sazzadul",
+    last_name: null,
+    full_name: null,
+    seniority: null,
+    title: "Software Engineer",
+    company_name: null,
+    company_domain: "codefusion.ai",
+    company_location: null,
+    company_email: null,
+    industry: "SaaS",
+    company_size: "1-10",
+    location: null,
+    linkedin_url: null,
+    email: null,
+    email_status: "unknown",
+    phone: null,
+  },
+];

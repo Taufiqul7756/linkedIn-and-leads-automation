@@ -15,15 +15,185 @@ import {
   LuTriangleAlert,
   LuChevronDown,
   LuSearch,
+  LuFlaskConical,
+  LuSparkles,
 } from "react-icons/lu";
 
 import { cn } from "@/utils/cn";
 import { leadsGenerateService } from "@/service/leadsGenerateService";
-import { leadsCollectService } from "@/service/leadsCollectService";
 import { COMPANY_SIZE_OPTIONS } from "@/types/LeadsCollect";
 import type { CompanySizeOption } from "@/types/LeadsCollect";
 import type { GenerateLead, GenerateResponse } from "@/types/LeadsGenerate";
 import { getEmailStatusStyle, buildEmployeeRanges } from "@/types/LeadsGenerate";
+import { MOCK_LEADS } from "@/lib/mock/leadsGenerate";
+
+// ── AI Models ────────────────────────────────────────────────────────────────
+
+type ModelProvider = "anthropic" | "gemini";
+
+interface EnrichModel {
+  model_id: string;
+  label: string;
+  provider: ModelProvider;
+  is_default?: boolean;
+}
+
+const ENRICH_MODELS: EnrichModel[] = [
+  { model_id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", provider: "anthropic" },
+  { model_id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", provider: "anthropic" },
+  { model_id: "claude-opus-4-6", label: "Claude Opus 4.6", provider: "anthropic" },
+  { model_id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", provider: "gemini", is_default: true },
+  { model_id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", provider: "gemini" },
+  { model_id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", provider: "gemini" },
+];
+
+const DEFAULT_MODEL = ENRICH_MODELS.find((m) => m.is_default)!;
+
+function GeminiIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none">
+      <path
+        d="M12 2C11 8 6 11 2 12C6 13 11 16 12 22C13 16 18 13 22 12C18 11 13 8 12 2Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function ClaudeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none">
+      <rect x="0" y="12" width="2" height="8" rx="1" fill="currentColor" />
+      <rect x="3" y="8" width="2" height="12" rx="1" fill="currentColor" />
+      <rect x="6" y="4" width="2" height="16" rx="1" fill="currentColor" />
+      <rect x="9" y="2" width="2" height="18" rx="1" fill="currentColor" />
+      <rect x="12" y="4" width="2" height="16" rx="1" fill="currentColor" />
+      <rect x="15" y="8" width="2" height="12" rx="1" fill="currentColor" />
+      <rect x="18" y="12" width="2" height="8" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ModelPicker({
+  selected,
+  onChange,
+}: {
+  selected: EnrichModel;
+  onChange: (m: EnrichModel) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<ModelProvider>(selected.provider);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const providers: ModelProvider[] = ["anthropic", "gemini"];
+  const filtered = ENRICH_MODELS.filter((m) => m.provider === activeProvider);
+  const Icon = selected.provider === "gemini" ? GeminiIcon : ClaudeIcon;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-[42px] items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm transition-colors hover:border-gray-300 hover:bg-gray-50"
+      >
+        <Icon
+          className={cn(
+            "h-3.5 w-3.5",
+            selected.provider === "gemini" ? "text-blue-500" : "text-orange-500"
+          )}
+        />
+        <span className="font-medium text-gray-700">{selected.label}</span>
+        <LuChevronDown className="h-3.5 w-3.5 text-gray-400" />
+      </button>
+
+      {open && (
+        <div className="absolute bottom-full left-0 z-30 mb-1.5 min-w-[220px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+          {/* Provider tabs */}
+          <div className="flex border-b border-gray-100">
+            {providers.map((p) => {
+              const PIcon = p === "gemini" ? GeminiIcon : ClaudeIcon;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setActiveProvider(p)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-semibold transition-colors",
+                    activeProvider === p
+                      ? "border-b-2 border-blue-500 text-blue-600"
+                      : "text-gray-400 hover:text-gray-600"
+                  )}
+                >
+                  <PIcon
+                    className={cn(
+                      "h-3 w-3",
+                      activeProvider === p
+                        ? p === "gemini"
+                          ? "text-blue-500"
+                          : "text-orange-500"
+                        : "text-gray-400"
+                    )}
+                  />
+                  {p === "gemini" ? "Gemini" : "Claude"}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Model list */}
+          {filtered.map((model) => {
+            const isSelected = model.model_id === selected.model_id;
+            return (
+              <button
+                key={model.model_id}
+                type="button"
+                onClick={() => {
+                  onChange(model);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+                  isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+                    isSelected ? "border-blue-500" : "border-gray-300"
+                  )}
+                >
+                  {isSelected && <div className="h-2 w-2 rounded-full bg-blue-500" />}
+                </div>
+                <p
+                  className={cn(
+                    "flex-1 text-sm font-medium",
+                    isSelected ? "text-blue-700" : "text-gray-700"
+                  )}
+                >
+                  {model.label}
+                </p>
+                {model.is_default && (
+                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                    Default
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -35,6 +205,13 @@ const PROGRESS_STEPS: { delay: number; text: string }[] = [
   { delay: 8_000, text: "Finding people…" },
   { delay: 20_000, text: "Revealing emails…" },
   { delay: 40_000, text: "Almost done…" },
+];
+
+const MOCK_PROGRESS_STEPS: { delay: number; text: string }[] = [
+  { delay: 0, text: "Loading mock leads…" },
+  { delay: 1_500, text: "Sending to AI for enrichment…" },
+  { delay: 4_000, text: "AI is filling missing fields…" },
+  { delay: 8_000, text: "Almost done…" },
 ];
 
 // ── Form state ───────────────────────────────────────────────────────────────
@@ -242,7 +419,7 @@ function SizeMultiSelect({
 function CreditsBadge() {
   const { data, isLoading } = useQuery({
     queryKey: ["leads-credits"],
-    queryFn: () => leadsCollectService().getCredits(),
+    queryFn: () => leadsGenerateService().getCredits(),
     staleTime: 60_000,
   });
 
@@ -268,24 +445,42 @@ interface ProgressModalProps {
   state: "running" | "error" | "success";
   errorMessage?: string;
   onClose: () => void;
+  isMock?: boolean;
+  modelLabel?: string;
 }
 
-function ProgressModal({ state, errorMessage, onClose }: ProgressModalProps) {
+function ProgressModal({
+  state,
+  errorMessage,
+  onClose,
+  isMock = false,
+  modelLabel,
+}: ProgressModalProps) {
   const [stepIndex, setStepIndex] = useState(0);
+  const steps = isMock ? MOCK_PROGRESS_STEPS : PROGRESS_STEPS;
 
   useEffect(() => {
     if (state !== "running") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStepIndex(0);
-    const timers = PROGRESS_STEPS.slice(1).map((s, i) =>
-      setTimeout(() => setStepIndex(i + 1), s.delay)
-    );
+    const timers = steps.slice(1).map((s, i) => setTimeout(() => setStepIndex(i + 1), s.delay));
     return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
+
+  // Auto-close on success after a short delay so the user sees the table
+  useEffect(() => {
+    if (state !== "success") return;
+    const t = setTimeout(onClose, 800);
+    return () => clearTimeout(t);
+  }, [state, onClose]);
+
+  const accent = isMock ? "violet" : "blue";
+  const progressPct = Math.round((stepIndex / (steps.length - 1)) * 100);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="relative w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
         {/* Close — only after terminal state */}
         {state !== "running" && (
           <button
@@ -297,28 +492,122 @@ function ProgressModal({ state, errorMessage, onClose }: ProgressModalProps) {
         )}
 
         {state === "running" && (
-          <div className="flex flex-col items-center gap-5 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-              <LuLoader className="h-7 w-7 animate-spin text-blue-600" />
+          <div className="flex flex-col gap-6">
+            {/* Header */}
+            <div className="flex items-center gap-4">
+              <div
+                className={cn(
+                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+                  accent === "violet" ? "bg-violet-50" : "bg-blue-50"
+                )}
+              >
+                {isMock ? (
+                  <LuSparkles className="h-6 w-6 animate-pulse text-violet-500" />
+                ) : (
+                  <LuLoader className="h-6 w-6 animate-spin text-blue-600" />
+                )}
+              </div>
+              <div>
+                <p className="text-base font-semibold text-gray-900">
+                  {isMock ? `Enriching with ${modelLabel ?? "AI"}` : "Finding leads"}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-400">
+                  {isMock
+                    ? `${modelLabel ?? "AI"} is enriching each lead`
+                    : "This may take up to 2 minutes — keep this tab open"}
+                </p>
+              </div>
             </div>
+
+            {/* Progress bar */}
             <div>
-              <p className="text-base font-semibold text-gray-900">Finding leads</p>
-              <p className="mt-1 text-sm text-gray-500">{PROGRESS_STEPS[stepIndex].text}</p>
-            </div>
-            <div className="flex gap-1.5">
-              {PROGRESS_STEPS.map((_, i) => (
-                <div
-                  key={i}
+              <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-gray-500">
+                <span>Progress</span>
+                <span
                   className={cn(
-                    "h-1.5 rounded-full transition-all duration-500",
-                    i <= stepIndex ? "w-6 bg-blue-500" : "w-2 bg-gray-200"
+                    "tabular-nums",
+                    accent === "violet" ? "text-violet-600" : "text-blue-600"
                   )}
+                >
+                  {progressPct}%
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-700 ease-out",
+                    accent === "violet" ? "bg-violet-500" : "bg-blue-500"
+                  )}
+                  style={{ width: `${progressPct}%` }}
                 />
-              ))}
+              </div>
             </div>
-            <p className="text-xs text-gray-400">
-              This may take up to 2 minutes — please keep this tab open.
-            </p>
+
+            {/* Step list */}
+            <div className="flex flex-col gap-2.5">
+              {steps.map((step, i) => {
+                const done = i < stepIndex;
+                const active = i === stepIndex;
+                return (
+                  <div key={i} className="flex items-center gap-3">
+                    {/* Step icon */}
+                    <div
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300",
+                        done
+                          ? accent === "violet"
+                            ? "border-violet-500 bg-violet-500"
+                            : "border-blue-500 bg-blue-500"
+                          : active
+                            ? accent === "violet"
+                              ? "border-violet-400 bg-violet-50"
+                              : "border-blue-400 bg-blue-50"
+                            : "border-gray-200 bg-white"
+                      )}
+                    >
+                      {done ? (
+                        <LuCheck className="h-3.5 w-3.5 text-white" />
+                      ) : active ? (
+                        <LuLoader
+                          className={cn(
+                            "h-3 w-3 animate-spin",
+                            accent === "violet" ? "text-violet-500" : "text-blue-500"
+                          )}
+                        />
+                      ) : null}
+                    </div>
+
+                    {/* Step label */}
+                    <span
+                      className={cn(
+                        "text-sm transition-colors duration-300",
+                        done
+                          ? "text-gray-400 line-through decoration-gray-300"
+                          : active
+                            ? "font-medium text-gray-900"
+                            : "text-gray-400"
+                      )}
+                    >
+                      {step.text}
+                    </span>
+
+                    {/* "Done" badge */}
+                    {done && (
+                      <span
+                        className={cn(
+                          "ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                          accent === "violet"
+                            ? "bg-violet-50 text-violet-600"
+                            : "bg-blue-50 text-blue-600"
+                        )}
+                      >
+                        Done
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -374,9 +663,6 @@ function LeadRow({
   onCheck: (v: boolean) => void;
 }) {
   const { label, className: badgeClass } = getEmailStatusStyle(lead.email_status);
-  const name =
-    lead.full_name ?? ([lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—");
-
   return (
     <tr className="group/row border-b border-gray-100 hover:bg-gray-50/60">
       <td className="w-10 px-3 py-3">
@@ -387,16 +673,32 @@ function LeadRow({
           className="h-4 w-4 rounded accent-blue-600"
         />
       </td>
-      {/* Name — sticky */}
+      {/* First Name — sticky */}
       <td className="sticky left-0 z-10 bg-white px-4 py-3 group-hover/row:bg-gray-50/60">
-        <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{name}</span>
+        <span className="text-sm font-medium text-gray-900 whitespace-nowrap">
+          {lead.first_name ?? "—"}
+        </span>
       </td>
+      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{lead.last_name ?? "—"}</td>
       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{lead.title ?? "—"}</td>
       <td className="px-4 py-3">
         <div className="text-sm font-medium text-gray-800 whitespace-nowrap">
           {lead.company_name ?? "—"}
         </div>
         {lead.company_domain && <div className="text-xs text-gray-400">{lead.company_domain}</div>}
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+        {lead.company_location ?? "—"}
+      </td>
+      <td className="px-4 py-3">
+        {lead.company_email ? (
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="text-sm text-gray-700">{lead.company_email}</span>
+            <CopyButton text={lead.company_email} />
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">—</span>
+        )}
       </td>
       <td className="px-4 py-3">
         {lead.email ? (
@@ -411,20 +713,30 @@ function LeadRow({
           <span className="text-sm text-gray-400">—</span>
         )}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{lead.phone ?? "—"}</td>
       <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{lead.location ?? "—"}</td>
       <td className="px-4 py-3">
         {lead.linkedin_url ? (
-          <a
-            href={lead.linkedin_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
-          >
-            <LuLinkedin className="h-3.5 w-3.5" />
-            View
-            <LuExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <LuLinkedin className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+            <a
+              href={lead.linkedin_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="max-w-[180px] truncate text-sm text-blue-600 hover:underline"
+              title={lead.linkedin_url}
+            >
+              {lead.linkedin_url.replace("https://", "").replace("http://", "")}
+            </a>
+            <CopyButton text={lead.linkedin_url} />
+            <a
+              href={lead.linkedin_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <LuExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         ) : (
           <span className="text-sm text-gray-400">—</span>
         )}
@@ -437,25 +749,29 @@ function LeadRow({
 
 function exportCsv(leads: GenerateLead[]) {
   const headers = [
-    "full_name",
+    "first_name",
+    "last_name",
     "title",
     "company_name",
     "company_domain",
+    "company_location",
+    "company_email",
     "email",
     "email_status",
-    "phone",
     "location",
     "linkedin_url",
   ];
   const rows = leads.map((l) =>
     [
-      l.full_name ?? [l.first_name, l.last_name].filter(Boolean).join(" "),
+      l.first_name ?? "",
+      l.last_name ?? "",
       l.title ?? "",
       l.company_name ?? "",
       l.company_domain ?? "",
+      l.company_location ?? "",
+      l.company_email ?? "",
       l.email ?? "",
       l.email_status,
-      l.phone ?? "",
       l.location ?? "",
       l.linkedin_url ?? "",
     ]
@@ -486,10 +802,12 @@ export default function LeadsGenerateView() {
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [isMock, setIsMock] = useState(false);
+  const [enrichModel, setEnrichModel] = useState<EnrichModel>(DEFAULT_MODEL);
 
   const { refetch: refetchCredits } = useQuery({
     queryKey: ["leads-credits"],
-    queryFn: () => leadsCollectService().getCredits(),
+    queryFn: () => leadsGenerateService().getCredits(),
     staleTime: 60_000,
   });
 
@@ -513,6 +831,7 @@ export default function LeadsGenerateView() {
   const handleGenerate = async () => {
     setSubmitAttempted(true);
     if (form.keywords.length === 0 && form.locations.length === 0) return;
+    setIsMock(false);
 
     const body = {
       keywords: form.keywords,
@@ -542,6 +861,34 @@ export default function LeadsGenerateView() {
       setErrorMessage(msg);
       setModalState("error");
       void refetchCredits();
+    }
+  };
+
+  const handleMockGenerate = async () => {
+    setIsMock(true);
+    setModalState("running");
+    setErrorMessage(undefined);
+
+    try {
+      const data = await leadsGenerateService().mockEnrichLeads(MOCK_LEADS, enrichModel.model_id);
+      const mockResult: GenerateResponse = {
+        leads: data.leads,
+        organizations_searched: new Set(data.leads.map((l) => l.company_domain)).size,
+        people_found: data.leads.length,
+        enriched: data.leads.length,
+        credits_spent: 0,
+        shortfall: 0,
+        credits_remaining: 0,
+      };
+
+      setResult(mockResult);
+      setSelected(new Set());
+      setModalState("success");
+    } catch (err: unknown) {
+      setErrorMessage(
+        (err as Error)?.message ?? "Claude enrichment failed. Check your ANTHROPIC_API_KEY."
+      );
+      setModalState("error");
     }
   };
 
@@ -585,10 +932,12 @@ export default function LeadsGenerateView() {
           state={modalState === "success" ? "success" : modalState}
           errorMessage={errorMessage}
           onClose={handleModalClose}
+          isMock={isMock}
+          modelLabel={enrichModel.label}
         />
       )}
 
-      <div className="mx-auto w-full max-w-5xl px-6 py-8">
+      <div className="w-full px-6 py-8">
         {/* Header */}
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
@@ -682,6 +1031,19 @@ export default function LeadsGenerateView() {
               <LuSearch className="h-4 w-4" />
               Find leads
             </button>
+
+            <div className="flex items-center gap-2">
+              <ModelPicker selected={enrichModel} onChange={setEnrichModel} />
+              <button
+                type="button"
+                onClick={handleMockGenerate}
+                className="flex h-[42px] items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 text-sm font-semibold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 active:bg-violet-200"
+                title={`Enrich 10 mock leads with ${enrichModel.label} (no Apollo credits needed)`}
+              >
+                <LuFlaskConical className="h-4 w-4" />
+                Try with mock data
+              </button>
+            </div>
           </div>
         </div>
 
@@ -690,16 +1052,32 @@ export default function LeadsGenerateView() {
           <div id="results-section" className="mt-6">
             {/* Summary strip */}
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-gray-600">
-                <span className="font-semibold text-gray-900">{leads.length}</span>{" "}
-                {leads.length === 1 ? "lead" : "leads"} from{" "}
-                <span className="font-semibold text-gray-900">{result.organizations_searched}</span>{" "}
-                {result.organizations_searched === 1 ? "company" : "companies"} ·{" "}
-                <span className="font-semibold text-gray-900">
-                  {result.credits_spent.toFixed(1)}
-                </span>{" "}
-                credits spent
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold text-gray-900">{leads.length}</span>{" "}
+                  {leads.length === 1 ? "lead" : "leads"} from{" "}
+                  <span className="font-semibold text-gray-900">
+                    {result.organizations_searched}
+                  </span>{" "}
+                  {result.organizations_searched === 1 ? "company" : "companies"}
+                  {!isMock && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <span className="font-semibold text-gray-900">
+                        {result.credits_spent.toFixed(1)}
+                      </span>{" "}
+                      credits spent
+                    </>
+                  )}
+                </p>
+                {isMock && (
+                  <span className="flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
+                    <LuSparkles className="h-3 w-3" />
+                    Enriched by {enrichModel.label} · Mock data
+                  </span>
+                )}
+              </div>
 
               {leads.length > 0 && (
                 <button
@@ -736,7 +1114,7 @@ export default function LeadsGenerateView() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-left text-sm">
+                  <table className="w-full min-w-[1200px] text-left text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <th className="w-10 px-3 py-3">
@@ -750,11 +1128,13 @@ export default function LeadsGenerateView() {
                             className="h-4 w-4 rounded accent-blue-600"
                           />
                         </th>
-                        <th className="sticky left-0 z-10 bg-gray-50/80 px-4 py-3">Name</th>
+                        <th className="sticky left-0 z-10 bg-gray-50/80 px-4 py-3">First Name</th>
+                        <th className="px-4 py-3">Last Name</th>
                         <th className="px-4 py-3">Title</th>
                         <th className="px-4 py-3">Company</th>
+                        <th className="px-4 py-3">Company Address</th>
+                        <th className="px-4 py-3">Company Email</th>
                         <th className="px-4 py-3">Email</th>
-                        <th className="px-4 py-3">Phone</th>
                         <th className="px-4 py-3">Location</th>
                         <th className="px-4 py-3">LinkedIn</th>
                       </tr>

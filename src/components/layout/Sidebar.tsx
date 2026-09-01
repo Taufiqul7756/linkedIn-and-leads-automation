@@ -19,8 +19,15 @@ import { authService } from "@/service/authService";
 
 const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
 
+const linkedInSubItems = [
+  { label: "Automation", href: "/linkedin/automation" },
+  { label: "Accounts & Knowledge", href: "/linkedin/accounts" },
+  { label: "Post Management", href: "/linkedin/post-management" },
+];
+
+const LINKEDIN_ROOT = "/linkedin";
+
 const leadsSubItems = [
-  { label: "Leads Collect", href: "/leads/collect", live: true },
   { label: "Leads Generate", href: "/leads/generate", live: true },
   { label: "Leads Outreach", href: "/leads/outreach", live: false },
   { label: "Leads by Niche", href: "/leads/niche", live: false },
@@ -36,6 +43,7 @@ export default function Sidebar() {
 
   const [collapsed, setCollapsed] = useState(false);
   const [leadsOpen, setLeadsOpen] = useState(pathname.startsWith(LEADS_ROOT));
+  const [linkedInOpen, setLinkedInOpen] = useState(pathname.startsWith(LINKEDIN_ROOT));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -55,6 +63,7 @@ export default function Sidebar() {
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
       if (next) {
         setLeadsOpen(false);
+        setLinkedInOpen(false);
         setUserMenuOpen(false);
       }
       return next;
@@ -89,7 +98,8 @@ export default function Sidebar() {
     }
   };
 
-  const isLinkedInActive =
+  const isLinkedInActive = pathname.startsWith(LINKEDIN_ROOT);
+  const isLinkedInAutopilotActive =
     pathname === "/linkedin-autopilot" || pathname.startsWith("/linkedin-autopilot/");
 
   return (
@@ -205,7 +215,56 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* LinkedIn Automation */}
+        {/* LinkedIn */}
+        <div className="mt-1">
+          <button
+            onClick={() => {
+              if (collapsed) return;
+              setLinkedInOpen((v) => !v);
+            }}
+            title={collapsed ? "LinkedIn" : undefined}
+            className={cn(
+              "flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors",
+              collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
+              isLinkedInActive ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"
+            )}
+          >
+            <FaLinkedinIn className="h-4 w-4 shrink-0" />
+            {!collapsed && (
+              <>
+                <span className="flex-1 text-left">LinkedIn</span>
+                <LuChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                    linkedInOpen ? "rotate-0" : "-rotate-90"
+                  )}
+                />
+              </>
+            )}
+          </button>
+
+          {!collapsed && linkedInOpen && (
+            <div className="mt-0.5 space-y-0.5 pl-3">
+              {linkedInSubItems.map(({ label, href }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
+                    pathname === href || pathname.startsWith(href + "/")
+                      ? "bg-blue-50 font-medium text-blue-700"
+                      : "text-gray-600 hover:bg-gray-50"
+                  )}
+                >
+                  <span className="text-xs text-gray-300">•</span>
+                  <span className="flex-1">{label}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* LinkedIn Autopilot (existing) */}
         <div className="mt-1">
           <Link
             href="/linkedin-autopilot"
@@ -213,7 +272,9 @@ export default function Sidebar() {
             className={cn(
               "flex items-center rounded-lg py-2 text-sm font-medium transition-colors",
               collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-              isLinkedInActive ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"
+              isLinkedInAutopilotActive
+                ? "bg-blue-50 text-blue-700"
+                : "text-gray-700 hover:bg-gray-50"
             )}
           >
             <FaLinkedinIn className="h-4 w-4 shrink-0" />

@@ -2,9 +2,11 @@ import leadsApi, { leadsGet, leadsPost } from "@/lib/leadsApi";
 import type {
   GenerateRequest,
   GenerateResponse,
+  GenerateLead,
   PreviewResponse,
   OrganizationDetail,
   OrganizationListResponse,
+  EnrichLeadResponse,
 } from "@/types/LeadsGenerate";
 
 export const leadsGenerateService = () => ({
@@ -34,4 +36,15 @@ export const leadsGenerateService = () => ({
   },
 
   getOrganization: (id: string) => leadsGet<OrganizationDetail>(`/organizations/${id}/`),
+
+  // POST /api/leads/{external_id}/enrich/ — enriches a single lead via the provider (Apollo)
+  enrichLead: (externalId: string) =>
+    leadsApi.post<EnrichLeadResponse>(`/${externalId}/enrich/`).then((res) => res.data),
+
+  // POST /api/leads/mock-enrich/ — enriches partial leads via Claude/Gemini (no Apollo needed)
+  mockEnrichLeads: (leads: GenerateLead[], model?: string) =>
+    leadsPost<{ leads: GenerateLead[] }>("/mock-enrich/", { leads, model }),
+
+  getCredits: () =>
+    leadsGet<{ data: { used: number; budget: number; remaining: number } }>("/credits/"),
 });
