@@ -1,12 +1,13 @@
-export type WebsiteStatus = "pending" | "crawling" | "ready" | "error";
+export type WebsiteStatus = "pending" | "crawling" | "ready" | "error" | "failed";
 
 export type WebsiteType = {
   id: string;
   url: string;
-  scope: "corporate" | "personal";
+  kind: string;
+  is_default: boolean;
   status: WebsiteStatus;
   summary: string;
-  facets: Record<string, unknown>;
+  facets: string;
   error: string;
   created_at: string;
 };

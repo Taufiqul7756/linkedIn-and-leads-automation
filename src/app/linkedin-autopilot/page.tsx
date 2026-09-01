@@ -1,11 +1,12 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
-import SetupStepper from "@/components/linkedin-autopilot/SetupStepper";
+import { LuBot, LuPenLine } from "react-icons/lu";
+import { cn } from "@/utils/cn";
 import AccountSection from "@/components/linkedin-autopilot/AccountSection";
-import GeneratePostsSection from "@/components/linkedin-autopilot/GeneratePostsSection";
+import AgentModeSection from "@/components/linkedin-autopilot/AgentModeSection";
+import ManualModeSection from "@/components/linkedin-autopilot/ManualModeSection";
 import ReviewApprovalSection from "@/components/linkedin-autopilot/ReviewApprovalSection";
 import PostManagementSection from "@/components/linkedin-autopilot/PostManagementSection";
-import AgentWorkflowSection from "@/components/linkedin-autopilot/AgentWorkflowSection";
 
 type Mode = "agent" | "manual";
 
@@ -26,51 +27,15 @@ function Sk({ className }: { className?: string }) {
 function PageSkeleton() {
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Mode tabs */}
-      <div className="flex gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
-        <Sk className="h-10 flex-1" />
-        <Sk className="h-10 flex-1" />
-      </div>
-
-      {/* Setup stepper */}
+      {/* LinkedIn card */}
       <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-2">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex flex-1 items-center gap-2">
-              <Sk className="h-8 w-8 shrink-0 rounded-full" />
-              {i < 4 && <Sk className="h-1 flex-1" />}
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 flex justify-between">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Sk key={i} className="h-3 w-16" />
-          ))}
-        </div>
-      </div>
-
-      {/* Agent mode banner */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
+        <div className="flex items-center gap-4">
+          <Sk className="h-10 w-10 rounded-xl" />
+          <div className="flex-1 space-y-2">
             <Sk className="h-4 w-40" />
-            <Sk className="h-3 w-64" />
+            <Sk className="h-3 w-56" />
           </div>
-          <Sk className="h-9 w-28 rounded-lg" />
-        </div>
-      </div>
-
-      {/* Account + knowledge base cards */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-          <Sk className="h-4 w-32" />
-          <Sk className="h-3 w-48" />
-          <Sk className="h-8 w-24 rounded-lg" />
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-          <Sk className="h-4 w-32" />
-          <Sk className="h-3 w-48" />
-          <Sk className="h-8 w-24 rounded-lg" />
+          <Sk className="h-9 w-20 rounded-lg" />
         </div>
       </div>
 
@@ -85,6 +50,12 @@ function PageSkeleton() {
             <Sk className="h-6 w-12" />
           </div>
         ))}
+      </div>
+
+      {/* Mode cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <Sk className="h-24 rounded-2xl" />
+        <Sk className="h-24 rounded-2xl" />
       </div>
 
       {/* Review & Approval */}
@@ -103,39 +74,6 @@ function PageSkeleton() {
               <Sk className="h-3 w-full" />
               <Sk className="h-3 w-5/6" />
               <Sk className="h-32 w-full rounded-lg" />
-              <div className="flex gap-2">
-                {[0, 1, 2, 3].map((j) => (
-                  <Sk key={j} className="h-8 flex-1 rounded-lg" />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Post Management */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <Sk className="h-5 w-36" />
-          <Sk className="h-8 w-28 rounded-lg" />
-        </div>
-        <div className="space-y-2">
-          <Sk className="h-10 w-full rounded-lg" />
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Sk key={i} className="h-12 w-full rounded-lg" />
-          ))}
-        </div>
-      </div>
-
-      {/* Agent Workflow */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-        <Sk className="h-5 w-48" />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-gray-100 p-4 space-y-2">
-              <Sk className="h-8 w-8 rounded-full" />
-              <Sk className="h-3 w-20" />
-              <Sk className="h-3 w-16" />
             </div>
           ))}
         </div>
@@ -145,69 +83,130 @@ function PageSkeleton() {
 }
 
 function LinkedInAutopilotContent() {
-  // sessionStorage is the sole source of truth for mode — immune to
-  // Next.js hydration timing issues with useSearchParams().
   const [mode, setModeState] = useState<Mode>(readStoredMode);
   const [mounted, setMounted] = useState(false);
+  const [agentTrigger, setAgentTrigger] = useState(0);
+  const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
-  const setMode = (newMode: Mode) => {
-    setModeState(newMode);
+  const openAgent = () => {
+    setModeState("agent");
     try {
-      sessionStorage.setItem(MODE_KEY, newMode);
+      sessionStorage.setItem(MODE_KEY, "agent");
     } catch {}
+    setAgentTrigger((t) => t + 1);
+  };
+
+  const openManual = () => {
+    setModeState("manual");
+    try {
+      sessionStorage.setItem(MODE_KEY, "manual");
+    } catch {}
+    setManualOpen(true);
   };
 
   if (!mounted) return <PageSkeleton />;
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Mode Tabs */}
-      <div className="flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+      {/* LinkedIn account + 8 stats cards — always at top */}
+      <AccountSection mode={mode} />
+
+      {/* Mode cards — clicking opens the respective modal */}
+      <div className="grid grid-cols-2 gap-3">
         <button
-          onClick={() => setMode("agent")}
-          className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+          onClick={openAgent}
+          className={cn(
+            "rounded-2xl border p-4 text-left transition-all",
             mode === "agent"
-              ? "bg-blue-600 text-white shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
+              ? "border-blue-500 bg-blue-50 shadow-sm"
+              : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+          )}
         >
-          Agentic
+          <div className="flex items-start gap-3">
+            <div
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+                mode === "agent" ? "bg-blue-600" : "bg-gray-100"
+              )}
+            >
+              <LuBot className={cn("h-5 w-5", mode === "agent" ? "text-white" : "text-gray-500")} />
+            </div>
+            <div>
+              <p
+                className={cn(
+                  "text-sm font-semibold",
+                  mode === "agent" ? "text-blue-700" : "text-gray-900"
+                )}
+              >
+                Agentic
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                Let the agent research your brand, build a plan, and draft posts for you to approve.
+              </p>
+            </div>
+          </div>
         </button>
+
         <button
-          onClick={() => setMode("manual")}
-          className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+          onClick={openManual}
+          className={cn(
+            "rounded-2xl border p-4 text-left transition-all",
             mode === "manual"
-              ? "bg-blue-600 text-white shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
+              ? "border-blue-500 bg-blue-50 shadow-sm"
+              : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+          )}
         >
-          Manual
+          <div className="flex items-start gap-3">
+            <div
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+                mode === "manual" ? "bg-blue-600" : "bg-gray-100"
+              )}
+            >
+              <LuPenLine
+                className={cn("h-5 w-5", mode === "manual" ? "text-white" : "text-gray-500")}
+              />
+            </div>
+            <div>
+              <p
+                className={cn(
+                  "text-sm font-semibold",
+                  mode === "manual" ? "text-blue-700" : "text-gray-900"
+                )}
+              >
+                Manual
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                Generate posts yourself from a prompt and your own knowledge base.
+              </p>
+            </div>
+          </div>
         </button>
       </div>
 
-      <SetupStepper mode={mode} />
-      <AccountSection mode={mode} />
-      {mode === "manual" && <GeneratePostsSection />}
+      {/* Agent modal — card-less, triggered via mode card */}
+      <AgentModeSection showCard={false} triggerOpen={agentTrigger} />
+
+      {/* Manual modal — 3-step stepper */}
+      <ManualModeSection open={manualOpen} onClose={() => setManualOpen(false)} />
+
       <ReviewApprovalSection mode={mode} />
       <PostManagementSection mode={mode} />
-      <AgentWorkflowSection />
     </div>
   );
 }
 
 export default function LinkedInAutopilotPage() {
   return (
-    <div className="flex-1 bg-[#E9ECF5] px-4 py-4 sm:px-6 sm:py-6">
-      <div className="mx-auto max-w-screen-xl">
-        <Suspense fallback={null}>
-          <LinkedInAutopilotContent />
-        </Suspense>
-      </div>
+    <div className="flex-1 bg-[#E9ECF5] px-4 py-4">
+      <Suspense fallback={null}>
+        <LinkedInAutopilotContent />
+      </Suspense>
     </div>
   );
 }

@@ -1,6 +1,16 @@
 "use client";
-import { useState } from "react";
-import { LuSparkles, LuArrowRight, LuX, LuTriangleAlert, LuLink } from "react-icons/lu";
+import { useState, useEffect, useRef } from "react";
+import {
+  LuSparkles,
+  LuArrowRight,
+  LuX,
+  LuTriangleAlert,
+  LuLink,
+  LuGlobe,
+  LuFileText,
+  LuLoader,
+  LuUpload,
+} from "react-icons/lu";
 import Tooltip from "@/components/ui/Tooltip";
 import { AxiosError } from "axios";
 import toast from "react-hot-toast";
@@ -16,17 +26,29 @@ import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import ModelSwitcher, { useSelectedModel } from "./ModelSwitcher";
 
 const LENGTH_OPTIONS = ["Short", "Medium", "Long"] as const;
-
 type Length = (typeof LENGTH_OPTIONS)[number];
+
+const PURPOSE_COLORS: Record<string, string> = {
+  knowledge: "bg-gray-100 text-gray-600",
+  tone: "bg-purple-100 text-purple-700",
+  style: "bg-orange-100 text-orange-700",
+};
+const PURPOSE_LABELS: Record<string, string> = {
+  knowledge: "Knowledge",
+  tone: "Tone",
+  style: "Style",
+};
+
+const isTerminal = (s: string) => s === "ready" || s === "error" || s === "failed";
 
 export default function GeneratePostsSection() {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Form state
   const [url, setUrl] = useState("");
-  const [toneDocId, setToneDocId] = useState("");
-  const [styleDocId, setStyleDocId] = useState("");
   const [postCount, setPostCount] = useState<number | "">("");
   const [postCountError, setPostCountError] = useState("");
   const [useEmoji, setUseEmoji] = useState(false);
@@ -39,25 +61,60 @@ export default function GeneratePostsSection() {
     suggested_topics: string[];
   } | null>(null);
 
-  const { data: websites } = useQueryWithTokenRefresh(
+  // Knowledge sources state
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+  const [selectedWebsiteIds, setSelectedWebsiteIds] = useState<Set<string>>(new Set());
+  const [websiteInput, setWebsiteInput] = useState("");
+  const [websiteAdding, setWebsiteAdding] = useState(false);
+  const [pendingDoc, setPendingDoc] = useState<File | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
+
+  // Queries
+  const { data: websitesData } = useQueryWithTokenRefresh(
     ["websites", workspaceId],
     () => websiteService(workspaceId).getWebsites(),
-    { enabled: !!workspaceId }
-  );
-  const website = websites?.results?.[0];
-
-  const { data: toneDocs } = useQueryWithTokenRefresh(
-    ["documents", workspaceId, "tone"],
-    () => documentService(workspaceId).getDocuments("tone"),
-    { enabled: !!workspaceId }
-  );
-
-  const { data: styleDocs } = useQueryWithTokenRefresh(
-    ["documents", workspaceId, "style"],
-    () => documentService(workspaceId).getDocuments("style"),
-    { enabled: !!workspaceId }
+    {
+      enabled: !!workspaceId,
+      refetchInterval: (query) => {
+        const results = query.state.data?.results ?? [];
+        return results.some((s) => !isTerminal(s.status)) ? 3000 : false;
+      },
+    }
   );
 
+  const { data: allDocs } = useQueryWithTokenRefresh(
+    ["documents", workspaceId],
+    () => documentService(workspaceId).getDocuments(),
+    {
+      enabled: !!workspaceId,
+      refetchInterval: (query) => {
+        const results = query.state.data?.results ?? [];
+        return results.some((d) => !isTerminal(d.status)) ? 3000 : false;
+      },
+    }
+  );
+
+  const websitesList = websitesData?.results ?? [];
+  const docsList = allDocs?.results ?? [];
+
+  // Auto-select all ready items on first load
+  useEffect(() => {
+    if (!websitesList.length) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedWebsiteIds(
+      new Set(websitesList.filter((s) => s.status === "ready").map((s) => s.id))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [websitesList.length]);
+
+  useEffect(() => {
+    if (!docsList.length) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedDocIds(new Set(docsList.filter((d) => d.status === "ready").map((d) => d.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docsList.length]);
+
+  // Mutations
   const suggestMutation = useMutationWithTokenRefresh(
     (websiteId: string) => postsService(workspaceId).suggestPrompts({ website_profile: websiteId }),
     {
@@ -74,6 +131,10 @@ export default function GeneratePostsSection() {
 
   const generateMutation = useMutationWithTokenRefresh(
     () => {
+      const selectedDocs = docsList.filter((d) => selectedDocIds.has(d.id));
+      const toneDoc = selectedDocs.find((d) => d.purpose === "tone");
+      const styleDoc = selectedDocs.find((d) => d.purpose === "style");
+
       const body = {
         prompt,
         tone: "professional",
@@ -83,8 +144,8 @@ export default function GeneratePostsSection() {
         use_ai_image: true,
         count: postCount as number,
         ...(selectedModelId ? { writer_model: selectedModelId } : {}),
-        ...(toneDocId ? { tone_document: toneDocId } : {}),
-        ...(styleDocId ? { style_document: styleDocId } : {}),
+        ...(toneDoc ? { tone_document: toneDoc.id } : {}),
+        ...(styleDoc ? { style_document: styleDoc.id } : {}),
       };
       const trimmedUrl = url.trim();
       return trimmedUrl
@@ -124,10 +185,70 @@ export default function GeneratePostsSection() {
     }
   );
 
+  // Handlers
+  const handleAddWebsite = async () => {
+    const trimmed = websiteInput.trim();
+    if (!trimmed || !workspaceId) return;
+    setWebsiteAdding(true);
+    try {
+      const site = await websiteService(workspaceId).addWebsite(trimmed);
+      setWebsiteInput("");
+      queryClient.invalidateQueries({ queryKey: ["websites", workspaceId] });
+      if (site?.id) setSelectedWebsiteIds((prev) => new Set([...prev, site.id]));
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setWebsiteAdding(false);
+    }
+  };
+
+  const handleDeleteWebsite = async (id: string) => {
+    try {
+      await websiteService(workspaceId).deleteWebsite(id);
+      queryClient.invalidateQueries({ queryKey: ["websites", workspaceId] });
+      setSelectedWebsiteIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    }
+  };
+
+  const handleAddDoc = async () => {
+    if (!pendingDoc || !workspaceId) return;
+    setDocUploading(true);
+    try {
+      const doc = await documentService(workspaceId).uploadDocument(pendingDoc, "knowledge");
+      setPendingDoc(null);
+      queryClient.invalidateQueries({ queryKey: ["documents", workspaceId] });
+      if (doc?.id) setSelectedDocIds((prev) => new Set([...prev, doc.id]));
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setDocUploading(false);
+    }
+  };
+
+  const handleDeleteDoc = async (id: string) => {
+    try {
+      await documentService(workspaceId).deleteDocument(id);
+      queryClient.invalidateQueries({ queryKey: ["documents", workspaceId] });
+      setSelectedDocIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    }
+  };
+
   const handleSuggest = () => {
-    if (!website) return;
+    if (!websitesList[0]) return;
     setSuggestions([]);
-    suggestMutation.mutate(website.id);
+    suggestMutation.mutate(websitesList[0].id);
   };
 
   const handleGenerate = () => {
@@ -153,6 +274,212 @@ export default function GeneratePostsSection() {
         </h2>
       </div>
 
+      {/* Knowledge Sources — inline, mirrors agent modal */}
+      <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-3">
+        <div className="mb-3 flex items-center gap-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+            Knowledge Sources
+          </p>
+          <Tooltip
+            text="Select which websites and documents to use when generating posts. Tone and Style documents shape the writing voice and format."
+            width="w-72"
+            position="bottom"
+          />
+        </div>
+
+        {/* Websites */}
+        <div className="mb-3">
+          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+            <LuGlobe className="h-3.5 w-3.5 text-blue-500" />
+            Websites
+          </p>
+          {websitesList.length > 0 && (
+            <ul className="mb-1.5 space-y-1">
+              {websitesList.map((site) => {
+                const crawling = !isTerminal(site.status);
+                return (
+                  <li
+                    key={site.id}
+                    className={cn(
+                      "overflow-hidden rounded-lg border",
+                      crawling ? "animate-shimmer-card border-blue-200" : "border-gray-200 bg-white"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 px-2.5 py-1.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedWebsiteIds.has(site.id)}
+                        onChange={(e) => {
+                          setSelectedWebsiteIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(site.id);
+                            else next.delete(site.id);
+                            return next;
+                          });
+                        }}
+                        className="h-3.5 w-3.5 shrink-0 rounded accent-blue-600"
+                      />
+                      <LuGlobe className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                        {site.url}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                          site.status === "ready"
+                            ? "bg-teal-100 text-teal-700"
+                            : site.status === "error"
+                              ? "bg-red-100 text-red-600"
+                              : "bg-blue-100 text-blue-600"
+                        )}
+                      >
+                        {site.status}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteWebsite(site.id)}
+                        className="shrink-0 text-gray-300 hover:text-red-500"
+                      >
+                        <LuX className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="flex gap-1.5">
+            <div className="relative flex-1">
+              <LuLink className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <input
+                type="url"
+                value={websiteInput}
+                onChange={(e) => setWebsiteInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddWebsite();
+                }}
+                placeholder="https://yoursite.com"
+                className="h-8 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              onClick={handleAddWebsite}
+              disabled={!websiteInput.trim() || websiteAdding}
+              className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              {websiteAdding ? <LuLoader className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+            </button>
+          </div>
+        </div>
+
+        {/* Documents */}
+        <div>
+          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+            <LuFileText className="h-3.5 w-3.5 text-blue-500" />
+            Documents
+          </p>
+          {docsList.length > 0 && (
+            <ul className="mb-1.5 space-y-1">
+              {docsList.map((doc) => {
+                const processing = !isTerminal(doc.status);
+                return (
+                  <li
+                    key={doc.id}
+                    className={cn(
+                      "overflow-hidden rounded-lg border",
+                      processing
+                        ? "animate-shimmer-card border-blue-200"
+                        : "border-gray-200 bg-white"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 px-2.5 py-1.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedDocIds.has(doc.id)}
+                        onChange={(e) => {
+                          setSelectedDocIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(doc.id);
+                            else next.delete(doc.id);
+                            return next;
+                          });
+                        }}
+                        className="h-3.5 w-3.5 shrink-0 rounded accent-blue-600"
+                      />
+                      <LuFileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                        {doc.filename}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                          PURPOSE_COLORS[doc.purpose] ?? PURPOSE_COLORS.knowledge
+                        )}
+                      >
+                        {PURPOSE_LABELS[doc.purpose] ?? doc.purpose}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                          doc.status === "ready"
+                            ? "bg-teal-100 text-teal-700"
+                            : doc.status === "error" || doc.status === "failed"
+                              ? "bg-red-100 text-red-600"
+                              : "bg-blue-100 text-blue-600"
+                        )}
+                      >
+                        {doc.status}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteDoc(doc.id)}
+                        className="shrink-0 text-gray-300 hover:text-red-500"
+                      >
+                        <LuX className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) setPendingDoc(file);
+              e.target.value = "";
+            }}
+          />
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={docUploading}
+              className="flex flex-1 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium transition-colors hover:border-blue-400 disabled:opacity-50"
+            >
+              <LuUpload className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+              <span
+                className={cn(
+                  "truncate",
+                  pendingDoc ? "text-gray-800" : "text-gray-400 hover:text-blue-600"
+                )}
+              >
+                {pendingDoc ? pendingDoc.name : "Choose PDF…"}
+              </span>
+            </button>
+            <button
+              onClick={handleAddDoc}
+              disabled={!pendingDoc || docUploading}
+              className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              {docUploading ? <LuLoader className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Generation options */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 lg:gap-5">
         {/* Number of posts */}
         <div>
@@ -236,46 +563,6 @@ export default function GeneratePostsSection() {
               </button>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Tone & Style document references */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Tone reference <span className="font-normal normal-case text-gray-400">PDF</span>
-            <Tooltip text="A PDF that guides the AI's writing voice. Upload tone references in Add Sources → Tone." />
-          </label>
-          <select
-            value={toneDocId}
-            onChange={(e) => setToneDocId(e.target.value)}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">None</option>
-            {toneDocs?.results?.map((doc) => (
-              <option key={doc.id} value={doc.id}>
-                {doc.filename}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Style reference <span className="font-normal normal-case text-gray-400">PDF</span>
-            <Tooltip text="A PDF that guides post structure and formatting. Upload style references in Add Sources → Style." />
-          </label>
-          <select
-            value={styleDocId}
-            onChange={(e) => setStyleDocId(e.target.value)}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">None</option>
-            {styleDocs?.results?.map((doc) => (
-              <option key={doc.id} value={doc.id}>
-                {doc.filename}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
