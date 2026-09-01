@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LuPlus,
   LuHistory,
@@ -8,27 +8,118 @@ import {
   LuSettings,
   LuZap,
   LuDatabase,
-  LuUpload,
   LuX,
+  LuLoader,
+  LuSquare,
+  LuClock,
+  LuPencil,
+  LuCheck,
+  LuChevronDown,
   LuPaperclip,
   LuLink,
+  LuUpload,
 } from "react-icons/lu";
 import { cn } from "@/utils/cn";
+import { useWorkspace } from "@/context/WorkspaceContext";
+import { linkedinAgentService } from "@/service/linkedinAgentService";
+import { extractErrorMessage } from "@/utils/extractErrorMessage";
+import toast from "react-hot-toast";
+import Link from "next/link";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
+import EditDraftModal from "./EditDraftModal";
+import AllDraftsModal from "./AllDraftsModal";
+import type {
+  Conversation,
+  ConversationListItem,
+  PaginatedConversations,
+  Question,
+  AgentPost,
+  AgentSettings,
+  BlockNode,
+  SpanNode,
+} from "@/types/LinkedInAgent";
 
-// ─── prompt suggestions ───────────────────────────────────────────────────────
+// ─── constants ────────────────────────────────────────────────────────────────
 
 const PROMPT_SUGGESTIONS = [
   { text: "Give me 5 drafts for LinkedIn", tag: null },
   { text: "Write a launch announcement", tag: null },
   { text: "Draft a hiring post", tag: null },
   {
-    text: `5 thought-leadership posts for SaaS, confident & punchy tone, 3 hashtags, spread over 2 weeks — hook: "Cold outreach isn't dead"`,
+    text: `5 thought-leadership posts for SaaS, confident & punchy tone, 3 hashtags, spread over 2 weeks`,
     tag: "All details included · skips questions",
   },
 ];
 
-// ─── small shared components ──────────────────────────────────────────────────
+const POLL_INTERVAL_MS = 2000;
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function formatSuggestedDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `${days[d.getDay()]}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() >= 12 ? "PM" : "AM"}`;
+}
+
+function renderBlocks(blocksJson: string, fallback: string): React.ReactNode {
+  let blocks: BlockNode[] = [];
+  try {
+    const parsed = JSON.parse(blocksJson);
+    if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
+  } catch {
+    // ignore
+  }
+
+  if (blocks.length === 0) {
+    return <span>{fallback}</span>;
+  }
+
+  return (
+    <>
+      {blocks.map((block, i) => {
+        const isFirst = i === 0;
+        if (block.type === "paragraph") {
+          return (
+            <p key={i} className={cn(!isFirst && "mt-3")}>
+              {block.spans.map((span: SpanNode, j: number) =>
+                span.bold ? <strong key={j}>{span.text}</strong> : <span key={j}>{span.text}</span>
+              )}
+            </p>
+          );
+        }
+        if (block.type === "list") {
+          return (
+            <ul key={i} className={cn("space-y-1", !isFirst && !block.tight && "mt-3")}>
+              {block.items.map((item, j) => (
+                <li key={j} className="flex gap-1.5">
+                  <span className="shrink-0 text-gray-400">{block.marker}</span>
+                  <span>
+                    {item.spans.map((span: SpanNode, k: number) =>
+                      span.bold ? (
+                        <strong key={k}>{span.text}</strong>
+                      ) : (
+                        <span key={k}>{span.text}</span>
+                      )
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+}
+
+function hasPendingInterrupt(conv: Conversation): boolean {
+  const pi = conv.pending_interrupt as { id?: string };
+  return !!pi?.id;
+}
+
+// ─── sub-components ───────────────────────────────────────────────────────────
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -52,40 +143,548 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
+// Question form field
+function QuestionField({
+  question,
+  value,
+  onChange,
+}: {
+  question: Question;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  if (question.kind === "choice" && question.options && question.options.length > 0) {
+    return (
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+        >
+          {question.options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        <LuChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      </div>
+    );
+  }
+
+  if (question.kind === "number") {
+    return (
+      <input
+        type="number"
+        value={value}
+        min={question.min}
+        max={question.max}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+      />
+    );
+  }
+
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder={`(optional)`}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+    />
+  );
+}
+
+// Grill form — renders pending_interrupt questions
+function GrillForm({
+  questions: rawQuestions,
+  onSubmit,
+  submitting,
+}: {
+  questions: Question[];
+  onSubmit: (answers: Record<string, string>) => void;
+  submitting: boolean;
+}) {
+  // guard against undefined/null entries from API
+  const questions = (rawQuestions ?? []).filter((q): q is Question => !!q && typeof q === "object");
+
+  const [answers, setAnswers] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const q of questions) {
+      init[q.id] = q.default !== undefined ? String(q.default) : (q.options?.[0] ?? "");
+    }
+    return init;
+  });
+
+  if (questions.length === 0) return null;
+
+  // full-width questions (text kind, or last if odd count)
+  const pairs: Question[][] = [];
+  let i = 0;
+  while (i < questions.length) {
+    const q = questions[i];
+    const isFullWidth =
+      q.kind === "text" || (questions.length % 2 === 1 && i === questions.length - 1);
+    if (isFullWidth) {
+      pairs.push([q]);
+      i++;
+    } else {
+      pairs.push([q, questions[i + 1]]);
+      i += 2;
+    }
+  }
+
+  const draftCount = answers["count"] ? parseInt(answers["count"], 10) : 5;
+
+  return (
+    <div className="mt-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="p-5">
+        <div className="space-y-4">
+          {pairs.map((row, ri) => (
+            <div
+              key={ri}
+              className={cn("grid gap-4", row.length === 2 ? "grid-cols-2" : "grid-cols-1")}
+            >
+              {row.map((q) => (
+                <div key={q.id}>
+                  <label className="mb-1.5 block text-xs font-semibold text-blue-600">
+                    {q.question}
+                  </label>
+                  <QuestionField
+                    question={q}
+                    value={answers[q.id] ?? ""}
+                    onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => onSubmit(answers)}
+          disabled={submitting}
+          className="mt-5 flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+        >
+          {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+          Generate {draftCount > 0 ? draftCount : ""} drafts
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Headlines form — multi-select checkboxes for choice questions
+function HeadlinesForm({
+  question,
+  onSubmit,
+  submitting,
+  onMoreHeadlines,
+}: {
+  question: Question;
+  onSubmit: (selected: string[]) => void;
+  submitting: boolean;
+  onMoreHeadlines?: () => void;
+}) {
+  const options = question.options ?? [];
+  const [selected, setSelected] = useState<Set<string>>(new Set(options));
+
+  const toggle = (opt: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(opt) ? next.delete(opt) : next.add(opt);
+      return next;
+    });
+
+  return (
+    <div className="mt-2">
+      <p className="mb-3 text-sm font-semibold text-gray-800">Choose headlines to draft</p>
+      <div className="space-y-2">
+        {options.map((opt) => (
+          <label
+            key={opt}
+            className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50"
+          >
+            <input
+              type="checkbox"
+              checked={selected.has(opt)}
+              onChange={() => toggle(opt)}
+              className="h-4 w-4 accent-blue-600"
+            />
+            <span className="text-sm text-gray-800">{opt}</span>
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 flex items-center justify-between">
+        {onMoreHeadlines && (
+          <button
+            onClick={onMoreHeadlines}
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            Generate more headlines
+          </button>
+        )}
+        <button
+          onClick={() => onSubmit([...selected])}
+          disabled={selected.size === 0 || submitting}
+          className="ml-auto flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+        >
+          {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+          Generate {selected.size} drafts
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Single draft card
+function DraftCard({ post, onEdit }: { post: AgentPost; onEdit: (post: AgentPost) => void }) {
+  const hasImage = !!post.image_url;
+  const dateStr = formatSuggestedDate(post.suggested_publish_at);
+
+  return (
+    // overflow-visible so the floating buttons protrude above the top border
+    <div className="relative flex h-72 w-80 shrink-0 flex-col rounded-2xl border border-gray-200 bg-white p-4">
+      {/* ✓ × floating on the top border — centered, half-outside */}
+      <div className="absolute right-3 top-0 flex -translate-y-1/2 items-center gap-1.5">
+        <button className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500">
+          <LuCheck className="h-3.5 w-3.5" />
+        </button>
+        <button className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400">
+          <LuX className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Title row */}
+      <div className="mb-1 flex items-start justify-between gap-2">
+        {post.headline ? (
+          <p className="text-sm font-semibold leading-snug text-gray-900 line-clamp-2">
+            {post.headline}
+          </p>
+        ) : (
+          <span />
+        )}
+        <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+          Draft
+        </span>
+      </div>
+
+      {/* Scheduled time */}
+      {dateStr && (
+        <div className="mb-2 flex items-center gap-1 text-xs text-gray-400">
+          <LuClock className="h-3 w-3 shrink-0" />
+          <span>{dateStr}</span>
+        </div>
+      )}
+
+      {/* Image placeholder (first card in design shows it) */}
+      {hasImage && (
+        <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={post.image_url} alt="" className="h-full w-full object-cover" />
+        </div>
+      )}
+      {!hasImage && !post.headline && (
+        <div className="mb-2 flex h-20 shrink-0 items-center justify-center rounded-xl bg-gray-100">
+          <svg
+            className="h-7 w-7 text-gray-300"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+      )}
+
+      {/* Body text */}
+      <div className="min-h-0 flex-1 overflow-hidden text-xs leading-relaxed text-gray-600 line-clamp-4">
+        {renderBlocks(post.body_blocks, post.body)}
+      </div>
+
+      {/* Edit pencil — bottom right */}
+      <button
+        onClick={() => onEdit(post)}
+        className="absolute bottom-3 right-3 text-gray-300 transition-colors hover:text-gray-600"
+      >
+        <LuPencil className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// Draft cards section
+function DraftsSection({
+  posts,
+  onEdit,
+  onViewAll,
+}: {
+  posts: AgentPost[];
+  onEdit: (post: AgentPost) => void;
+  onViewAll: () => void;
+}) {
+  const draftPosts = posts.filter((p) => p.status === "draft");
+
+  return (
+    <div className="mt-2">
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-gray-900">Your drafts</span>
+          {draftPosts.length > 0 && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+              {draftPosts.length} to approve
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/linkedin/post-management"
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            Go to Post management
+          </Link>
+          <button
+            onClick={onViewAll}
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            View all {posts.length}
+          </button>
+        </div>
+      </div>
+
+      {/* Horizontal scroll — pt-4 gives room for the floating ✓/× buttons */}
+      <div className="flex gap-3 overflow-x-auto pt-4 pb-2">
+        {posts.map((post) => (
+          <DraftCard key={post.id} post={post} onEdit={onEdit} />
+        ))}
+      </div>
+
+      {/* Generate more */}
+      <button className="mt-3 flex items-center gap-1.5 text-sm text-blue-600 transition-colors hover:text-blue-700">
+        <LuPlus className="h-4 w-4" />
+        Generate more drafts
+      </button>
+    </div>
+  );
+}
+
+// Thinking / running indicator
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+        <LuPlus className="h-4 w-4 text-white" />
+      </div>
+      <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3">
+        <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" />
+      </div>
+    </div>
+  );
+}
+
+// History sidebar item
+function HistoryItem({
+  item,
+  active,
+  onClick,
+}: {
+  item: ConversationListItem;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-lg px-3 py-2.5 text-left transition-colors",
+        active ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"
+      )}
+    >
+      <p className="truncate text-sm font-medium">{item.title || "Untitled conversation"}</p>
+      <p className="mt-0.5 truncate text-xs text-gray-400">
+        {new Date(item.updated_at).toLocaleDateString()}
+      </p>
+    </button>
+  );
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
-const KNOWLEDGE_SOURCE_COUNT = 4;
-
 export default function AutomationView() {
+  const { activeWorkspace } = useWorkspace();
+  const workspaceId = activeWorkspace?.id ?? "";
+
+  // UI state
   const [message, setMessage] = useState("");
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [attachments, setAttachments] = useState<
     { id: string; type: "file" | "url"; name: string }[]
   >([]);
+
+  // Conversation state
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [posts, setPosts] = useState<AgentPost[]>([]);
+  const [sending, setSending] = useState(false);
+  const [answering, setAnswering] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [history, setHistory] = useState<PaginatedConversations | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [editPost, setEditPost] = useState<AgentPost | null>(null);
+  const [viewAllOpen, setViewAllOpen] = useState(false);
+  const [restoringConv, setRestoringConv] = useState(true);
+
+  // Settings
+  const [settings, setSettings] = useState<AgentSettings>({
+    use_emoji: false,
+    use_knowledge: true,
+    use_ai_image: false,
+    make_longer: false,
+  });
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
+  // refs
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const promptRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const plusRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // modal
-  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const svc = useCallback(() => linkedinAgentService(workspaceId), [workspaceId]);
 
-  // popovers
-  const [promptOpen, setPromptOpen] = useState(false);
-  const [plusOpen, setPlusOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // ── polling ──
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
 
-  // settings state
-  const [settings, setSettings] = useState({
-    useEmoji: false,
-    useKnowledgeBase: true,
-    useImage: false,
-    useHashtags: true,
-    defaultPostCount: 5,
-  });
+  const fetchPosts = useCallback(
+    async (postIds: string[]) => {
+      if (!postIds.length) return;
+      try {
+        const data = await svc().getAgentPosts({ pageSize: 50 });
+        const byId = new Map(data.results.map((p) => [p.id, p]));
+        const ordered = postIds.map((id) => byId.get(id)).filter(Boolean) as AgentPost[];
+        setPosts(ordered);
+      } catch {
+        // ignore
+      }
+    },
+    [svc]
+  );
 
-  // click-outside refs
-  const promptRef = useRef<HTMLDivElement>(null);
-  const plusRef = useRef<HTMLDivElement>(null);
-  const settingsRef = useRef<HTMLDivElement>(null);
+  const handlePollResult = useCallback(
+    (conv: Conversation) => {
+      setConversation(conv);
+      if (conv.status === "running") return;
+      stopPolling();
+      if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
+        fetchPosts(conv.artifacts.post_ids);
+      }
+    },
+    [stopPolling, fetchPosts]
+  );
 
+  const startPolling = useCallback(
+    (convId: string) => {
+      stopPolling();
+      pollRef.current = setInterval(async () => {
+        try {
+          const conv = await svc().getConversation(convId);
+          handlePollResult(conv);
+          if (conv.status !== "running") stopPolling();
+        } catch {
+          stopPolling();
+        }
+      }, POLL_INTERVAL_MS);
+    },
+    [svc, stopPolling, handlePollResult]
+  );
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  // ── restore conversation on mount ──
+  // Priority: ?conv= URL param → last conversation from history → empty state
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    async function restore() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const convId = params.get("conv");
+
+        const targetId =
+          convId ??
+          (await svc()
+            .getConversations(1, 1)
+            .then((r) => r.results[0]?.id ?? null)
+            .catch(() => null));
+
+        if (!targetId) return;
+
+        const conv = await svc().getConversation(targetId);
+        setConversation(conv);
+        if (conv.status === "running") startPolling(conv.id);
+        if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
+          fetchPosts(conv.artifacts.post_ids);
+        }
+      } catch {
+        window.history.replaceState(null, "", window.location.pathname);
+      } finally {
+        setRestoringConv(false);
+      }
+    }
+
+    restore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+
+  // ── write conv id to URL when conversation changes ──
+  useEffect(() => {
+    if (!conversation?.id) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("conv") === conversation.id) return;
+    params.set("conv", conversation.id);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  }, [conversation?.id]);
+
+  // ── scroll to bottom on new messages ──
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversation?.messages, conversation?.status, posts]);
+
+  // ── load settings once ──
+  useEffect(() => {
+    if (!workspaceId || settingsLoaded) return;
+    svc()
+      .getSettings()
+      .then((s) => {
+        setSettings(s);
+        setSettingsLoaded(true);
+      })
+      .catch(() => setSettingsLoaded(true));
+  }, [workspaceId, settingsLoaded, svc]);
+
+  // ── click-outside handlers ──
   useEffect(() => {
     if (!promptOpen) return;
     const h = (e: MouseEvent) => {
@@ -94,15 +693,6 @@ export default function AutomationView() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [promptOpen]);
-
-  useEffect(() => {
-    if (!plusOpen) return;
-    const h = (e: MouseEvent) => {
-      if (plusRef.current && !plusRef.current.contains(e.target as Node)) setPlusOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [plusOpen]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -114,10 +704,190 @@ export default function AutomationView() {
     return () => document.removeEventListener("mousedown", h);
   }, [settingsOpen]);
 
-  const handleSuggestionClick = (text: string) => {
-    setMessage(text);
-    setPromptOpen(false);
+  useEffect(() => {
+    if (!plusOpen) return;
+    const h = (e: MouseEvent) => {
+      if (plusRef.current && !plusRef.current.contains(e.target as Node)) setPlusOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [plusOpen]);
+
+  useEffect(() => {
+    if (!historyOpen) return;
+    const h = (e: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node))
+        setHistoryOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [historyOpen]);
+
+  // ── send first message (creates conversation) ──
+  const handleSend = async () => {
+    const text = message.trim();
+    if (!text || !workspaceId) return;
+    setSending(true);
+    setMessage("");
+    try {
+      let convId = conversation?.id;
+
+      if (!convId || conversation?.status === "cancelled" || conversation?.status === "archived") {
+        const newConv = await svc().createConversation();
+        convId = newConv.id;
+        setConversation(newConv);
+        setPosts([]);
+      }
+
+      await svc().sendMessage(convId!, text);
+      // optimistically show user message
+      setConversation((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "running",
+              messages: [
+                ...prev.messages,
+                {
+                  id: crypto.randomUUID(),
+                  role: "user",
+                  kind: "text",
+                  text,
+                  payload: {},
+                  created_at: new Date().toISOString(),
+                },
+              ],
+            }
+          : prev
+      );
+      startPolling(convId!);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setSending(false);
+    }
   };
+
+  // ── answer pending interrupt ──
+  const handleAnswer = async (answers: Record<string, string>) => {
+    if (!conversation || !workspaceId) return;
+    const pi = conversation.pending_interrupt as { id?: string };
+    if (!pi?.id) return;
+    setAnswering(true);
+    try {
+      await svc().answerQuestion(conversation.id, pi.id, answers);
+      setConversation((prev) => (prev ? { ...prev, status: "running" } : prev));
+      startPolling(conversation.id);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setAnswering(false);
+    }
+  };
+
+  // ── cancel ──
+  const handleCancel = async () => {
+    if (!conversation) return;
+    setCancelling(true);
+    try {
+      const updated = await svc().cancelConversation(conversation.id);
+      setConversation(updated);
+      stopPolling();
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // ── new chat ──
+  const handleNewChat = () => {
+    stopPolling();
+    setConversation(null);
+    setPosts([]);
+    setMessage("");
+    window.history.replaceState(null, "", window.location.pathname);
+    textareaRef.current?.focus();
+  };
+
+  // ── load history ──
+  const handleOpenHistory = async () => {
+    setHistoryOpen(true);
+    if (!workspaceId) return;
+    setHistoryLoading(true);
+    try {
+      const data = await svc().getConversations();
+      setHistory(data);
+    } catch {
+      // ignore
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // ── load conversation from history ──
+  const handleLoadConversation = async (id: string) => {
+    setHistoryOpen(false);
+    stopPolling();
+    setPosts([]);
+    try {
+      const conv = await svc().getConversation(id);
+      setConversation(conv);
+      if (conv.status === "running") startPolling(id);
+      if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
+        fetchPosts(conv.artifacts.post_ids);
+      }
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    }
+  };
+
+  // ── save settings ──
+  const handleSettingChange = async (key: keyof AgentSettings, value: boolean) => {
+    const next = { ...settings, [key]: value };
+    setSettings(next);
+    setSettingsSaving(true);
+    try {
+      await svc().patchSettings({ [key]: value });
+    } catch {
+      // revert
+      setSettings(settings);
+      toast.error("Failed to save settings.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  // ── derived state ──
+  const isRunning = conversation?.status === "running";
+  const isAwaiting = conversation?.status === "awaiting_input";
+  const isCompleted = conversation?.status === "completed";
+  const isFailed = conversation?.status === "failed";
+  const isTerminal = conversation?.status === "cancelled" || conversation?.status === "archived";
+  const canSend =
+    !sending &&
+    !isRunning &&
+    !isAwaiting &&
+    (!conversation || isCompleted || isFailed || isTerminal || !conversation);
+  const showCancel = isRunning || isAwaiting;
+
+  const pendingInterrupt =
+    conversation && hasPendingInterrupt(conversation)
+      ? (conversation.pending_interrupt as { id: string; kind: string; questions: Question[] })
+      : null;
+
+  // safe questions array (filter out any undefined entries the API might return)
+  const piQuestions = (pendingInterrupt?.questions ?? []).filter(
+    (q): q is Question => !!q && typeof q === "object"
+  );
+
+  // detect if it's a multi-choice headline-style interrupt
+  const isHeadlineStyle =
+    piQuestions.length === 1 &&
+    piQuestions[0].kind === "choice" &&
+    (piQuestions[0].options?.length ?? 0) > 2;
+
+  const sourceCount = 0; // would come from knowledge base query
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
@@ -140,14 +910,18 @@ export default function AutomationView() {
           >
             <LuDatabase className="h-3.5 w-3.5 text-gray-400" />
             Knowledge base
-            <span className="text-gray-300">·</span>
-            <span className="font-medium text-blue-600">{KNOWLEDGE_SOURCE_COUNT} sources</span>
+            {sourceCount > 0 && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className="font-medium text-blue-600">{sourceCount} sources</span>
+              </>
+            )}
           </button>
         </div>
 
         {/* Agent composer card */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200">
-          {/* Composer header */}
+          {/* Header */}
           <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
@@ -159,38 +933,227 @@ export default function AutomationView() {
               <span className="hidden text-xs text-gray-400 lg:block">
                 Everything happens in chat — drafts appear here for approval
               </span>
-              <button className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-50">
-                <LuHistory className="h-3.5 w-3.5" />
-                History
-              </button>
-              <button className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-600 transition-colors hover:bg-blue-100">
+
+              {/* History */}
+              <div ref={historyRef} className="relative">
+                <button
+                  onClick={handleOpenHistory}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <LuHistory className="h-3.5 w-3.5" />
+                  History
+                </button>
+
+                {historyOpen && (
+                  <div className="absolute right-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                    <div className="border-b border-gray-100 px-4 py-3">
+                      <span className="text-sm font-semibold text-gray-900">
+                        Conversation history
+                      </span>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto p-2">
+                      {historyLoading ? (
+                        <div className="flex items-center gap-2 px-3 py-4 text-sm text-gray-400">
+                          <LuLoader className="h-4 w-4 animate-spin" />
+                          Loading…
+                        </div>
+                      ) : !history?.results.length ? (
+                        <p className="px-3 py-4 text-sm text-gray-400">No conversations yet.</p>
+                      ) : (
+                        history.results.map((item) => (
+                          <HistoryItem
+                            key={item.id}
+                            item={item}
+                            active={item.id === conversation?.id}
+                            onClick={() => handleLoadConversation(item.id)}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={handleNewChat}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-600 transition-colors hover:bg-blue-100"
+              >
                 <LuPlus className="h-3.5 w-3.5" />
                 New chat
               </button>
             </div>
           </div>
 
-          {/* Chat messages area */}
+          {/* Messages area */}
           <div className="flex-1 overflow-y-auto px-5 py-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                <LuPlus className="h-4 w-4 text-white" />
+            {/* Loading state while restoring conversation */}
+            {restoringConv && (
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                  <LuPlus className="h-4 w-4 text-white" />
+                </div>
+                <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-400">
+                  <LuLoader className="h-4 w-4 animate-spin" />
+                  Loading conversation…
+                </div>
               </div>
-              <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                Tell me what you want and I&apos;ll research your brand, ask a couple of quick
-                questions, then draft posts right here for you to approve.
+            )}
+
+            {/* Welcome message — only after restore completes with no conversation */}
+            {!restoringConv && !conversation && (
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                  <LuPlus className="h-4 w-4 text-white" />
+                </div>
+                <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                  Tell me what you want and I&apos;ll research your brand, ask a couple of quick
+                  questions, then draft posts right here for you to approve.
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Conversation messages */}
+            {conversation?.messages.map((msg) => {
+              if (msg.role === "user") {
+                // Answer message — empty text, render summary from payload.answers
+                if (!msg.text && msg.kind === "text") {
+                  const answers = msg.payload.answers as Record<string, string> | undefined;
+                  if (!answers) return null;
+                  const summary = Object.values(answers).filter(Boolean).join(" · ");
+                  return (
+                    <div key={msg.id} className="mt-4 flex justify-end">
+                      <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-100 px-4 py-3 text-sm leading-relaxed text-blue-800">
+                        {summary}
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={msg.id} className="mt-4 flex justify-end">
+                    <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
+                      {msg.text}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Agent messages
+              if (msg.kind === "posts") {
+                // Posts rendered separately below
+                return null;
+              }
+
+              return (
+                <div key={msg.id} className="mt-4 flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                    <LuPlus className="h-4 w-4 text-white" />
+                  </div>
+                  <div
+                    className={cn(
+                      "max-w-xl rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
+                      msg.kind === "error" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-700"
+                    )}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Awaiting input — question form */}
+            {isAwaiting && pendingInterrupt && piQuestions.length > 0 && (
+              <div className="mt-4 flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                  <LuPlus className="h-4 w-4 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="inline-block max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                    Great — a few quick things so I draft the right posts. You can change any of
+                    these.
+                  </div>
+
+                  {isHeadlineStyle ? (
+                    <HeadlinesForm
+                      question={piQuestions[0]}
+                      submitting={answering}
+                      onSubmit={(selected) =>
+                        handleAnswer({ [piQuestions[0].id]: selected.join(",") })
+                      }
+                    />
+                  ) : (
+                    <GrillForm
+                      questions={piQuestions}
+                      onSubmit={handleAnswer}
+                      submitting={answering}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Running indicator */}
+            {isRunning && (
+              <div className="mt-4">
+                <ThinkingIndicator />
+              </div>
+            )}
+
+            {/* Draft cards */}
+            {posts.length > 0 && (
+              <div className="mt-4">
+                <DraftsSection
+                  posts={posts}
+                  onEdit={setEditPost}
+                  onViewAll={() => setViewAllOpen(true)}
+                />
+              </div>
+            )}
+
+            {/* Terminal states */}
+            {isTerminal && (
+              <div className="mt-4 flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-400">
+                  <LuPlus className="h-4 w-4 text-white" />
+                </div>
+                <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                  {conversation?.status === "archived"
+                    ? "This conversation was archived after 7 days. "
+                    : "Conversation cancelled. "}
+                  <button
+                    onClick={handleNewChat}
+                    className="font-medium text-blue-600 hover:underline"
+                  >
+                    Start a new one
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input area */}
           <div className="shrink-0 border-t border-gray-100 px-5 py-4">
             <textarea
+              ref={textareaRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="e.g. Give me 5 LinkedIn drafts about our brand..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && canSend && message.trim()) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={
+                isAwaiting
+                  ? "Answer the questions above…"
+                  : isRunning
+                    ? "Agent is working…"
+                    : "e.g. Give me 5 LinkedIn drafts about our brand..."
+              }
+              disabled={isRunning || isAwaiting}
               rows={2}
-              className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none"
+              className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
             />
 
             {/* Attachment chips */}
@@ -218,12 +1181,30 @@ export default function AutomationView() {
               </div>
             )}
 
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setAttachments((prev) => [
+                  ...prev,
+                  { id: crypto.randomUUID(), type: "file", name: file.name },
+                ]);
+                e.target.value = "";
+                setPlusOpen(false);
+              }}
+            />
+
             <div className="mt-3 flex items-center justify-between">
               {/* Prompt suggestions */}
               <div ref={promptRef} className="relative">
                 <button
                   onClick={() => setPromptOpen((v) => !v)}
-                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50"
+                  disabled={isRunning || isAwaiting}
+                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
                 >
                   <LuZap className="h-3.5 w-3.5" />
                   Prompt suggestions
@@ -235,7 +1216,10 @@ export default function AutomationView() {
                       {PROMPT_SUGGESTIONS.map((s, i) => (
                         <button
                           key={i}
-                          onClick={() => handleSuggestionClick(s.text)}
+                          onClick={() => {
+                            setMessage(s.text);
+                            setPromptOpen(false);
+                          }}
                           className="w-full px-4 py-3 text-left transition-colors hover:bg-gray-50"
                         >
                           <p className="text-sm text-gray-800">{s.text}</p>
@@ -251,8 +1235,24 @@ export default function AutomationView() {
                 )}
               </div>
 
-              {/* Right-side action buttons */}
+              {/* Right-side actions */}
               <div className="flex items-center gap-2">
+                {/* Cancel */}
+                {showCancel && (
+                  <button
+                    onClick={handleCancel}
+                    disabled={cancelling}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {cancelling ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuSquare className="h-3.5 w-3.5" />
+                    )}
+                    Cancel
+                  </button>
+                )}
+
                 {/* Plus — file / URL attach */}
                 <div ref={plusRef} className="relative">
                   <button
@@ -264,7 +1264,6 @@ export default function AutomationView() {
 
                   {plusOpen && (
                     <div className="absolute bottom-full right-0 z-20 mb-2 w-60 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
-                      {/* Upload file */}
                       <button
                         onClick={() => fileInputRef.current?.click()}
                         className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50"
@@ -272,22 +1271,6 @@ export default function AutomationView() {
                         <LuUpload className="h-4 w-4 text-gray-400" />
                         Upload a file
                       </button>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setAttachments((prev) => [
-                            ...prev,
-                            { id: crypto.randomUUID(), type: "file", name: file.name },
-                          ]);
-                          e.target.value = "";
-                          setPlusOpen(false);
-                        }}
-                      />
-                      {/* URL input */}
                       <div className="mt-2 flex gap-2">
                         <input
                           type="url"
@@ -329,14 +1312,16 @@ export default function AutomationView() {
                 <div ref={settingsRef} className="relative">
                   <button
                     onClick={() => setSettingsOpen((v) => !v)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100"
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100",
+                      settingsSaving && "opacity-50"
+                    )}
                   >
                     <LuSettings className="h-4 w-4" />
                   </button>
 
                   {settingsOpen && (
                     <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                      {/* Header */}
                       <div className="flex items-center justify-between px-4 py-3">
                         <span className="text-sm font-semibold text-gray-900">
                           Composer settings
@@ -350,7 +1335,6 @@ export default function AutomationView() {
                       </div>
 
                       <div className="divide-y divide-gray-100 px-4 pb-4">
-                        {/* Use emoji */}
                         <div className="flex items-start justify-between gap-3 py-3">
                           <div>
                             <p className="text-sm font-medium text-gray-800">Use emoji</p>
@@ -359,12 +1343,10 @@ export default function AutomationView() {
                             </p>
                           </div>
                           <Toggle
-                            checked={settings.useEmoji}
-                            onChange={(v) => setSettings((s) => ({ ...s, useEmoji: v }))}
+                            checked={settings.use_emoji}
+                            onChange={(v) => handleSettingChange("use_emoji", v)}
                           />
                         </div>
-
-                        {/* Use knowledge base */}
                         <div className="flex items-start justify-between gap-3 py-3">
                           <div>
                             <p className="text-sm font-medium text-gray-800">Use knowledge base</p>
@@ -373,59 +1355,28 @@ export default function AutomationView() {
                             </p>
                           </div>
                           <Toggle
-                            checked={settings.useKnowledgeBase}
-                            onChange={(v) => setSettings((s) => ({ ...s, useKnowledgeBase: v }))}
+                            checked={settings.use_knowledge}
+                            onChange={(v) => handleSettingChange("use_knowledge", v)}
                           />
                         </div>
-
-                        {/* Use image */}
                         <div className="flex items-start justify-between gap-3 py-3">
                           <div>
-                            <p className="text-sm font-medium text-gray-800">Use image</p>
+                            <p className="text-sm font-medium text-gray-800">Use AI image</p>
                             <p className="text-xs text-gray-400">Suggest a visual for each draft</p>
                           </div>
                           <Toggle
-                            checked={settings.useImage}
-                            onChange={(v) => setSettings((s) => ({ ...s, useImage: v }))}
+                            checked={settings.use_ai_image}
+                            onChange={(v) => handleSettingChange("use_ai_image", v)}
                           />
                         </div>
-
-                        {/* Use hashtags */}
-                        <div className="flex items-start justify-between gap-3 py-3">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">Use hashtags</p>
-                            <p className="text-xs text-gray-400">
-                              Include relevant hashtags in every draft
-                            </p>
-                          </div>
-                          <Toggle
-                            checked={settings.useHashtags}
-                            onChange={(v) => setSettings((s) => ({ ...s, useHashtags: v }))}
-                          />
-                        </div>
-
-                        {/* Default number of posts */}
                         <div className="flex items-start justify-between gap-3 pt-3">
                           <div>
-                            <p className="text-sm font-medium text-gray-800">
-                              Default number of posts
-                            </p>
-                            <p className="text-xs text-gray-400">
-                              Used when a request doesn&apos;t specify a count
-                            </p>
+                            <p className="text-sm font-medium text-gray-800">Make longer</p>
+                            <p className="text-xs text-gray-400">Write longer posts by default</p>
                           </div>
-                          <input
-                            type="number"
-                            min={1}
-                            max={20}
-                            value={settings.defaultPostCount}
-                            onChange={(e) =>
-                              setSettings((s) => ({
-                                ...s,
-                                defaultPostCount: Number(e.target.value),
-                              }))
-                            }
-                            className="h-8 w-14 shrink-0 rounded-lg border border-gray-200 text-center text-sm font-medium text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                          <Toggle
+                            checked={settings.make_longer}
+                            onChange={(v) => handleSettingChange("make_longer", v)}
                           />
                         </div>
                       </div>
@@ -435,13 +1386,21 @@ export default function AutomationView() {
 
                 {/* Send */}
                 <button
+                  onClick={handleSend}
+                  disabled={!canSend || !message.trim() || sending}
                   className={cn(
                     "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors",
-                    message.trim() ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 opacity-60"
+                    canSend && message.trim()
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "bg-blue-600 opacity-50"
                   )}
                 >
+                  {sending ? (
+                    <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LuSend className="h-3.5 w-3.5" />
+                  )}
                   Send
-                  <LuSend className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -450,6 +1409,18 @@ export default function AutomationView() {
       </div>
 
       <KnowledgeBaseModal isOpen={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
+
+      <EditDraftModal post={editPost} onClose={() => setEditPost(null)} />
+
+      <AllDraftsModal
+        isOpen={viewAllOpen}
+        onClose={() => setViewAllOpen(false)}
+        workspaceId={workspaceId}
+        onEdit={(post) => {
+          setViewAllOpen(false);
+          setEditPost(post);
+        }}
+      />
     </div>
   );
 }

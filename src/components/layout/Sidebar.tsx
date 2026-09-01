@@ -11,6 +11,10 @@ import {
   LuLayoutGrid,
   LuPanelLeftClose,
   LuPanelLeftOpen,
+  LuPlus,
+  LuUser,
+  LuFileText,
+  LuZap,
 } from "react-icons/lu";
 import { FaLinkedinIn } from "react-icons/fa";
 import { cn } from "@/utils/cn";
@@ -20,9 +24,9 @@ import { authService } from "@/service/authService";
 const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
 
 const linkedInSubItems = [
-  { label: "Automation", href: "/linkedin/automation" },
-  { label: "Accounts & Knowledge", href: "/linkedin/accounts" },
-  { label: "Post Management", href: "/linkedin/post-management" },
+  { label: "Automation", href: "/linkedin/automation", icon: LuZap },
+  { label: "Accounts & Knowledge", href: "/linkedin/accounts", icon: LuUser },
+  { label: "Post Management", href: "/linkedin/post-management", icon: LuFileText },
 ];
 
 const LINKEDIN_ROOT = "/linkedin";
@@ -53,7 +57,6 @@ export default function Sidebar() {
     const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored === "true") setCollapsed(true);
-
     setMounted(true);
   }, []);
 
@@ -99,40 +102,38 @@ export default function Sidebar() {
   };
 
   const isLinkedInActive = pathname.startsWith(LINKEDIN_ROOT);
-  const isLinkedInAutopilotActive =
-    pathname === "/linkedin-autopilot" || pathname.startsWith("/linkedin-autopilot/");
 
   return (
     <aside
       className={cn(
-        "flex h-screen shrink-0 flex-col overflow-hidden bg-white transition-[width] duration-300 ease-in-out",
+        "flex h-screen shrink-0 flex-col overflow-hidden bg-[#1a1740] transition-[width] duration-300 ease-in-out",
         collapsed ? "w-[68px]" : "w-64"
       )}
     >
       {/* Logo + collapse toggle */}
       <div
         className={cn(
-          "flex h-14 shrink-0 items-center border-b border-gray-100",
+          "flex h-14 shrink-0 items-center border-b border-white/10",
           collapsed ? "justify-center px-3" : "justify-between px-5"
         )}
       >
         {collapsed ? (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-400">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400">
             <span className="text-sm font-bold text-white">R</span>
           </div>
         ) : (
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-400">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400">
               <span className="text-sm font-bold text-white">R</span>
             </div>
-            <span className="font-semibold text-gray-900">Relay</span>
+            <span className="font-semibold text-white">Relay</span>
           </div>
         )}
 
         <button
           onClick={toggleCollapsed}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+          className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
         >
           {collapsed ? (
             <LuPanelLeftOpen className="h-4 w-4" />
@@ -145,7 +146,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className={cn("flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
         {!collapsed && (
-          <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+          <p className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
             Workspace
           </p>
         )}
@@ -162,8 +163,8 @@ export default function Sidebar() {
               "flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors",
               collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
               pathname.startsWith(LEADS_ROOT)
-                ? "bg-blue-50 text-blue-700"
-                : "text-gray-700 hover:bg-gray-50"
+                ? "bg-white/15 text-white"
+                : "text-white/70 hover:bg-white/10 hover:text-white"
             )}
           >
             <LuLayoutGrid className="h-4 w-4 shrink-0" />
@@ -190,22 +191,22 @@ export default function Sidebar() {
                     className={cn(
                       "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
                       pathname === href || pathname.startsWith(href + "/")
-                        ? "bg-blue-50 text-blue-700 font-medium"
-                        : "text-gray-600 hover:bg-gray-50"
+                        ? "bg-white/15 font-medium text-white"
+                        : "text-white/60 hover:bg-white/10 hover:text-white"
                     )}
                   >
-                    <span className="text-xs text-gray-300">•</span>
+                    <span className="text-xs text-white/30">•</span>
                     <span className="flex-1">{label}</span>
                   </Link>
                 ) : (
                   <span
                     key={href}
                     title="Coming soon"
-                    className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-400"
+                    className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-white/30"
                   >
-                    <span className="text-xs text-gray-300">•</span>
+                    <span className="text-xs text-white/20">•</span>
                     <span className="flex-1">{label}</span>
-                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-400">
+                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/40">
                       Soon
                     </span>
                   </span>
@@ -226,10 +227,12 @@ export default function Sidebar() {
             className={cn(
               "flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors",
               collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-              isLinkedInActive ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"
+              isLinkedInActive ? "text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
             )}
           >
-            <FaLinkedinIn className="h-4 w-4 shrink-0" />
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#0077B5]">
+              <FaLinkedinIn className="h-3 w-3 text-white" />
+            </div>
             {!collapsed && (
               <>
                 <span className="flex-1 text-left">LinkedIn</span>
@@ -245,62 +248,53 @@ export default function Sidebar() {
 
           {!collapsed && linkedInOpen && (
             <div className="mt-0.5 space-y-0.5 pl-3">
-              {linkedInSubItems.map(({ label, href }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
-                    pathname === href || pathname.startsWith(href + "/")
-                      ? "bg-blue-50 font-medium text-blue-700"
-                      : "text-gray-600 hover:bg-gray-50"
-                  )}
-                >
-                  <span className="text-xs text-gray-300">•</span>
-                  <span className="flex-1">{label}</span>
-                </Link>
-              ))}
+              {linkedInSubItems.map(({ label, href, icon: Icon }) => {
+                const isActive = pathname === href || pathname.startsWith(href + "/");
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
+                      isActive
+                        ? "bg-violet-600/60 font-medium text-white"
+                        : "text-white/60 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    {label === "Automation" ? (
+                      <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-blue-600">
+                        <LuPlus className="h-2.5 w-2.5 text-white" />
+                      </div>
+                    ) : (
+                      <Icon className="h-4 w-4 shrink-0" />
+                    )}
+                    <span className="flex-1">{label}</span>
+                  </Link>
+                );
+              })}
             </div>
           )}
-        </div>
-
-        {/* LinkedIn Autopilot (existing) */}
-        <div className="mt-1">
-          <Link
-            href="/linkedin-autopilot"
-            title={collapsed ? "LinkedIn Automation" : undefined}
-            className={cn(
-              "flex items-center rounded-lg py-2 text-sm font-medium transition-colors",
-              collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-              isLinkedInAutopilotActive
-                ? "bg-blue-50 text-blue-700"
-                : "text-gray-700 hover:bg-gray-50"
-            )}
-          >
-            <FaLinkedinIn className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>LinkedIn Automation</span>}
-          </Link>
         </div>
       </nav>
 
       {/* User bottom section */}
-      <div ref={userMenuRef} className="relative shrink-0 border-t border-gray-100 p-3">
-        {/* Popup menu — Settings + Sign out */}
+      <div ref={userMenuRef} className="relative shrink-0 border-t border-white/10 p-3">
+        {/* Popup menu */}
         {userMenuOpen && (
-          <div className="absolute bottom-full left-3 right-3 z-30 mb-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div className="absolute bottom-full left-3 right-3 z-30 mb-1 overflow-hidden rounded-xl border border-white/10 bg-[#1a1740] shadow-lg">
             <div className="p-1">
               <Link
                 href="/settings"
                 onClick={() => setUserMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
               >
-                <LuSettings className="h-4 w-4 text-gray-400" />
+                <LuSettings className="h-4 w-4" />
                 Settings
               </Link>
               <button
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
               >
                 {loggingOut ? (
                   <LuLoader className="h-4 w-4 animate-spin" />
@@ -315,32 +309,32 @@ export default function Sidebar() {
 
         {/* Trigger */}
         {!mounted ? (
-          <div className="h-10 w-full animate-pulse rounded-lg bg-gray-100" />
+          <div className="h-10 w-full animate-pulse rounded-lg bg-white/10" />
         ) : collapsed ? (
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
             title={displayName}
-            className="flex w-full items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-gray-50"
+            className="flex w-full items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-white/10"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-200 text-xs font-bold text-violet-700">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/30 text-xs font-bold text-violet-300">
               {initials}
             </div>
           </button>
         ) : (
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
-            className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-gray-50"
+            className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-white/10"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-200 text-xs font-bold text-violet-700">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/30 text-xs font-bold text-violet-300">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-gray-800">{displayName}</p>
-              <p className="truncate text-[10px] text-gray-400">Account settings</p>
+              <p className="truncate text-xs font-semibold text-white">{displayName}</p>
+              <p className="truncate text-[10px] text-white/40">Account settings</p>
             </div>
             <LuChevronDown
               className={cn(
-                "h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-200",
+                "h-3.5 w-3.5 shrink-0 text-white/40 transition-transform duration-200",
                 userMenuOpen ? "rotate-180" : "rotate-0"
               )}
             />
