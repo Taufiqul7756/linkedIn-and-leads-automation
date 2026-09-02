@@ -67,6 +67,7 @@ function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): Reac
 
 function MiniCard({ post, onEdit }: { post: AgentPost; onEdit: (p: AgentPost) => void }) {
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
+  const bodyText = post.body ?? "";
 
   return (
     <div className="relative flex flex-col rounded-2xl border border-gray-200 bg-white overflow-hidden">
