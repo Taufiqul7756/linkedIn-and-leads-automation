@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { LuX, LuCheck, LuClock, LuPencil, LuChevronLeft, LuChevronRight } from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
@@ -16,30 +16,57 @@ function formatSuggestedDate(iso: string | null): string {
   return `${days[d.getDay()]}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() >= 12 ? "PM" : "AM"}`;
 }
 
-function renderBodyText(blocksJson: string, fallback: string): string {
-  try {
-    const blocks: BlockNode[] = JSON.parse(blocksJson);
-    if (Array.isArray(blocks) && blocks.length > 0) {
-      return blocks
-        .map((b) => {
-          if (b.type === "paragraph") return b.spans.map((s: SpanNode) => s.text).join("");
-          if (b.type === "list")
-            return b.items.map((i) => i.spans.map((s: SpanNode) => s.text).join("")).join(" ");
-          return "";
-        })
-        .join(" ");
+function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): React.ReactNode {
+  let blocks: BlockNode[] = [];
+  if (Array.isArray(blocksInput)) {
+    blocks = blocksInput;
+  } else {
+    try {
+      const parsed = JSON.parse(blocksInput);
+      if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
+    } catch {
+      /* ignore */
     }
-  } catch {
-    // ignore
   }
-  return fallback;
+  if (blocks.length === 0) return <span>{fallback}</span>;
+  return (
+    <>
+      {blocks.map((block, i) => {
+        if (block.type === "paragraph") {
+          return (
+            <p key={i} className={i > 0 ? "mt-2" : undefined}>
+              {block.spans.map((s: SpanNode, j: number) =>
+                s.bold ? <strong key={j}>{s.text}</strong> : <span key={j}>{s.text}</span>
+              )}
+            </p>
+          );
+        }
+        if (block.type === "list") {
+          return (
+            <ul key={i} className={i > 0 ? "mt-2 space-y-1" : "space-y-1"}>
+              {block.items.map((item, j) => (
+                <li key={j} className="flex gap-1">
+                  <span className="shrink-0 text-gray-400">{block.marker}</span>
+                  <span>
+                    {item.spans.map((s: SpanNode, k: number) =>
+                      s.bold ? <strong key={k}>{s.text}</strong> : <span key={k}>{s.text}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
 }
 
 // ─── mini card (grid-friendly, no absolute-positioned overflow) ────────────────
 
 function MiniCard({ post, onEdit }: { post: AgentPost; onEdit: (p: AgentPost) => void }) {
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
-  const bodyText = renderBodyText(post.body_blocks, post.body);
 
   return (
     <div className="relative flex flex-col rounded-2xl border border-gray-200 bg-white overflow-hidden">
@@ -79,7 +106,9 @@ function MiniCard({ post, onEdit }: { post: AgentPost; onEdit: (p: AgentPost) =>
         )}
 
         {/* Body */}
-        <p className="flex-1 text-xs leading-relaxed text-gray-600 line-clamp-4">{bodyText}</p>
+        <div className="flex-1 overflow-hidden text-xs leading-relaxed text-gray-600 line-clamp-4">
+          {renderBlocks(post.body_blocks, post.body)}
+        </div>
 
         {/* Edit pencil */}
         <button

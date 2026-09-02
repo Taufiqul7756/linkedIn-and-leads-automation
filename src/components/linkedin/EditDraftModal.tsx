@@ -1,9 +1,60 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { LuX, LuPencil, LuPlus, LuSettings, LuSend, LuImage, LuUpload } from "react-icons/lu";
 import { cn } from "@/utils/cn";
-import type { AgentPost } from "@/types/LinkedInAgent";
+import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
+
+// ─── rich text renderer ───────────────────────────────────────────────────────
+
+function renderBlocks(blocksInput: BlockNode[] | string): React.ReactNode {
+  let blocks: BlockNode[] = [];
+  if (Array.isArray(blocksInput)) {
+    blocks = blocksInput;
+  } else {
+    try {
+      const parsed = JSON.parse(blocksInput);
+      if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (blocks.length === 0) return null;
+
+  return (
+    <>
+      {blocks.map((block, i) => {
+        if (block.type === "paragraph") {
+          return (
+            <p key={i} className={i > 0 ? "mt-3" : undefined}>
+              {block.spans.map((s: SpanNode, j: number) =>
+                s.bold ? <strong key={j}>{s.text}</strong> : <span key={j}>{s.text}</span>
+              )}
+            </p>
+          );
+        }
+        if (block.type === "list") {
+          return (
+            <ul key={i} className={cn("space-y-1", i > 0 && "mt-3")}>
+              {block.items.map((item, j) => (
+                <li key={j} className="flex gap-1.5">
+                  <span className="shrink-0 text-gray-400">{block.marker}</span>
+                  <span>
+                    {item.spans.map((s: SpanNode, k: number) =>
+                      s.bold ? <strong key={k}>{s.text}</strong> : <span key={k}>{s.text}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+}
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -125,12 +176,23 @@ export default function EditDraftModal({ post, onClose }: Props) {
           {/* Body */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">Body</label>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={6}
-              className="w-full resize-y rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-            />
+            {post.body_blocks ? (
+              <div
+                contentEditable
+                suppressContentEditableWarning
+                onInput={(e) => setBody(e.currentTarget.textContent ?? "")}
+                className="min-h-[280px] w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 whitespace-pre-wrap"
+              >
+                {renderBlocks(post.body_blocks)}
+              </div>
+            ) : (
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={14}
+                className="w-full resize-y rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+            )}
           </div>
 
           {/* Mini composer — ask for changes */}

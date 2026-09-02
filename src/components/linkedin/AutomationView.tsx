@@ -63,13 +63,17 @@ function formatSuggestedDate(iso: string | null): string {
   return `${days[d.getDay()]}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() >= 12 ? "PM" : "AM"}`;
 }
 
-function renderBlocks(blocksJson: string, fallback: string): React.ReactNode {
+function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): React.ReactNode {
   let blocks: BlockNode[] = [];
-  try {
-    const parsed = JSON.parse(blocksJson);
-    if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
-  } catch {
-    // ignore
+  if (Array.isArray(blocksInput)) {
+    blocks = blocksInput;
+  } else {
+    try {
+      const parsed = JSON.parse(blocksInput);
+      if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
+    } catch {
+      /* ignore */
+    }
   }
 
   if (blocks.length === 0) {
@@ -405,16 +409,17 @@ function DraftCard({ post, onEdit }: { post: AgentPost; onEdit: (post: AgentPost
       )}
 
       {/* Body text */}
-      <div className="min-h-0 flex-1 overflow-hidden text-xs leading-relaxed text-gray-600 line-clamp-4">
+      <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600 line-clamp-6">
         {renderBlocks(post.body_blocks, post.body)}
       </div>
 
       {/* Edit pencil — bottom right */}
       <button
         onClick={() => onEdit(post)}
-        className="absolute bottom-3 right-3 text-gray-300 transition-colors hover:text-gray-600"
+        className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
       >
-        <LuPencil className="h-3.5 w-3.5" />
+        <LuPencil className="h-3 w-3" />
+        Edit
       </button>
     </div>
   );
