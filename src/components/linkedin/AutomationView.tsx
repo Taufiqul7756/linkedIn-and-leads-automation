@@ -18,6 +18,7 @@ import {
   LuPaperclip,
   LuLink,
   LuUpload,
+  LuTrash2,
 } from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -491,28 +492,76 @@ function ThinkingIndicator() {
   );
 }
 
-// History sidebar item
+// ─── history helpers ──────────────────────────────────────────────────────────
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function groupConversations(items: ConversationListItem[]) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const last7Start = new Date(todayStart);
+  last7Start.setDate(last7Start.getDate() - 7);
+
+  const groups: { label: string; items: ConversationListItem[] }[] = [
+    { label: "Today", items: [] },
+    { label: "Yesterday", items: [] },
+    { label: "Last 7 days", items: [] },
+    { label: "Older", items: [] },
+  ];
+
+  for (const item of items) {
+    const t = new Date(item.updated_at).getTime();
+    if (t >= todayStart.getTime()) groups[0].items.push(item);
+    else if (t >= yesterdayStart.getTime()) groups[1].items.push(item);
+    else if (t >= last7Start.getTime()) groups[2].items.push(item);
+    else groups[3].items.push(item);
+  }
+
+  return groups.filter((g) => g.items.length > 0);
+}
+
+// ─── history sidebar item ─────────────────────────────────────────────────────
+
 function HistoryItem({
   item,
   active,
   onClick,
+  onDelete,
 }: {
   item: ConversationListItem;
   active: boolean;
   onClick: () => void;
+  onDelete: (e: React.MouseEvent) => void;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full rounded-lg px-3 py-2.5 text-left transition-colors",
-        active ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"
+        "group relative w-full rounded-lg px-3 py-2.5 text-left transition-colors",
+        active ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100"
       )}
     >
-      <p className="truncate text-sm font-medium">{item.title || "Untitled conversation"}</p>
-      <p className="mt-0.5 truncate text-xs text-gray-400">
-        {new Date(item.updated_at).toLocaleDateString()}
-      </p>
+      <p className="truncate pr-7 text-sm font-medium">{item.title || "Untitled conversation"}</p>
+      <p className="mt-0.5 text-xs text-gray-400">{relativeTime(item.updated_at)}</p>
+      <span
+        role="button"
+        onClick={onDelete}
+        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+      >
+        <LuTrash2 className="h-3.5 w-3.5" />
+      </span>
     </button>
   );
 }
@@ -562,7 +611,6 @@ export default function AutomationView() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
-  const historyRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -713,16 +761,6 @@ export default function AutomationView() {
     return () => document.removeEventListener("mousedown", h);
   }, [plusOpen]);
 
-  useEffect(() => {
-    if (!historyOpen) return;
-    const h = (e: MouseEvent) => {
-      if (historyRef.current && !historyRef.current.contains(e.target as Node))
-        setHistoryOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [historyOpen]);
-
   // ── send first message (creates conversation) ──
   const handleSend = async () => {
     const text = message.trim();
@@ -810,8 +848,36 @@ export default function AutomationView() {
     textareaRef.current?.focus();
   };
 
+  // ── restore history panel open state after hydration ──
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (localStorage.getItem("agent-history-open") === "true") setHistoryOpen(true);
+  }, []);
+
+  // ── persist history panel open state ──
+  useEffect(() => {
+    localStorage.setItem("agent-history-open", String(historyOpen));
+  }, [historyOpen]);
+
+  // ── auto-load history on mount if panel was persisted open ──
+  useEffect(() => {
+    if (!historyOpen || !workspaceId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHistoryLoading(true);
+    svc()
+      .getConversations()
+      .then(setHistory)
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+
   // ── load history ──
   const handleOpenHistory = async () => {
+    if (historyOpen) {
+      setHistoryOpen(false);
+      return;
+    }
     setHistoryOpen(true);
     if (!workspaceId) return;
     setHistoryLoading(true);
@@ -827,7 +893,6 @@ export default function AutomationView() {
 
   // ── load conversation from history ──
   const handleLoadConversation = async (id: string) => {
-    setHistoryOpen(false);
     stopPolling();
     setPosts([]);
     try {
@@ -839,6 +904,19 @@ export default function AutomationView() {
       }
     } catch (err) {
       toast.error(extractErrorMessage(err));
+    }
+  };
+
+  // ── delete conversation ──
+  const handleDeleteConversation = async (id: string) => {
+    try {
+      await svc().deleteConversation(id);
+      setHistory((prev) =>
+        prev ? { ...prev, results: prev.results.filter((c) => c.id !== id) } : prev
+      );
+      if (conversation?.id === id) handleNewChat();
+    } catch {
+      toast.error("Failed to delete conversation");
     }
   };
 
@@ -935,44 +1013,13 @@ export default function AutomationView() {
               </span>
 
               {/* History */}
-              <div ref={historyRef} className="relative">
-                <button
-                  onClick={handleOpenHistory}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-50"
-                >
-                  <LuHistory className="h-3.5 w-3.5" />
-                  History
-                </button>
-
-                {historyOpen && (
-                  <div className="absolute right-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                    <div className="border-b border-gray-100 px-4 py-3">
-                      <span className="text-sm font-semibold text-gray-900">
-                        Conversation history
-                      </span>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto p-2">
-                      {historyLoading ? (
-                        <div className="flex items-center gap-2 px-3 py-4 text-sm text-gray-400">
-                          <LuLoader className="h-4 w-4 animate-spin" />
-                          Loading…
-                        </div>
-                      ) : !history?.results.length ? (
-                        <p className="px-3 py-4 text-sm text-gray-400">No conversations yet.</p>
-                      ) : (
-                        history.results.map((item) => (
-                          <HistoryItem
-                            key={item.id}
-                            item={item}
-                            active={item.id === conversation?.id}
-                            onClick={() => handleLoadConversation(item.id)}
-                          />
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={handleOpenHistory}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                <LuHistory className="h-3.5 w-3.5" />
+                History
+              </button>
 
               <button
                 onClick={handleNewChat}
@@ -984,430 +1031,500 @@ export default function AutomationView() {
             </div>
           </div>
 
-          {/* Messages area */}
-          <div className="flex-1 overflow-y-auto px-5 py-6">
-            {/* Loading state while restoring conversation */}
-            {restoringConv && (
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                  <LuPlus className="h-4 w-4 text-white" />
+          {/* Body row — history panel + chat */}
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            {/* History panel */}
+            {historyOpen && (
+              <div className="flex w-60 shrink-0 flex-col border-r border-gray-100">
+                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
+                  <span className="text-sm font-semibold text-gray-900">Chat history</span>
+                  <button
+                    onClick={() => setHistoryOpen(false)}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                  >
+                    <LuX className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-400">
-                  <LuLoader className="h-4 w-4 animate-spin" />
-                  Loading conversation…
+                <div className="flex-1 overflow-y-auto p-2">
+                  <button
+                    onClick={handleNewChat}
+                    className="mb-4 mt-1 flex w-full items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-600 transition-colors hover:bg-blue-100"
+                  >
+                    <LuPlus className="h-3.5 w-3.5" />
+                    New chat
+                  </button>
+                  {historyLoading ? (
+                    <div className="flex items-center gap-2 px-3 py-6 text-sm text-gray-400">
+                      <LuLoader className="h-4 w-4 animate-spin" />
+                      Loading…
+                    </div>
+                  ) : !history?.results.length ? (
+                    <p className="px-3 py-6 text-sm text-gray-400">No conversations yet.</p>
+                  ) : (
+                    groupConversations(history.results).map((group) => (
+                      <div key={group.label} className="mb-4">
+                        <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                          {group.label}
+                        </p>
+                        {group.items.map((item) => (
+                          <HistoryItem
+                            key={item.id}
+                            item={item}
+                            active={item.id === conversation?.id}
+                            onClick={() => handleLoadConversation(item.id)}
+                            onDelete={(e) => {
+                              e.stopPropagation();
+                              handleDeleteConversation(item.id);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Welcome message — only after restore completes with no conversation */}
-            {!restoringConv && !conversation && (
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                  <LuPlus className="h-4 w-4 text-white" />
-                </div>
-                <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                  Tell me what you want and I&apos;ll research your brand, ask a couple of quick
-                  questions, then draft posts right here for you to approve.
-                </div>
-              </div>
-            )}
+            {/* Chat column */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {/* Messages area */}
+              <div className="flex-1 overflow-y-auto px-5 py-6">
+                {/* Loading state while restoring conversation */}
+                {restoringConv && (
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                      <LuPlus className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-400">
+                      <LuLoader className="h-4 w-4 animate-spin" />
+                      Loading conversation…
+                    </div>
+                  </div>
+                )}
 
-            {/* Conversation messages */}
-            {conversation?.messages.map((msg) => {
-              if (msg.role === "user") {
-                // Answer message — empty text, render summary from payload.answers
-                if (!msg.text && msg.kind === "text") {
-                  const answers = msg.payload.answers as Record<string, string> | undefined;
-                  if (!answers) return null;
-                  const summary = Object.values(answers).filter(Boolean).join(" · ");
+                {/* Welcome message — only after restore completes with no conversation */}
+                {!restoringConv && !conversation && (
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                      <LuPlus className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                      Tell me what you want and I&apos;ll research your brand, ask a couple of quick
+                      questions, then draft posts right here for you to approve.
+                    </div>
+                  </div>
+                )}
+
+                {/* Conversation messages */}
+                {conversation?.messages.map((msg) => {
+                  if (msg.role === "user") {
+                    // Answer message — empty text, render summary from payload.answers
+                    if (!msg.text && msg.kind === "text") {
+                      const answers = msg.payload.answers as Record<string, string> | undefined;
+                      if (!answers) return null;
+                      const summary = Object.values(answers).filter(Boolean).join(" · ");
+                      return (
+                        <div key={msg.id} className="mt-4 flex justify-end">
+                          <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-100 px-4 py-3 text-sm leading-relaxed text-blue-800">
+                            {summary}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={msg.id} className="mt-4 flex justify-end">
+                        <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
+                          {msg.text}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Agent messages
+                  if (msg.kind === "posts") {
+                    // Posts rendered separately below
+                    return null;
+                  }
+
                   return (
-                    <div key={msg.id} className="mt-4 flex justify-end">
-                      <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-100 px-4 py-3 text-sm leading-relaxed text-blue-800">
-                        {summary}
+                    <div key={msg.id} className="mt-4 flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                        <LuPlus className="h-4 w-4 text-white" />
+                      </div>
+                      <div
+                        className={cn(
+                          "max-w-xl rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
+                          msg.kind === "error"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-gray-50 text-gray-700"
+                        )}
+                      >
+                        {msg.text}
                       </div>
                     </div>
                   );
-                }
-                return (
-                  <div key={msg.id} className="mt-4 flex justify-end">
-                    <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
-                      {msg.text}
+                })}
+
+                {/* Awaiting input — question form */}
+                {isAwaiting && pendingInterrupt && piQuestions.length > 0 && (
+                  <div className="mt-4 flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                      <LuPlus className="h-4 w-4 text-white" />
                     </div>
-                  </div>
-                );
-              }
+                    <div className="flex-1">
+                      <div className="inline-block max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                        Great — a few quick things so I draft the right posts. You can change any of
+                        these.
+                      </div>
 
-              // Agent messages
-              if (msg.kind === "posts") {
-                // Posts rendered separately below
-                return null;
-              }
-
-              return (
-                <div key={msg.id} className="mt-4 flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                    <LuPlus className="h-4 w-4 text-white" />
-                  </div>
-                  <div
-                    className={cn(
-                      "max-w-xl rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
-                      msg.kind === "error" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-700"
-                    )}
-                  >
-                    {msg.text}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Awaiting input — question form */}
-            {isAwaiting && pendingInterrupt && piQuestions.length > 0 && (
-              <div className="mt-4 flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                  <LuPlus className="h-4 w-4 text-white" />
-                </div>
-                <div className="flex-1">
-                  <div className="inline-block max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                    Great — a few quick things so I draft the right posts. You can change any of
-                    these.
-                  </div>
-
-                  {isHeadlineStyle ? (
-                    <HeadlinesForm
-                      question={piQuestions[0]}
-                      submitting={answering}
-                      onSubmit={(selected) =>
-                        handleAnswer({ [piQuestions[0].id]: selected.join(",") })
-                      }
-                    />
-                  ) : (
-                    <GrillForm
-                      questions={piQuestions}
-                      onSubmit={handleAnswer}
-                      submitting={answering}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Running indicator */}
-            {isRunning && (
-              <div className="mt-4">
-                <ThinkingIndicator />
-              </div>
-            )}
-
-            {/* Draft cards */}
-            {posts.length > 0 && (
-              <div className="mt-4">
-                <DraftsSection
-                  posts={posts}
-                  onEdit={setEditPost}
-                  onViewAll={() => setViewAllOpen(true)}
-                />
-              </div>
-            )}
-
-            {/* Terminal states */}
-            {isTerminal && (
-              <div className="mt-4 flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-400">
-                  <LuPlus className="h-4 w-4 text-white" />
-                </div>
-                <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
-                  {conversation?.status === "archived" ? (
-                    <>
-                      This conversation was archived after 7 days.{" "}
-                      <button
-                        onClick={handleNewChat}
-                        className="font-medium text-blue-600 hover:underline"
-                      >
-                        Start a new one
-                      </button>
-                    </>
-                  ) : (
-                    "Generation stopped. You can keep chatting or send a new message."
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input area */}
-          <div className="shrink-0 border-t border-gray-100 px-5 py-4">
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && canSend && message.trim()) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={
-                isAwaiting
-                  ? "Answer the questions above…"
-                  : isRunning
-                    ? "Agent is working…"
-                    : "e.g. Give me 5 LinkedIn drafts about our brand..."
-              }
-              disabled={isRunning || isAwaiting}
-              rows={2}
-              className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
-            />
-
-            {/* Attachment chips */}
-            {attachments.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {attachments.map((a) => (
-                  <span
-                    key={a.id}
-                    className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
-                  >
-                    {a.type === "file" ? (
-                      <LuPaperclip className="h-3 w-3 shrink-0" />
-                    ) : (
-                      <LuLink className="h-3 w-3 shrink-0" />
-                    )}
-                    <span className="max-w-[140px] truncate">{a.name}</span>
-                    <button
-                      onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
-                      className="shrink-0 text-blue-400 hover:text-blue-600"
-                    >
-                      <LuX className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setAttachments((prev) => [
-                  ...prev,
-                  { id: crypto.randomUUID(), type: "file", name: file.name },
-                ]);
-                e.target.value = "";
-                setPlusOpen(false);
-              }}
-            />
-
-            <div className="mt-3 flex items-center justify-between">
-              {/* Prompt suggestions */}
-              <div ref={promptRef} className="relative">
-                <button
-                  onClick={() => setPromptOpen((v) => !v)}
-                  disabled={isRunning || isAwaiting}
-                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
-                >
-                  <LuZap className="h-3.5 w-3.5" />
-                  Prompt suggestions
-                </button>
-
-                {promptOpen && (
-                  <div className="absolute bottom-full left-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                    <div className="divide-y divide-gray-100">
-                      {PROMPT_SUGGESTIONS.map((s, i) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            setMessage(s.text);
-                            setPromptOpen(false);
-                          }}
-                          className="w-full px-4 py-3 text-left transition-colors hover:bg-gray-50"
-                        >
-                          <p className="text-sm text-gray-800">{s.text}</p>
-                          {s.tag && (
-                            <span className="mt-1 inline-block text-xs font-medium text-teal-600">
-                              {s.tag}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Right-side actions */}
-              <div className="flex items-center gap-2">
-                {/* Cancel */}
-                {showCancel && (
-                  <button
-                    onClick={handleCancel}
-                    disabled={cancelling}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {cancelling ? (
-                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <LuSquare className="h-3.5 w-3.5" />
-                    )}
-                    Cancel
-                  </button>
-                )}
-
-                {/* Plus — file / URL attach */}
-                <div ref={plusRef} className="relative">
-                  <button
-                    onClick={() => setPlusOpen((v) => !v)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100"
-                  >
-                    <LuPlus className="h-4 w-4" />
-                  </button>
-
-                  {plusOpen && (
-                    <div className="absolute bottom-full right-0 z-20 mb-2 w-60 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50"
-                      >
-                        <LuUpload className="h-4 w-4 text-gray-400" />
-                        Upload a file
-                      </button>
-                      <div className="mt-2 flex gap-2">
-                        <input
-                          type="url"
-                          placeholder="Paste a URL"
-                          value={urlInput}
-                          onChange={(e) => setUrlInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key !== "Enter" || !urlInput.trim()) return;
-                            setAttachments((prev) => [
-                              ...prev,
-                              { id: crypto.randomUUID(), type: "url", name: urlInput.trim() },
-                            ]);
-                            setUrlInput("");
-                            setPlusOpen(false);
-                          }}
-                          className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                      {isHeadlineStyle ? (
+                        <HeadlinesForm
+                          question={piQuestions[0]}
+                          submitting={answering}
+                          onSubmit={(selected) =>
+                            handleAnswer({ [piQuestions[0].id]: selected.join(",") })
+                          }
                         />
-                        <button
-                          disabled={!urlInput.trim()}
-                          onClick={() => {
-                            if (!urlInput.trim()) return;
-                            setAttachments((prev) => [
-                              ...prev,
-                              { id: crypto.randomUUID(), type: "url", name: urlInput.trim() },
-                            ]);
-                            setUrlInput("");
-                            setPlusOpen(false);
-                          }}
-                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          Add
-                        </button>
-                      </div>
+                      ) : (
+                        <GrillForm
+                          questions={piQuestions}
+                          onSubmit={handleAnswer}
+                          submitting={answering}
+                        />
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* Settings */}
-                <div ref={settingsRef} className="relative">
-                  <button
-                    onClick={() => setSettingsOpen((v) => !v)}
-                    className={cn(
-                      "flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100",
-                      settingsSaving && "opacity-50"
-                    )}
-                  >
-                    <LuSettings className="h-4 w-4" />
-                  </button>
+                {/* Running indicator */}
+                {isRunning && (
+                  <div className="mt-4">
+                    <ThinkingIndicator />
+                  </div>
+                )}
 
-                  {settingsOpen && (
-                    <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                      <div className="flex items-center justify-between px-4 py-3">
-                        <span className="text-sm font-semibold text-gray-900">
-                          Composer settings
-                        </span>
-                        <button
-                          onClick={() => setSettingsOpen(false)}
-                          className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
-                        >
-                          <LuX className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                {/* Draft cards */}
+                {posts.length > 0 && (
+                  <div className="mt-4">
+                    <DraftsSection
+                      posts={posts}
+                      onEdit={setEditPost}
+                      onViewAll={() => setViewAllOpen(true)}
+                    />
+                  </div>
+                )}
 
-                      <div className="divide-y divide-gray-100 px-4 pb-4">
-                        <div className="flex items-start justify-between gap-3 py-3">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">Use emoji</p>
-                            <p className="text-xs text-gray-400">
-                              Let the agent sprinkle emoji into drafts
-                            </p>
-                          </div>
-                          <Toggle
-                            checked={settings.use_emoji}
-                            onChange={(v) => handleSettingChange("use_emoji", v)}
-                          />
-                        </div>
-                        <div className="flex items-start justify-between gap-3 py-3">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">Use knowledge base</p>
-                            <p className="text-xs text-gray-400">
-                              Ground drafts in your connected sources
-                            </p>
-                          </div>
-                          <Toggle
-                            checked={settings.use_knowledge}
-                            onChange={(v) => handleSettingChange("use_knowledge", v)}
-                          />
-                        </div>
-                        <div className="flex items-start justify-between gap-3 py-3">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">Use AI image</p>
-                            <p className="text-xs text-gray-400">Suggest a visual for each draft</p>
-                          </div>
-                          <Toggle
-                            checked={settings.use_ai_image}
-                            onChange={(v) => handleSettingChange("use_ai_image", v)}
-                          />
-                        </div>
-                        <div className="flex items-start justify-between gap-3 pt-3">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">Make longer</p>
-                            <p className="text-xs text-gray-400">Write longer posts by default</p>
-                          </div>
-                          <Toggle
-                            checked={settings.make_longer}
-                            onChange={(v) => handleSettingChange("make_longer", v)}
-                          />
-                        </div>
-                      </div>
+                {/* Terminal states */}
+                {isTerminal && (
+                  <div className="mt-4 flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-400">
+                      <LuPlus className="h-4 w-4 text-white" />
                     </div>
-                  )}
-                </div>
+                    <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                      {conversation?.status === "archived" ? (
+                        <>
+                          This conversation was archived after 7 days.{" "}
+                          <button
+                            onClick={handleNewChat}
+                            className="font-medium text-blue-600 hover:underline"
+                          >
+                            Start a new one
+                          </button>
+                        </>
+                      ) : (
+                        "Generation stopped. You can keep chatting or send a new message."
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                {/* Send */}
-                <button
-                  onClick={handleSend}
-                  disabled={!canSend || !message.trim() || sending}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors",
-                    canSend && message.trim()
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "bg-blue-600 opacity-50"
-                  )}
-                >
-                  {sending ? (
-                    <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <LuSend className="h-3.5 w-3.5" />
-                  )}
-                  Send
-                </button>
+                <div ref={messagesEndRef} />
               </div>
+
+              {/* Input area */}
+              <div className="shrink-0 border-t border-gray-100 px-5 py-4">
+                <textarea
+                  ref={textareaRef}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && canSend && message.trim()) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  placeholder={
+                    isAwaiting
+                      ? "Answer the questions above…"
+                      : isRunning
+                        ? "Agent is working…"
+                        : "e.g. Give me 5 LinkedIn drafts about our brand..."
+                  }
+                  disabled={isRunning || isAwaiting}
+                  rows={2}
+                  className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
+                />
+
+                {/* Attachment chips */}
+                {attachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {attachments.map((a) => (
+                      <span
+                        key={a.id}
+                        className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+                      >
+                        {a.type === "file" ? (
+                          <LuPaperclip className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <LuLink className="h-3 w-3 shrink-0" />
+                        )}
+                        <span className="max-w-[140px] truncate">{a.name}</span>
+                        <button
+                          onClick={() =>
+                            setAttachments((prev) => prev.filter((x) => x.id !== a.id))
+                          }
+                          className="shrink-0 text-blue-400 hover:text-blue-600"
+                        >
+                          <LuX className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setAttachments((prev) => [
+                      ...prev,
+                      { id: crypto.randomUUID(), type: "file", name: file.name },
+                    ]);
+                    e.target.value = "";
+                    setPlusOpen(false);
+                  }}
+                />
+
+                <div className="mt-3 flex items-center justify-between">
+                  {/* Prompt suggestions */}
+                  <div ref={promptRef} className="relative">
+                    <button
+                      onClick={() => setPromptOpen((v) => !v)}
+                      disabled={isRunning || isAwaiting}
+                      className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      <LuZap className="h-3.5 w-3.5" />
+                      Prompt suggestions
+                    </button>
+
+                    {promptOpen && (
+                      <div className="absolute bottom-full left-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                        <div className="divide-y divide-gray-100">
+                          {PROMPT_SUGGESTIONS.map((s, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                setMessage(s.text);
+                                setPromptOpen(false);
+                              }}
+                              className="w-full px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                            >
+                              <p className="text-sm text-gray-800">{s.text}</p>
+                              {s.tag && (
+                                <span className="mt-1 inline-block text-xs font-medium text-teal-600">
+                                  {s.tag}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right-side actions */}
+                  <div className="flex items-center gap-2">
+                    {/* Cancel */}
+                    {showCancel && (
+                      <button
+                        onClick={handleCancel}
+                        disabled={cancelling}
+                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {cancelling ? (
+                          <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <LuSquare className="h-3.5 w-3.5" />
+                        )}
+                        Cancel
+                      </button>
+                    )}
+
+                    {/* Plus — file / URL attach */}
+                    <div ref={plusRef} className="relative">
+                      <button
+                        onClick={() => setPlusOpen((v) => !v)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100"
+                      >
+                        <LuPlus className="h-4 w-4" />
+                      </button>
+
+                      {plusOpen && (
+                        <div className="absolute bottom-full right-0 z-20 mb-2 w-60 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50"
+                          >
+                            <LuUpload className="h-4 w-4 text-gray-400" />
+                            Upload a file
+                          </button>
+                          <div className="mt-2 flex gap-2">
+                            <input
+                              type="url"
+                              placeholder="Paste a URL"
+                              value={urlInput}
+                              onChange={(e) => setUrlInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter" || !urlInput.trim()) return;
+                                setAttachments((prev) => [
+                                  ...prev,
+                                  { id: crypto.randomUUID(), type: "url", name: urlInput.trim() },
+                                ]);
+                                setUrlInput("");
+                                setPlusOpen(false);
+                              }}
+                              className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                            />
+                            <button
+                              disabled={!urlInput.trim()}
+                              onClick={() => {
+                                if (!urlInput.trim()) return;
+                                setAttachments((prev) => [
+                                  ...prev,
+                                  { id: crypto.randomUUID(), type: "url", name: urlInput.trim() },
+                                ]);
+                                setUrlInput("");
+                                setPlusOpen(false);
+                              }}
+                              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Settings */}
+                    <div ref={settingsRef} className="relative">
+                      <button
+                        onClick={() => setSettingsOpen((v) => !v)}
+                        className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100",
+                          settingsSaving && "opacity-50"
+                        )}
+                      >
+                        <LuSettings className="h-4 w-4" />
+                      </button>
+
+                      {settingsOpen && (
+                        <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                          <div className="flex items-center justify-between px-4 py-3">
+                            <span className="text-sm font-semibold text-gray-900">
+                              Composer settings
+                            </span>
+                            <button
+                              onClick={() => setSettingsOpen(false)}
+                              className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                            >
+                              <LuX className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="divide-y divide-gray-100 px-4 pb-4">
+                            <div className="flex items-start justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">Use emoji</p>
+                                <p className="text-xs text-gray-400">
+                                  Let the agent sprinkle emoji into drafts
+                                </p>
+                              </div>
+                              <Toggle
+                                checked={settings.use_emoji}
+                                onChange={(v) => handleSettingChange("use_emoji", v)}
+                              />
+                            </div>
+                            <div className="flex items-start justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">
+                                  Use knowledge base
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  Ground drafts in your connected sources
+                                </p>
+                              </div>
+                              <Toggle
+                                checked={settings.use_knowledge}
+                                onChange={(v) => handleSettingChange("use_knowledge", v)}
+                              />
+                            </div>
+                            <div className="flex items-start justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">Use AI image</p>
+                                <p className="text-xs text-gray-400">
+                                  Suggest a visual for each draft
+                                </p>
+                              </div>
+                              <Toggle
+                                checked={settings.use_ai_image}
+                                onChange={(v) => handleSettingChange("use_ai_image", v)}
+                              />
+                            </div>
+                            <div className="flex items-start justify-between gap-3 pt-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">Make longer</p>
+                                <p className="text-xs text-gray-400">
+                                  Write longer posts by default
+                                </p>
+                              </div>
+                              <Toggle
+                                checked={settings.make_longer}
+                                onChange={(v) => handleSettingChange("make_longer", v)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Send */}
+                    <button
+                      onClick={handleSend}
+                      disabled={!canSend || !message.trim() || sending}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors",
+                        canSend && message.trim()
+                          ? "bg-blue-600 hover:bg-blue-700"
+                          : "bg-blue-600 opacity-50"
+                      )}
+                    >
+                      {sending ? (
+                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <LuSend className="h-3.5 w-3.5" />
+                      )}
+                      Send
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {/* /chat column */}
             </div>
+            {/* /body row */}
           </div>
         </div>
       </div>
