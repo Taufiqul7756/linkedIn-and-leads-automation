@@ -229,13 +229,13 @@ function GrillForm({
   let i = 0;
   while (i < questions.length) {
     const q = questions[i];
-    const isFullWidth =
-      q.kind === "text" || (questions.length % 2 === 1 && i === questions.length - 1);
+    const next = questions[i + 1];
+    const isFullWidth = q.kind === "text" || !next;
     if (isFullWidth) {
       pairs.push([q]);
       i++;
     } else {
-      pairs.push([q, questions[i + 1]]);
+      pairs.push([q, next]);
       i += 2;
     }
   }
@@ -646,16 +646,29 @@ export default function AutomationView() {
     [svc]
   );
 
+  const refreshHistory = useCallback(async () => {
+    try {
+      const data = await svc().getConversations();
+
+      setHistory(data);
+    } catch {
+      // ignore
+    }
+  }, [svc]);
+
   const handlePollResult = useCallback(
     (conv: Conversation) => {
       setConversation(conv);
       if (conv.status === "running") return;
       stopPolling();
-      if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
-        fetchPosts(conv.artifacts.post_ids);
+      if (conv.status === "completed") {
+        refreshHistory();
+        if (conv.artifacts.post_ids.length > 0) {
+          fetchPosts(conv.artifacts.post_ids);
+        }
       }
     },
-    [stopPolling, fetchPosts]
+    [stopPolling, fetchPosts, refreshHistory]
   );
 
   const startPolling = useCallback(
