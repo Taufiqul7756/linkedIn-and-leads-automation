@@ -73,12 +73,14 @@ export const linkedinAgentService = (workspaceId: string) => ({
     excludeStatus?: string;
     page?: number;
     pageSize?: number;
+    conversationId?: string;
   }) => {
     const q = new URLSearchParams({ state: "agent" });
     if (params?.status) q.set("status", params.status);
     if (params?.excludeStatus) q.set("exclude_status", params.excludeStatus);
     if (params?.page) q.set("page", String(params.page));
     if (params?.pageSize) q.set("page_size", String(params.pageSize));
+    if (params?.conversationId) q.set("conversation", params.conversationId);
     return axiosGet<PaginatedAgentPosts>(
       `/workspaces/${workspaceId}/content/posts/?${q.toString()}`
     );

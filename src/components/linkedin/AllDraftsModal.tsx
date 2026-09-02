@@ -108,10 +108,17 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   workspaceId: string;
+  conversationId: string | null;
   onEdit: (post: AgentPost) => void;
 }
 
-export default function AllDraftsModal({ isOpen, onClose, workspaceId, onEdit }: Props) {
+export default function AllDraftsModal({
+  isOpen,
+  onClose,
+  workspaceId,
+  conversationId,
+  onEdit,
+}: Props) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<PaginatedAgentPosts | null>(null);
   const [loading, setLoading] = useState(false);
@@ -121,11 +128,16 @@ export default function AllDraftsModal({ isOpen, onClose, workspaceId, onEdit }:
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     linkedinAgentService(workspaceId)
-      .getAgentPosts({ page, pageSize: PAGE_SIZE, status: "draft" })
+      .getAgentPosts({
+        page,
+        pageSize: PAGE_SIZE,
+        status: "draft",
+        conversationId: conversationId ?? undefined,
+      })
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, [isOpen, workspaceId, page]);
+  }, [isOpen, workspaceId, conversationId, page]);
 
   // reset to page 1 when closed
   useEffect(() => {
@@ -146,7 +158,7 @@ export default function AllDraftsModal({ isOpen, onClose, workspaceId, onEdit }:
   if (!isOpen) return null;
 
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 1;
-  const posts = data?.results ?? [];
+  const pagedPosts = data?.results ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -173,11 +185,11 @@ export default function AllDraftsModal({ isOpen, onClose, workspaceId, onEdit }:
             <div className="flex items-center justify-center py-20">
               <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : posts.length === 0 ? (
+          ) : pagedPosts.length === 0 ? (
             <p className="py-20 text-center text-sm text-gray-400">No drafts found.</p>
           ) : (
             <div className="grid grid-cols-1 gap-x-4 gap-y-8 pt-4 sm:grid-cols-2 lg:grid-cols-3">
-              {posts.map((post) => (
+              {pagedPosts.map((post) => (
                 <MiniCard key={post.id} post={post} onEdit={onEdit} />
               ))}
             </div>

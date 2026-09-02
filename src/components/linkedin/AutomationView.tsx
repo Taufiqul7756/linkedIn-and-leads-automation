@@ -454,7 +454,7 @@ function DraftsSection({
             onClick={onViewAll}
             className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
           >
-            View all {posts.length}
+            View all drafts
           </button>
         </div>
       </div>
@@ -732,7 +732,7 @@ export default function AutomationView() {
     try {
       let convId = conversation?.id;
 
-      if (!convId || conversation?.status === "cancelled" || conversation?.status === "archived") {
+      if (!convId || conversation?.status === "archived") {
         const newConv = await svc().createConversation();
         convId = newConv.id;
         setConversation(newConv);
@@ -1116,15 +1116,19 @@ export default function AutomationView() {
                   <LuPlus className="h-4 w-4 text-white" />
                 </div>
                 <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
-                  {conversation?.status === "archived"
-                    ? "This conversation was archived after 7 days. "
-                    : "Conversation cancelled. "}
-                  <button
-                    onClick={handleNewChat}
-                    className="font-medium text-blue-600 hover:underline"
-                  >
-                    Start a new one
-                  </button>
+                  {conversation?.status === "archived" ? (
+                    <>
+                      This conversation was archived after 7 days.{" "}
+                      <button
+                        onClick={handleNewChat}
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        Start a new one
+                      </button>
+                    </>
+                  ) : (
+                    "Generation stopped. You can keep chatting or send a new message."
+                  )}
                 </div>
               </div>
             )}
@@ -1416,6 +1420,7 @@ export default function AutomationView() {
         isOpen={viewAllOpen}
         onClose={() => setViewAllOpen(false)}
         workspaceId={workspaceId}
+        conversationId={conversation?.id ?? null}
         onEdit={(post) => {
           setViewAllOpen(false);
           setEditPost(post);
