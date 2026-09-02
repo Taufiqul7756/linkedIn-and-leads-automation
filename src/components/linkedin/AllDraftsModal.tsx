@@ -1,18 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  LuX,
-  LuCheck,
-  LuClock,
-  LuPencil,
-  LuChevronLeft,
-  LuChevronRight,
-  LuLoader,
-} from "react-icons/lu";
+import { LuX, LuCheck, LuClock, LuPencil, LuChevronLeft, LuChevronRight } from "react-icons/lu";
 import { cn } from "@/utils/cn";
-import { linkedinAgentService } from "@/service/linkedinAgentService";
-import type { AgentPost, PaginatedAgentPosts, BlockNode, SpanNode } from "@/types/LinkedInAgent";
+import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
 
 const PAGE_SIZE = 6;
 
@@ -107,37 +98,12 @@ function MiniCard({ post, onEdit }: { post: AgentPost; onEdit: (p: AgentPost) =>
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  workspaceId: string;
-  conversationId: string | null;
+  posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
 }
 
-export default function AllDraftsModal({
-  isOpen,
-  onClose,
-  workspaceId,
-  conversationId,
-  onEdit,
-}: Props) {
+export default function AllDraftsModal({ isOpen, onClose, posts, onEdit }: Props) {
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<PaginatedAgentPosts | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen || !workspaceId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    linkedinAgentService(workspaceId)
-      .getAgentPosts({
-        page,
-        pageSize: PAGE_SIZE,
-        status: "draft",
-        conversationId: conversationId ?? undefined,
-      })
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, [isOpen, workspaceId, conversationId, page]);
 
   // reset to page 1 when closed
   useEffect(() => {
@@ -157,8 +123,8 @@ export default function AllDraftsModal({
 
   if (!isOpen) return null;
 
-  const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 1;
-  const pagedPosts = data?.results ?? [];
+  const totalPages = Math.max(1, Math.ceil(posts.length / PAGE_SIZE));
+  const pagedPosts = posts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -169,7 +135,7 @@ export default function AllDraftsModal({
         <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
             <h2 className="font-semibold text-gray-900">All drafts</h2>
-            {data && <p className="text-xs text-gray-400">{data.count} total</p>}
+            <p className="text-xs text-gray-400">{posts.length} total</p>
           </div>
           <button
             onClick={onClose}
@@ -181,11 +147,7 @@ export default function AllDraftsModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
-            </div>
-          ) : pagedPosts.length === 0 ? (
+          {pagedPosts.length === 0 ? (
             <p className="py-20 text-center text-sm text-gray-400">No drafts found.</p>
           ) : (
             <div className="grid grid-cols-1 gap-x-4 gap-y-8 pt-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -197,14 +159,14 @@ export default function AllDraftsModal({
         </div>
 
         {/* Pagination footer */}
-        {data && totalPages > 1 && (
+        {totalPages > 1 && (
           <div className="flex shrink-0 items-center justify-between border-t border-gray-100 px-6 py-4">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1 || loading}
+              disabled={page === 1}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50",
-                (page === 1 || loading) && "cursor-not-allowed opacity-40"
+                page === 1 && "cursor-not-allowed opacity-40"
               )}
             >
               <LuChevronLeft className="h-4 w-4" />
@@ -218,10 +180,10 @@ export default function AllDraftsModal({
 
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages || loading}
+              disabled={page === totalPages}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50",
-                (page === totalPages || loading) && "cursor-not-allowed opacity-40"
+                page === totalPages && "cursor-not-allowed opacity-40"
               )}
             >
               Next

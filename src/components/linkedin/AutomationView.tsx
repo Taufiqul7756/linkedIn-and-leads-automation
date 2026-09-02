@@ -428,7 +428,7 @@ function DraftsSection({
 }: {
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
-  onViewAll: () => void;
+  onViewAll: (posts: AgentPost[]) => void;
 }) {
   const draftPosts = posts.filter((p) => p.status === "draft");
 
@@ -452,7 +452,7 @@ function DraftsSection({
             Go to Post management
           </Link>
           <button
-            onClick={onViewAll}
+            onClick={() => onViewAll(posts)}
             className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
           >
             View all drafts
@@ -594,6 +594,7 @@ export default function AutomationView() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [editPost, setEditPost] = useState<AgentPost | null>(null);
   const [viewAllOpen, setViewAllOpen] = useState(false);
+  const [viewAllPosts, setViewAllPosts] = useState<AgentPost[]>([]);
   const [restoringConv, setRestoringConv] = useState(true);
 
   // Settings
@@ -1140,10 +1141,32 @@ export default function AutomationView() {
                     );
                   }
 
-                  // Agent messages
+                  // Agent messages — posts message: render inline with its own drafts
                   if (msg.kind === "posts") {
-                    // Posts rendered separately below
-                    return null;
+                    const msgPostIds = (msg.payload.post_ids as string[] | undefined) ?? [];
+                    const msgPosts = posts.filter((p) => msgPostIds.includes(p.id));
+                    return (
+                      <div key={msg.id} className="mt-4 flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                          <LuPlus className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <div className="mb-3 inline-block rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                            {msg.text}
+                          </div>
+                          {msgPosts.length > 0 && (
+                            <DraftsSection
+                              posts={msgPosts}
+                              onEdit={setEditPost}
+                              onViewAll={(p) => {
+                                setViewAllPosts(p);
+                                setViewAllOpen(true);
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
                   }
 
                   return (
@@ -1200,17 +1223,6 @@ export default function AutomationView() {
                 {isRunning && (
                   <div className="mt-4">
                     <ThinkingIndicator />
-                  </div>
-                )}
-
-                {/* Draft cards */}
-                {posts.length > 0 && (
-                  <div className="mt-4">
-                    <DraftsSection
-                      posts={posts}
-                      onEdit={setEditPost}
-                      onViewAll={() => setViewAllOpen(true)}
-                    />
                   </div>
                 )}
 
@@ -1536,8 +1548,7 @@ export default function AutomationView() {
       <AllDraftsModal
         isOpen={viewAllOpen}
         onClose={() => setViewAllOpen(false)}
-        workspaceId={workspaceId}
-        conversationId={conversation?.id ?? null}
+        posts={viewAllPosts}
         onEdit={(post) => {
           setViewAllOpen(false);
           setEditPost(post);
