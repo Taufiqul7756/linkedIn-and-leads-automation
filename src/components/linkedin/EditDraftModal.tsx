@@ -177,16 +177,18 @@ export default function EditDraftModal({ post, onClose }: Props) {
 
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Title */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-            />
-          </div>
+          {/* Title — only shown when the post has a headline */}
+          {post.headline && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+            </div>
+          )}
 
           {/* Body — Tiptap rich text editor */}
           <div>

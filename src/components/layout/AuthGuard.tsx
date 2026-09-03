@@ -23,7 +23,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!token && !isPublic) {
       router.replace("/login");
     } else if (token && isPublic) {
-      router.replace("/linkedin-autopilot");
+      router.replace("/automation");
     }
   }, [token, isPublic, router, mounted]);
 

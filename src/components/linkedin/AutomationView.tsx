@@ -19,6 +19,7 @@ import {
   LuLink,
   LuUpload,
   LuTrash2,
+  LuFilter,
 } from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -30,6 +31,7 @@ import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
 import type {
+  Attachment,
   Conversation,
   ConversationListItem,
   PaginatedConversations,
@@ -119,6 +121,29 @@ function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): Reac
   );
 }
 
+function getBodyPreview(blocksInput: BlockNode[] | string, fallback: string): string {
+  let blocks: BlockNode[] = [];
+  if (Array.isArray(blocksInput)) {
+    blocks = blocksInput;
+  } else {
+    try {
+      const parsed = JSON.parse(blocksInput);
+      if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (blocks.length === 0) return fallback;
+  return blocks
+    .flatMap((block) => {
+      if (block.type === "paragraph") return block.spans.map((s) => s.text);
+      if (block.type === "list")
+        return block.items.flatMap((item) => item.spans.map((s) => s.text));
+      return [];
+    })
+    .join(" ");
+}
+
 function hasPendingInterrupt(conv: Conversation): boolean {
   const pi = conv.pending_interrupt as { id?: string };
   return !!pi?.id;
@@ -158,7 +183,45 @@ function QuestionField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  // Local free-text state for allow_free_text choice questions.
+  // freeText overrides the select when non-empty.
+  const [freeText, setFreeText] = useState("");
+
   if (question.kind === "choice" && question.options && question.options.length > 0) {
+    if (question.allow_free_text) {
+      return (
+        <div className="space-y-2">
+          <div className="relative">
+            <select
+              value={freeText ? "" : value}
+              onChange={(e) => {
+                setFreeText("");
+                onChange(e.target.value);
+              }}
+              className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+            >
+              {question.options.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+            <LuChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            value={freeText}
+            placeholder="Or type your own…"
+            onChange={(e) => {
+              setFreeText(e.target.value);
+              onChange(e.target.value || value);
+            }}
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="relative">
         <select
@@ -194,7 +257,7 @@ function QuestionField({
     <input
       type="text"
       value={value}
-      placeholder={`(optional)`}
+      placeholder="(optional)"
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
     />
@@ -208,7 +271,7 @@ function GrillForm({
   submitting,
 }: {
   questions: Question[];
-  onSubmit: (answers: Record<string, string>) => void;
+  onSubmit: (answers: Record<string, string | string[]>) => void;
   submitting: boolean;
 }) {
   // guard against undefined/null entries from API
@@ -224,13 +287,13 @@ function GrillForm({
 
   if (questions.length === 0) return null;
 
-  // full-width questions (text kind, or last if odd count)
+  // full-width: text kind, allow_free_text (two stacked inputs), or last in an odd count
   const pairs: Question[][] = [];
   let i = 0;
   while (i < questions.length) {
     const q = questions[i];
     const next = questions[i + 1];
-    const isFullWidth = q.kind === "text" || !next;
+    const isFullWidth = q.kind === "text" || q.allow_free_text || !next;
     if (isFullWidth) {
       pairs.push([q]);
       i++;
@@ -239,8 +302,6 @@ function GrillForm({
       i += 2;
     }
   }
-
-  const draftCount = answers["count"] ? parseInt(answers["count"], 10) : 5;
 
   return (
     <div className="mt-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -273,71 +334,85 @@ function GrillForm({
           className="mt-5 flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
         >
           {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
-          Generate {draftCount > 0 ? draftCount : ""} drafts
+          Generate drafts
         </button>
       </div>
     </div>
   );
 }
 
-// Headlines form — multi-select checkboxes for choice questions
+// Headlines form — editable list: keep / reword / delete / add custom
 function HeadlinesForm({
-  question,
+  headlines: initial,
   onSubmit,
   submitting,
-  onMoreHeadlines,
 }: {
-  question: Question;
-  onSubmit: (selected: string[]) => void;
+  headlines: string[];
+  onSubmit: (headlines: string[]) => void;
   submitting: boolean;
-  onMoreHeadlines?: () => void;
 }) {
-  const options = question.options ?? [];
-  const [selected, setSelected] = useState<Set<string>>(new Set(options));
+  const [items, setItems] = useState(() => initial.map((text, i) => ({ id: String(i), text })));
 
-  const toggle = (opt: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(opt) ? next.delete(opt) : next.add(opt);
-      return next;
-    });
+  const update = (id: string, text: string) =>
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, text } : item)));
+
+  const remove = (id: string) => setItems((prev) => prev.filter((item) => item.id !== id));
+
+  const addCustom = () => setItems((prev) => [...prev, { id: String(Date.now()), text: "" }]);
+
+  const final = items.map((i) => i.text.trim()).filter(Boolean);
 
   return (
-    <div className="mt-2">
-      <p className="mb-3 text-sm font-semibold text-gray-800">Choose headlines to draft</p>
-      <div className="space-y-2">
-        {options.map((opt) => (
-          <label
-            key={opt}
-            className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50"
-          >
-            <input
-              type="checkbox"
-              checked={selected.has(opt)}
-              onChange={() => toggle(opt)}
-              className="h-4 w-4 accent-blue-600"
-            />
-            <span className="text-sm text-gray-800">{opt}</span>
-          </label>
-        ))}
-      </div>
-      <div className="mt-4 flex items-center justify-between">
-        {onMoreHeadlines && (
-          <button
-            onClick={onMoreHeadlines}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            Generate more headlines
-          </button>
-        )}
+    <div className="mt-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="p-5">
+        <p className="mb-1 text-sm font-semibold text-gray-800">Edit first lines</p>
+        <p className="mb-4 text-xs text-gray-400">
+          Each line becomes one post. Edit, delete, or add your own — what you send is what gets
+          written.
+        </p>
+
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div key={item.id} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={item.text}
+                onChange={(e) => update(item.id, e.target.value)}
+                placeholder="Write a first line…"
+                className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+              <button
+                onClick={() => remove(item.id)}
+                className="shrink-0 rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400"
+                title="Remove"
+              >
+                <LuX className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+
         <button
-          onClick={() => onSubmit([...selected])}
-          disabled={selected.size === 0 || submitting}
-          className="ml-auto flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+          onClick={addCustom}
+          className="mt-3 flex items-center gap-1.5 text-sm text-blue-600 transition-colors hover:text-blue-700"
         >
-          {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
-          Generate {selected.size} drafts
+          <LuPlus className="h-4 w-4" />
+          Add headline
         </button>
+
+        <div className="mt-5 flex items-center justify-between">
+          <p className="text-xs text-gray-400">
+            {final.length} post{final.length !== 1 ? "s" : ""} will be written
+          </p>
+          <button
+            onClick={() => onSubmit(final)}
+            disabled={submitting}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+          >
+            {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+            Generate {final.length > 0 ? final.length : ""} draft{final.length !== 1 ? "s" : ""}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -349,10 +424,10 @@ function DraftCard({ post, onEdit }: { post: AgentPost; onEdit: (post: AgentPost
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
 
   return (
-    // overflow-visible so the floating buttons protrude above the top border
-    <div className="relative flex h-72 w-80 shrink-0 flex-col rounded-2xl border border-gray-200 bg-white p-4">
-      {/* ✓ × floating on the top border — centered, half-outside */}
-      <div className="absolute right-3 top-0 flex -translate-y-1/2 items-center gap-1.5">
+    // Outer wrapper: overflow-visible so floating buttons protrude above top border
+    <div className="relative h-72 w-80 shrink-0">
+      {/* ✓ × floating on the top border — half-outside the card */}
+      <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
         <button className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500">
           <LuCheck className="h-3.5 w-3.5" />
         </button>
@@ -361,66 +436,56 @@ function DraftCard({ post, onEdit }: { post: AgentPost; onEdit: (post: AgentPost
         </button>
       </div>
 
-      {/* Title row */}
-      <div className="mb-1 flex items-start justify-between gap-2">
-        {post.headline ? (
-          <p className="text-sm font-semibold leading-snug text-gray-900 line-clamp-2">
-            {post.headline}
-          </p>
-        ) : (
-          <span />
+      {/* Card — overflow-hidden clips body text naturally at card boundary */}
+      <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4">
+        {/* Title row */}
+        <div className="mb-1 flex shrink-0 items-start justify-between gap-2">
+          {post.headline ? (
+            <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900">
+              {post.headline}
+            </p>
+          ) : (
+            <span />
+          )}
+          <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+            Draft
+          </span>
+        </div>
+
+        {/* Scheduled time */}
+        {dateStr && (
+          <div className="mb-2 flex shrink-0 items-center gap-1 text-xs text-gray-400">
+            <LuClock className="h-3 w-3 shrink-0" />
+            <span>{dateStr}</span>
+          </div>
         )}
-        <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
-          Draft
-        </span>
+
+        {/* Image — only shown when URL exists */}
+        {hasImage && (
+          <div className="mb-2 flex h-24 shrink-0 overflow-hidden rounded-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={post.image_url} alt="" className="h-full w-full object-cover" />
+          </div>
+        )}
+
+        {/* Body — rich text when no image (fills height); plain truncated when image present */}
+        <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600">
+          {hasImage ? (
+            <p className="line-clamp-3">{getBodyPreview(post.body_blocks, post.body)}</p>
+          ) : (
+            renderBlocks(post.body_blocks, post.body)
+          )}
+        </div>
+
+        {/* Edit pencil — bottom right */}
+        <button
+          onClick={() => onEdit(post)}
+          className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+        >
+          <LuPencil className="h-3 w-3" />
+          Edit
+        </button>
       </div>
-
-      {/* Scheduled time */}
-      {dateStr && (
-        <div className="mb-2 flex items-center gap-1 text-xs text-gray-400">
-          <LuClock className="h-3 w-3 shrink-0" />
-          <span>{dateStr}</span>
-        </div>
-      )}
-
-      {/* Image placeholder (first card in design shows it) */}
-      {hasImage && (
-        <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={post.image_url} alt="" className="h-full w-full object-cover" />
-        </div>
-      )}
-      {!hasImage && !post.headline && (
-        <div className="mb-2 flex h-20 shrink-0 items-center justify-center rounded-xl bg-gray-100">
-          <svg
-            className="h-7 w-7 text-gray-300"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-        </div>
-      )}
-
-      {/* Body text */}
-      <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600 line-clamp-6">
-        {renderBlocks(post.body_blocks, post.body)}
-      </div>
-
-      {/* Edit pencil — bottom right */}
-      <button
-        onClick={() => onEdit(post)}
-        className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-      >
-        <LuPencil className="h-3 w-3" />
-        Edit
-      </button>
     </div>
   );
 }
@@ -481,17 +546,49 @@ function DraftsSection({
   );
 }
 
-// Thinking / running indicator
+// Thinking / running indicator — cycles through status steps like Claude
+const THINKING_STEPS = [
+  "Thinking…",
+  "Reading your sources…",
+  "Analyzing your profile…",
+  "Crafting your angle…",
+  "Optimizing prompt…",
+  "Writing drafts…",
+  "Almost done…",
+];
+
 function ThinkingIndicator() {
+  const [stepIndex, setStepIndex] = useState(0);
+  const [fade, setFade] = useState(true);
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setFade(false);
+      setTimeout(() => {
+        setStepIndex((i) => (i < THINKING_STEPS.length - 1 ? i + 1 : i));
+        setFade(true);
+      }, 300);
+    }, 3500);
+    return () => clearInterval(iv);
+  }, []);
+
   return (
     <div className="flex items-start gap-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
         <LuPlus className="h-4 w-4 text-white" />
       </div>
-      <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3">
-        <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" />
+      <div className="flex items-center gap-3 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3">
+        <div className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:-0.3s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400" />
+        </div>
+        <span
+          className="text-sm text-gray-500 transition-opacity duration-300"
+          style={{ opacity: fade ? 1 : 0 }}
+        >
+          {THINKING_STEPS[stepIndex]}
+        </span>
       </div>
     </div>
   );
@@ -580,14 +677,14 @@ export default function AutomationView() {
   // UI state
   const [message, setMessage] = useState("");
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
-  const [attachments, setAttachments] = useState<
-    { id: string; type: "file" | "url"; name: string }[]
-  >([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [addingUrl, setAddingUrl] = useState(false);
 
   // Conversation state
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -604,10 +701,13 @@ export default function AutomationView() {
 
   // Settings
   const [settings, setSettings] = useState<AgentSettings>({
+    post_count: 5,
+    use_hashtags: true,
     use_emoji: false,
     use_knowledge: true,
-    use_ai_image: false,
-    make_longer: false,
+    use_ai_image: true,
+    ignore_headline: false,
+    ignore_grilling: false,
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -616,6 +716,7 @@ export default function AutomationView() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -659,7 +760,8 @@ export default function AutomationView() {
   const handlePollResult = useCallback(
     (conv: Conversation) => {
       setConversation(conv);
-      if (conv.status === "running") return;
+      if (conv.status === "running") return; // keep polling
+      if (conv.attachments?.some((a) => a.status === "pending")) return; // keep polling for attachments
       stopPolling();
       if (conv.status === "completed") {
         refreshHistory();
@@ -772,6 +874,15 @@ export default function AutomationView() {
   }, [settingsOpen]);
 
   useEffect(() => {
+    if (!filterOpen) return;
+    const h = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [filterOpen]);
+
+  useEffect(() => {
     if (!plusOpen) return;
     const h = (e: MouseEvent) => {
       if (plusRef.current && !plusRef.current.contains(e.target as Node)) setPlusOpen(false);
@@ -826,7 +937,7 @@ export default function AutomationView() {
   };
 
   // ── answer pending interrupt ──
-  const handleAnswer = async (answers: Record<string, string>) => {
+  const handleAnswer = async (answers: Record<string, string | string[]>) => {
     if (!conversation || !workspaceId) return;
     const pi = conversation.pending_interrupt as { id?: string };
     if (!pi?.id) return;
@@ -839,6 +950,77 @@ export default function AutomationView() {
       toast.error(extractErrorMessage(err));
     } finally {
       setAnswering(false);
+    }
+  };
+
+  // ── ensure conversation exists (shared by attach handlers) ──
+  const ensureConversation = async (): Promise<string | null> => {
+    if (!workspaceId) return null;
+    if (conversation?.id && conversation.status !== "archived") return conversation.id;
+    const newConv = await svc().createConversation();
+    setConversation(newConv);
+    setPosts([]);
+    return newConv.id;
+  };
+
+  // ── attach file (PDF only) ──
+  const handleFileAttach = async (file: File) => {
+    if ((conversation?.attachments?.length ?? 0) >= 5) {
+      toast.error("Maximum 5 attachments per conversation.");
+      return;
+    }
+    setUploadingAttachment(true);
+    try {
+      const convId = await ensureConversation();
+      if (!convId) return;
+      const att = await svc().uploadAttachment(convId, file);
+      setConversation((prev) =>
+        prev ? { ...prev, attachments: [...(prev.attachments ?? []), att] } : prev
+      );
+      startPolling(convId);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  // ── attach URL ──
+  const handleUrlAttach = async (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    if ((conversation?.attachments?.length ?? 0) >= 5) {
+      toast.error("Maximum 5 attachments per conversation.");
+      return;
+    }
+    setAddingUrl(true);
+    setUrlInput("");
+    setPlusOpen(false);
+    try {
+      const convId = await ensureConversation();
+      if (!convId) return;
+      const att = await svc().addAttachmentUrl(convId, trimmed);
+      setConversation((prev) =>
+        prev ? { ...prev, attachments: [...(prev.attachments ?? []), att] } : prev
+      );
+      startPolling(convId);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setAddingUrl(false);
+    }
+  };
+
+  // ── delete attachment ──
+  const handleDeleteAttachment = async (aid: string) => {
+    if (!conversation?.id) return;
+    try {
+      await svc().deleteAttachment(conversation.id, aid);
+      setConversation((prev) =>
+        prev ? { ...prev, attachments: prev.attachments.filter((a) => a.id !== aid) } : prev
+      );
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
     }
   };
 
@@ -863,6 +1045,7 @@ export default function AutomationView() {
     setConversation(null);
     setPosts([]);
     setMessage("");
+    setUrlInput("");
     window.history.replaceState(null, "", window.location.pathname);
     textareaRef.current?.focus();
   };
@@ -878,7 +1061,7 @@ export default function AutomationView() {
     localStorage.setItem("agent-history-open", String(historyOpen));
   }, [historyOpen]);
 
-  // ── auto-load history on mount if panel was persisted open ──
+  // ── load history whenever panel opens (or workspaceId changes while open) ──
   useEffect(() => {
     if (!historyOpen || !workspaceId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -889,25 +1072,11 @@ export default function AutomationView() {
       .catch(() => {})
       .finally(() => setHistoryLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [historyOpen, workspaceId]);
 
-  // ── load history ──
-  const handleOpenHistory = async () => {
-    if (historyOpen) {
-      setHistoryOpen(false);
-      return;
-    }
-    setHistoryOpen(true);
-    if (!workspaceId) return;
-    setHistoryLoading(true);
-    try {
-      const data = await svc().getConversations();
-      setHistory(data);
-    } catch {
-      // ignore
-    } finally {
-      setHistoryLoading(false);
-    }
+  // ── toggle history panel (loading is handled by the effect above) ──
+  const handleOpenHistory = () => {
+    setHistoryOpen((v) => !v);
   };
 
   // ── load conversation from history ──
@@ -940,7 +1109,7 @@ export default function AutomationView() {
   };
 
   // ── save settings ──
-  const handleSettingChange = async (key: keyof AgentSettings, value: boolean) => {
+  const handleSettingChange = async (key: keyof AgentSettings, value: boolean | number) => {
     const next = { ...settings, [key]: value };
     setSettings(next);
     setSettingsSaving(true);
@@ -961,28 +1130,32 @@ export default function AutomationView() {
   const isCompleted = conversation?.status === "completed";
   const isFailed = conversation?.status === "failed";
   const isTerminal = conversation?.status === "cancelled" || conversation?.status === "archived";
+  const hasPendingAttachments =
+    conversation?.attachments?.some((a) => a.status === "pending") ?? false;
   const canSend =
     !sending &&
     !isRunning &&
     !isAwaiting &&
+    !hasPendingAttachments &&
     (!conversation || isCompleted || isFailed || isTerminal || !conversation);
   const showCancel = isRunning || isAwaiting;
 
   const pendingInterrupt =
     conversation && hasPendingInterrupt(conversation)
-      ? (conversation.pending_interrupt as { id: string; kind: string; questions: Question[] })
+      ? (conversation.pending_interrupt as {
+          id: string;
+          kind: "questions" | "headlines" | string;
+          questions?: Question[];
+          headlines?: string[];
+        })
       : null;
+
+  const isHeadlineInterrupt = pendingInterrupt?.kind === "headlines";
 
   // safe questions array (filter out any undefined entries the API might return)
   const piQuestions = (pendingInterrupt?.questions ?? []).filter(
     (q): q is Question => !!q && typeof q === "object"
   );
-
-  // detect if it's a multi-choice headline-style interrupt
-  const isHeadlineStyle =
-    piQuestions.length === 1 &&
-    piQuestions[0].kind === "choice" &&
-    (piQuestions[0].options?.length ?? 0) > 2;
 
   const sourceCount = 0; // would come from knowledge base query
 
@@ -999,8 +1172,9 @@ export default function AutomationView() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-8 py-5">
-        {/* Knowledge base pill */}
-        <div className="shrink-0">
+        {/* Top bar — Knowledge base + Filter + active chips */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Knowledge base button */}
           <button
             onClick={() => setKnowledgeOpen(true)}
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
@@ -1014,6 +1188,92 @@ export default function AutomationView() {
               </>
             )}
           </button>
+
+          {/* Filter dropdown */}
+          <div ref={filterRef} className="relative">
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                filterOpen
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              <LuFilter className="h-3.5 w-3.5" />
+              Filter
+              <LuChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform duration-150",
+                  filterOpen && "rotate-180"
+                )}
+              />
+            </button>
+
+            {filterOpen && (
+              <div className="absolute left-0 top-full z-20 mt-1.5 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                <p className="px-4 pt-3.5 pb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                  Composer defaults
+                </p>
+                <div className="divide-y divide-gray-100 px-4 pb-3">
+                  {/* Ask questions */}
+                  <label className="flex cursor-pointer items-start gap-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={!settings.ignore_grilling}
+                      onChange={(e) => handleSettingChange("ignore_grilling", !e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-blue-600"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">Ask me questions first</p>
+                      <p className="text-xs text-gray-400">
+                        If off, skips straight to headlines using your defaults
+                      </p>
+                    </div>
+                  </label>
+                  {/* Show headlines */}
+                  <label className="flex cursor-pointer items-start gap-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={!settings.ignore_headline}
+                      onChange={(e) => handleSettingChange("ignore_headline", !e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-blue-600"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">
+                        Show headlines to pick from
+                      </p>
+                      <p className="text-xs text-gray-400">If off, drafts are generated directly</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Active filter chips */}
+          {!settings.ignore_grilling && (
+            <span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
+              Questions before drafting
+              <button
+                onClick={() => handleSettingChange("ignore_grilling", true)}
+                className="ml-0.5 text-blue-400 hover:text-blue-600"
+              >
+                <LuX className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {!settings.ignore_headline && (
+            <span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
+              Headlines before drafting
+              <button
+                onClick={() => handleSettingChange("ignore_headline", true)}
+                className="ml-0.5 text-blue-400 hover:text-blue-600"
+              >
+                <LuX className="h-3 w-3" />
+              </button>
+            </span>
+          )}
         </div>
 
         {/* Agent composer card */}
@@ -1139,13 +1399,26 @@ export default function AutomationView() {
                   if (msg.role === "user") {
                     // Answer message — empty text, render summary from payload.answers
                     if (!msg.text && msg.kind === "text") {
-                      const answers = msg.payload.answers as Record<string, string> | undefined;
+                      const answers = msg.payload.answers as
+                        Record<string, string | string[]> | undefined;
                       if (!answers) return null;
-                      const summary = Object.values(answers).filter(Boolean).join(" · ");
+                      const parts: string[] = [];
+                      for (const [key, val] of Object.entries(answers)) {
+                        if (Array.isArray(val)) {
+                          parts.push(
+                            key === "headlines"
+                              ? `Approved ${val.length} headline${val.length !== 1 ? "s" : ""}`
+                              : `${val.length} selected`
+                          );
+                        } else if (val) {
+                          parts.push(val);
+                        }
+                      }
+                      const summary = parts.join(" · ");
                       return (
                         <div key={msg.id} className="mt-4 flex justify-end">
                           <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-100 px-4 py-3 text-sm leading-relaxed text-blue-800">
-                            {summary}
+                            {summary || "✓ Answered"}
                           </div>
                         </div>
                       );
@@ -1154,6 +1427,29 @@ export default function AutomationView() {
                       <div key={msg.id} className="mt-4 flex justify-end">
                         <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
                           {msg.text}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Agent messages — edit turn
+                  if (msg.kind === "edit") {
+                    const field = msg.payload.field as "text" | "image" | undefined;
+                    return (
+                      <div key={msg.id} className="mt-4 flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
+                          <LuPencil className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+                            <LuPencil className="h-3 w-3" />
+                            {field === "image" ? "Image updated" : "Post edited"}
+                          </div>
+                          {msg.text && (
+                            <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                              {msg.text}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1206,36 +1502,44 @@ export default function AutomationView() {
                   );
                 })}
 
-                {/* Awaiting input — question form */}
-                {isAwaiting && pendingInterrupt && piQuestions.length > 0 && (
+                {/* Awaiting input — headline round */}
+                {isAwaiting && isHeadlineInterrupt && pendingInterrupt && (
                   <div className="mt-4 flex items-start gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
                       <LuPlus className="h-4 w-4 text-white" />
                     </div>
                     <div className="flex-1">
-                      <div className="inline-block max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                        Great — a few quick things so I draft the right posts. You can change any of
-                        these.
-                      </div>
+                      <HeadlinesForm
+                        headlines={pendingInterrupt.headlines ?? []}
+                        submitting={answering}
+                        onSubmit={(headlines) => handleAnswer({ headlines })}
+                      />
+                    </div>
+                  </div>
+                )}
 
-                      {isHeadlineStyle ? (
-                        <HeadlinesForm
-                          question={piQuestions[0]}
-                          submitting={answering}
-                          onSubmit={(selected) =>
-                            handleAnswer({ [piQuestions[0].id]: selected.join(",") })
-                          }
-                        />
-                      ) : (
+                {/* Awaiting input — question form */}
+                {isAwaiting &&
+                  !isHeadlineInterrupt &&
+                  pendingInterrupt &&
+                  piQuestions.length > 0 && (
+                    <div className="mt-4 flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                        <LuPlus className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="inline-block max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                          Great — a few quick things so I draft the right posts. You can change any
+                          of these.
+                        </div>
                         <GrillForm
                           questions={piQuestions}
                           onSubmit={handleAnswer}
                           submitting={answering}
                         />
-                      )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Running indicator */}
                 {isRunning && (
@@ -1296,46 +1600,57 @@ export default function AutomationView() {
                 />
 
                 {/* Attachment chips */}
-                {attachments.length > 0 && (
+                {(conversation?.attachments?.length ?? 0) > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {attachments.map((a) => (
-                      <span
-                        key={a.id}
-                        className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
-                      >
-                        {a.type === "file" ? (
-                          <LuPaperclip className="h-3 w-3 shrink-0" />
-                        ) : (
-                          <LuLink className="h-3 w-3 shrink-0" />
-                        )}
-                        <span className="max-w-[140px] truncate">{a.name}</span>
-                        <button
-                          onClick={() =>
-                            setAttachments((prev) => prev.filter((x) => x.id !== a.id))
-                          }
-                          className="shrink-0 text-blue-400 hover:text-blue-600"
+                    {conversation!.attachments.map((a: Attachment) => {
+                      const isPending = a.status === "pending";
+                      const isFailed = a.status === "failed";
+                      const chipCls = isFailed
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : isPending
+                          ? "border-gray-200 bg-gray-50 text-gray-500"
+                          : "border-blue-200 bg-blue-50 text-blue-700";
+                      return (
+                        <span
+                          key={a.id}
+                          title={isFailed ? a.error : undefined}
+                          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${chipCls}`}
                         >
-                          <LuX className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
+                          {isPending ? (
+                            <LuLoader className="h-3 w-3 shrink-0 animate-spin" />
+                          ) : a.kind === "url" ? (
+                            <LuLink className="h-3 w-3 shrink-0" />
+                          ) : (
+                            <LuPaperclip className="h-3 w-3 shrink-0" />
+                          )}
+                          <span className="max-w-[140px] truncate">{a.label}</span>
+                          {isFailed && (
+                            <span className="shrink-0 text-[10px] text-red-400">Failed</span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteAttachment(a.id)}
+                            className="shrink-0 opacity-60 hover:opacity-100"
+                          >
+                            <LuX className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Hidden file input */}
+                {/* Hidden file input — PDF only */}
                 <input
                   ref={fileInputRef}
                   type="file"
+                  accept=".pdf"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    setAttachments((prev) => [
-                      ...prev,
-                      { id: crypto.randomUUID(), type: "file", name: file.name },
-                    ]);
                     e.target.value = "";
                     setPlusOpen(false);
+                    handleFileAttach(file);
                   }}
                 />
 
@@ -1404,13 +1719,25 @@ export default function AutomationView() {
                       </button>
 
                       {plusOpen && (
-                        <div className="absolute bottom-full right-0 z-20 mb-2 w-60 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
+                        <div className="absolute bottom-full right-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
+                          {(conversation?.attachments?.length ?? 0) >= 5 && (
+                            <p className="mb-2 text-center text-xs text-amber-600">
+                              Maximum 5 attachments reached.
+                            </p>
+                          )}
                           <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50"
+                            disabled={
+                              uploadingAttachment || (conversation?.attachments?.length ?? 0) >= 5
+                            }
+                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50 disabled:opacity-50"
                           >
-                            <LuUpload className="h-4 w-4 text-gray-400" />
-                            Upload a file
+                            {uploadingAttachment ? (
+                              <LuLoader className="h-4 w-4 animate-spin text-gray-400" />
+                            ) : (
+                              <LuUpload className="h-4 w-4 text-gray-400" />
+                            )}
+                            {uploadingAttachment ? "Uploading…" : "Upload a PDF"}
                           </button>
                           <div className="mt-2 flex gap-2">
                             <input
@@ -1419,32 +1746,29 @@ export default function AutomationView() {
                               value={urlInput}
                               onChange={(e) => setUrlInput(e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.key !== "Enter" || !urlInput.trim()) return;
-                                setAttachments((prev) => [
-                                  ...prev,
-                                  { id: crypto.randomUUID(), type: "url", name: urlInput.trim() },
-                                ]);
-                                setUrlInput("");
-                                setPlusOpen(false);
+                                if (e.key === "Enter") handleUrlAttach(urlInput);
                               }}
                               className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
                             />
                             <button
-                              disabled={!urlInput.trim()}
-                              onClick={() => {
-                                if (!urlInput.trim()) return;
-                                setAttachments((prev) => [
-                                  ...prev,
-                                  { id: crypto.randomUUID(), type: "url", name: urlInput.trim() },
-                                ]);
-                                setUrlInput("");
-                                setPlusOpen(false);
-                              }}
+                              disabled={
+                                !urlInput.trim() ||
+                                addingUrl ||
+                                (conversation?.attachments?.length ?? 0) >= 5
+                              }
+                              onClick={() => handleUrlAttach(urlInput)}
                               className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                             >
-                              Add
+                              {addingUrl ? (
+                                <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                "Add"
+                              )}
                             </button>
                           </div>
+                          <p className="mt-2 text-center text-[10px] text-gray-400">
+                            PDF or URL · used only in this conversation
+                          </p>
                         </div>
                       )}
                     </div>
@@ -1462,7 +1786,7 @@ export default function AutomationView() {
                       </button>
 
                       {settingsOpen && (
-                        <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                        <div className="absolute bottom-full right-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
                           <div className="flex items-center justify-between px-4 py-3">
                             <span className="text-sm font-semibold text-gray-900">
                               Composer settings
@@ -1476,16 +1800,58 @@ export default function AutomationView() {
                           </div>
 
                           <div className="divide-y divide-gray-100 px-4 pb-4">
+                            {/* Post count */}
+                            <div className="flex items-center justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">Posts per batch</p>
+                                <p className="text-xs text-gray-400">
+                                  How many drafts per run (1–20)
+                                </p>
+                              </div>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={settings.post_count}
+                                onChange={(e) => {
+                                  const n = Math.min(20, Math.max(1, Number(e.target.value)));
+                                  if (!isNaN(n)) handleSettingChange("post_count", n);
+                                }}
+                                className="w-16 rounded-lg border border-gray-200 px-2 py-1.5 text-center text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                              />
+                            </div>
+
+                            {/* Content toggles */}
                             <div className="flex items-start justify-between gap-3 py-3">
                               <div>
                                 <p className="text-sm font-medium text-gray-800">Use emoji</p>
-                                <p className="text-xs text-gray-400">
-                                  Let the agent sprinkle emoji into drafts
-                                </p>
+                                <p className="text-xs text-gray-400">Sprinkle emoji into drafts</p>
                               </div>
                               <Toggle
                                 checked={settings.use_emoji}
                                 onChange={(v) => handleSettingChange("use_emoji", v)}
+                              />
+                            </div>
+                            <div className="flex items-start justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">Use hashtags</p>
+                                <p className="text-xs text-gray-400">Add hashtags to each draft</p>
+                              </div>
+                              <Toggle
+                                checked={settings.use_hashtags}
+                                onChange={(v) => handleSettingChange("use_hashtags", v)}
+                              />
+                            </div>
+                            <div className="flex items-start justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">Use AI image</p>
+                                <p className="text-xs text-gray-400">
+                                  Generate a visual for each draft
+                                </p>
+                              </div>
+                              <Toggle
+                                checked={settings.use_ai_image}
+                                onChange={(v) => handleSettingChange("use_ai_image", v)}
                               />
                             </div>
                             <div className="flex items-start justify-between gap-3 py-3">
@@ -1500,30 +1866,6 @@ export default function AutomationView() {
                               <Toggle
                                 checked={settings.use_knowledge}
                                 onChange={(v) => handleSettingChange("use_knowledge", v)}
-                              />
-                            </div>
-                            <div className="flex items-start justify-between gap-3 py-3">
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">Use AI image</p>
-                                <p className="text-xs text-gray-400">
-                                  Suggest a visual for each draft
-                                </p>
-                              </div>
-                              <Toggle
-                                checked={settings.use_ai_image}
-                                onChange={(v) => handleSettingChange("use_ai_image", v)}
-                              />
-                            </div>
-                            <div className="flex items-start justify-between gap-3 pt-3">
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">Make longer</p>
-                                <p className="text-xs text-gray-400">
-                                  Write longer posts by default
-                                </p>
-                              </div>
-                              <Toggle
-                                checked={settings.make_longer}
-                                onChange={(v) => handleSettingChange("make_longer", v)}
                               />
                             </div>
                           </div>
