@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   LuPlus,
   LuHistory,
@@ -24,6 +25,7 @@ import {
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinAgentService } from "@/service/linkedinAgentService";
+import { postsService } from "@/service/postsService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import toast from "react-hot-toast";
 import Link from "next/link";
@@ -419,25 +421,77 @@ function HeadlinesForm({
 }
 
 // Single draft card
-function DraftCard({ post, onEdit }: { post: AgentPost; onEdit: (post: AgentPost) => void }) {
+function DraftCard({
+  post,
+  onEdit,
+  onApprove,
+  onReject,
+  isApproving,
+  isRejecting,
+}: {
+  post: AgentPost;
+  onEdit: (post: AgentPost) => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  isApproving: boolean;
+  isRejecting: boolean;
+}) {
   const hasImage = !!post.image_url;
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
+
+  const isDraft = post.status === "draft";
+
+  const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+    approved: { label: "Approved", cls: "bg-green-100 text-green-700" },
+    scheduled: { label: "Scheduled", cls: "bg-blue-100 text-blue-700" },
+    published: { label: "Published", cls: "bg-emerald-100 text-emerald-700" },
+    failed: { label: "Failed", cls: "bg-red-100 text-red-700" },
+    draft: { label: "Draft", cls: "bg-violet-100 text-violet-700" },
+  };
+  const badge = STATUS_BADGE[post.status] ?? STATUS_BADGE.draft;
 
   return (
     // Outer wrapper: overflow-visible so floating buttons protrude above top border
     <div className="relative h-72 w-80 shrink-0">
-      {/* ✓ × floating on the top border — half-outside the card */}
+      {/* Floating area — approve/reject buttons for drafts, status pill for everything else */}
       <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
-        <button className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500">
-          <LuCheck className="h-3.5 w-3.5" />
-        </button>
-        <button className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400">
-          <LuX className="h-3.5 w-3.5" />
-        </button>
+        {isDraft && (
+          <>
+            <button
+              onClick={() => onApprove(post.id)}
+              disabled={isApproving || isRejecting}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500 disabled:opacity-50"
+              title="Approve"
+            >
+              {isApproving ? (
+                <LuLoader className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <LuCheck className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <button
+              onClick={() => onReject(post.id)}
+              disabled={isApproving || isRejecting}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400 disabled:opacity-50"
+              title="Delete"
+            >
+              {isRejecting ? (
+                <LuLoader className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <LuX className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Card — overflow-hidden clips body text naturally at card boundary */}
-      <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4">
+      <div
+        className={cn(
+          "flex h-full flex-col overflow-hidden rounded-2xl border bg-white p-4",
+          isDraft ? "border-gray-200" : "border-green-200"
+        )}
+      >
         {/* Title row */}
         <div className="mb-1 flex shrink-0 items-start justify-between gap-2">
           {post.headline ? (
@@ -447,8 +501,10 @@ function DraftCard({ post, onEdit }: { post: AgentPost; onEdit: (post: AgentPost
           ) : (
             <span />
           )}
-          <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
-            Draft
+          <span
+            className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", badge.cls)}
+          >
+            {badge.label}
           </span>
         </div>
 
@@ -460,17 +516,24 @@ function DraftCard({ post, onEdit }: { post: AgentPost; onEdit: (post: AgentPost
           </div>
         )}
 
-        {/* Image — only shown when URL exists */}
-        {hasImage && (
+        {/* Image — spinner while generating, actual image when ready */}
+        {post.image_status === "pending" ? (
+          <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-blue-200 bg-blue-50">
+            <div className="flex flex-col items-center gap-1">
+              <LuLoader className="h-4 w-4 animate-spin text-blue-400" />
+              <span className="text-[10px] text-blue-400">Generating image…</span>
+            </div>
+          </div>
+        ) : hasImage ? (
           <div className="mb-2 flex h-24 shrink-0 overflow-hidden rounded-xl">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={post.image_url} alt="" className="h-full w-full object-cover" />
           </div>
-        )}
+        ) : null}
 
         {/* Body — rich text when no image (fills height); plain truncated when image present */}
         <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600">
-          {hasImage ? (
+          {post.image_status === "pending" || hasImage ? (
             <p className="line-clamp-3">{getBodyPreview(post.body_blocks, post.body)}</p>
           ) : (
             renderBlocks(post.body_blocks, post.body)
@@ -495,10 +558,18 @@ function DraftsSection({
   posts,
   onEdit,
   onViewAll,
+  onApprove,
+  onReject,
+  approvingIds,
+  rejectingIds,
 }: {
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
   onViewAll: (posts: AgentPost[]) => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  approvingIds: Set<string>;
+  rejectingIds: Set<string>;
 }) {
   const draftPosts = posts.filter((p) => p.status === "draft");
 
@@ -533,7 +604,15 @@ function DraftsSection({
       {/* Horizontal scroll — pt-4 gives room for the floating ✓/× buttons */}
       <div className="flex gap-3 overflow-x-auto pt-4 pb-2">
         {posts.map((post) => (
-          <DraftCard key={post.id} post={post} onEdit={onEdit} />
+          <DraftCard
+            key={post.id}
+            post={post}
+            onEdit={onEdit}
+            onApprove={onApprove}
+            onReject={onReject}
+            isApproving={approvingIds.has(post.id)}
+            isRejecting={rejectingIds.has(post.id)}
+          />
         ))}
       </div>
 
@@ -698,6 +777,8 @@ export default function AutomationView() {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewAllPosts, setViewAllPosts] = useState<AgentPost[]>([]);
   const [restoringConv, setRestoringConv] = useState(true);
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
+  const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
 
   // Settings
   const [settings, setSettings] = useState<AgentSettings>({
@@ -714,6 +795,8 @@ export default function AutomationView() {
 
   // refs
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const imagePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const postsRef = useRef<AgentPost[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -723,6 +806,53 @@ export default function AutomationView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const svc = useCallback(() => linkedinAgentService(workspaceId), [workspaceId]);
+  const queryClient = useQueryClient();
+
+  // ── approve / reject draft posts ──
+  const handleApprovePost = useCallback(
+    async (id: string) => {
+      setApprovingIds((prev) => new Set(prev).add(id));
+      try {
+        await postsService(workspaceId).approvePost(id);
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, status: "approved" } : p)));
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
+        toast.success("Post approved!");
+      } catch (err) {
+        toast.error(extractErrorMessage(err) || "Failed to approve post.");
+      } finally {
+        setApprovingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [workspaceId, queryClient]
+  );
+
+  const handleRejectPost = useCallback(
+    async (id: string) => {
+      setRejectingIds((prev) => new Set(prev).add(id));
+      try {
+        await postsService(workspaceId).rejectPost(id);
+        setPosts((prev) => prev.filter((p) => p.id !== id));
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
+        toast.success("Post deleted.");
+      } catch (err) {
+        toast.error(extractErrorMessage(err) || "Failed to delete post.");
+      } finally {
+        setRejectingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [workspaceId, queryClient]
+  );
 
   // ── polling ──
   const stopPolling = useCallback(() => {
@@ -746,6 +876,36 @@ export default function AutomationView() {
     },
     [svc]
   );
+
+  // ── image generation polling ──
+  useEffect(() => {
+    // Keep ref in sync so the interval callback always sees fresh post IDs
+    postsRef.current = posts;
+
+    const hasPending = posts.some((p) => p.image_status === "pending");
+
+    if (!hasPending) {
+      if (imagePollRef.current) {
+        clearInterval(imagePollRef.current);
+        imagePollRef.current = null;
+      }
+      return;
+    }
+
+    if (imagePollRef.current) return; // already polling
+
+    imagePollRef.current = setInterval(() => {
+      const ids = postsRef.current.map((p) => p.id);
+      if (ids.length) fetchPosts(ids);
+    }, 3000);
+
+    return () => {
+      if (imagePollRef.current) {
+        clearInterval(imagePollRef.current);
+        imagePollRef.current = null;
+      }
+    };
+  }, [posts, fetchPosts]);
 
   const refreshHistory = useCallback(async () => {
     try {
@@ -1476,6 +1636,10 @@ export default function AutomationView() {
                                 setViewAllPosts(p);
                                 setViewAllOpen(true);
                               }}
+                              onApprove={handleApprovePost}
+                              onReject={handleRejectPost}
+                              approvingIds={approvingIds}
+                              rejectingIds={rejectingIds}
                             />
                           )}
                         </div>

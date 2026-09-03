@@ -128,7 +128,7 @@ function getInitials(name: string) {
 
 const PAGE_SIZE = 10;
 
-export default function ReviewApprovalSection({ mode }: { mode: "agent" | "manual" }) {
+export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manual" }) {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
