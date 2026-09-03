@@ -2,65 +2,76 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { LuX, LuPencil, LuPlus, LuSettings, LuSend, LuImage, LuUpload } from "react-icons/lu";
-import { cn } from "@/utils/cn";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
+import TiptapEditor from "@/components/ui/TiptapEditor";
 
-// ─── rich text renderer ───────────────────────────────────────────────────────
+// ─── convert legacy body_blocks → Tiptap JSON ─────────────────────────────────
 
-function renderBlocks(blocksInput: BlockNode[] | string): React.ReactNode {
+function bodyBlocksToTiptap(blocksInput: BlockNode[] | string): object {
   let blocks: BlockNode[] = [];
   if (Array.isArray(blocksInput)) {
     blocks = blocksInput;
   } else {
     try {
       const parsed = JSON.parse(blocksInput);
-      if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
+      // Already Tiptap JSON (has type: "doc")
+      if (parsed && parsed.type === "doc") return parsed;
+      if (Array.isArray(parsed)) blocks = parsed;
     } catch {
       /* ignore */
     }
   }
 
-  if (blocks.length === 0) return null;
+  const content = blocks
+    .map((block) => {
+      if (block.type === "paragraph") {
+        return {
+          type: "paragraph",
+          content: block.spans.map((s: SpanNode) => ({
+            type: "text",
+            text: s.text,
+            ...(s.bold ? { marks: [{ type: "bold" }] } : {}),
+          })),
+        };
+      }
+      if (block.type === "list") {
+        return {
+          type: "bulletList",
+          content: block.items.map((item) => ({
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                content: item.spans.map((s: SpanNode) => ({
+                  type: "text",
+                  text: s.text,
+                  ...(s.bold ? { marks: [{ type: "bold" }] } : {}),
+                })),
+              },
+            ],
+          })),
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
 
-  return (
-    <>
-      {blocks.map((block, i) => {
-        if (block.type === "paragraph") {
-          return (
-            <p key={i} className={i > 0 ? "mt-3" : undefined}>
-              {block.spans.map((s: SpanNode, j: number) =>
-                s.bold ? <strong key={j}>{s.text}</strong> : <span key={j}>{s.text}</span>
-              )}
-            </p>
-          );
-        }
-        if (block.type === "list") {
-          return (
-            <ul key={i} className={cn("space-y-1", i > 0 && "mt-3")}>
-              {block.items.map((item, j) => (
-                <li key={j} className="flex gap-1.5">
-                  <span className="shrink-0 text-gray-400">{block.marker}</span>
-                  <span>
-                    {item.spans.map((s: SpanNode, k: number) =>
-                      s.bold ? <strong key={k}>{s.text}</strong> : <span key={k}>{s.text}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          );
-        }
-        return null;
-      })}
-    </>
-  );
+  return { type: "doc", content };
+}
+
+function plainTextToTiptap(text: string): object {
+  const content = text.split("\n").map((line) => ({
+    type: "paragraph",
+    content: line ? [{ type: "text", text: line }] : [],
+  }));
+  return { type: "doc", content };
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function isoToDateInput(iso: string | null): string {
   if (!iso) return "";
-  return iso.slice(0, 10); // "YYYY-MM-DD"
+  return iso.slice(0, 10);
 }
 
 function isoToTimeInput(iso: string | null): string {
@@ -80,16 +91,10 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={cn(
-        "inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none",
-        checked ? "bg-blue-600" : "bg-gray-200"
-      )}
+      className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${checked ? "bg-blue-600" : "bg-gray-200"}`}
     >
       <span
-        className={cn(
-          "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200",
-          checked ? "translate-x-5" : "translate-x-0"
-        )}
+        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"}`}
       />
     </button>
   );
@@ -106,22 +111,32 @@ export default function EditDraftModal({ post, onClose }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [bodyJson, setBodyJson] = useState<object>({ type: "doc", content: [] });
+  const [editorKey, setEditorKey] = useState(0);
   const [changeMsg, setChangeMsg] = useState("");
   const [useImage, setUseImage] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
 
-  // re-initialise when post changes
+  // Re-initialise when post changes
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!post) return;
     setTitle(post.headline ?? "");
-    setBody(post.body ?? "");
     setChangeMsg("");
     setUseImage(!!post.image_url || post.image_status !== "none");
     setScheduledDate(isoToDateInput(post.suggested_publish_at));
     setScheduledTime(isoToTimeInput(post.suggested_publish_at));
+
+    if (post.body_blocks) {
+      setBodyJson(bodyBlocksToTiptap(post.body_blocks));
+    } else if (post.body) {
+      setBodyJson(plainTextToTiptap(post.body));
+    } else {
+      setBodyJson({ type: "doc", content: [] });
+    }
+    // Remount the editor with fresh content
+    setEditorKey((k) => k + 1);
   }, [post?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -162,37 +177,29 @@ export default function EditDraftModal({ post, onClose }: Props) {
 
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Title */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-            />
-          </div>
+          {/* Title — only shown when the post has a headline */}
+          {post.headline && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+            </div>
+          )}
 
-          {/* Body */}
+          {/* Body — Tiptap rich text editor */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">Body</label>
-            {post.body_blocks ? (
-              <div
-                contentEditable
-                suppressContentEditableWarning
-                onInput={(e) => setBody(e.currentTarget.textContent ?? "")}
-                className="min-h-[280px] w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 whitespace-pre-wrap"
-              >
-                {renderBlocks(post.body_blocks)}
-              </div>
-            ) : (
-              <textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={14}
-                className="w-full resize-y rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-              />
-            )}
+            <TiptapEditor
+              key={editorKey}
+              content={bodyJson}
+              onChange={setBodyJson}
+              minHeight="280px"
+              placeholder="Write your LinkedIn post…"
+            />
           </div>
 
           {/* Mini composer — ask for changes */}

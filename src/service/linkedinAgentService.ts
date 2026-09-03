@@ -1,6 +1,7 @@
 import axios from "axios";
 import { del } from "@/lib/api";
 import type {
+  Attachment,
   Conversation,
   PaginatedConversations,
   AgentSettings,
@@ -51,7 +52,7 @@ export const linkedinAgentService = (workspaceId: string) => ({
       { text }
     ),
 
-  answerQuestion: (id: string, interruptId: string, answers: Record<string, string>) =>
+  answerQuestion: (id: string, interruptId: string, answers: Record<string, string | string[]>) =>
     axiosPost<{ run_id: string }>(`/workspaces/${workspaceId}/agent/conversations/${id}/answer/`, {
       interrupt_id: interruptId,
       answers,
@@ -59,6 +60,32 @@ export const linkedinAgentService = (workspaceId: string) => ({
 
   cancelConversation: (id: string) =>
     axiosPost<Conversation>(`/workspaces/${workspaceId}/agent/conversations/${id}/cancel/`),
+
+  uploadAttachment: (convId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return axios
+      .post<Attachment>(
+        `${Config.API_URL}/workspaces/${workspaceId}/agent/conversations/${convId}/attachments/`,
+        form,
+        { headers: getAuthHeaders() }
+      )
+      .then((r) => r.data);
+  },
+
+  addAttachmentUrl: (convId: string, url: string) =>
+    axiosPost<Attachment>(`/workspaces/${workspaceId}/agent/conversations/${convId}/attachments/`, {
+      url,
+    }),
+
+  getAttachments: (convId: string) =>
+    axiosGet<Attachment[]>(`/workspaces/${workspaceId}/agent/conversations/${convId}/attachments/`),
+
+  deleteAttachment: (convId: string, aid: string) =>
+    axios.delete(
+      `${Config.API_URL}/workspaces/${workspaceId}/agent/conversations/${convId}/attachments/${aid}/`,
+      { headers: getAuthHeaders() }
+    ),
 
   deleteConversation: (id: string) =>
     del<void>(`/workspaces/${workspaceId}/agent/conversations/${id}/`),

@@ -20,8 +20,9 @@ export interface Question {
 
 export interface PendingInterrupt {
   id: string;
-  kind: string;
-  questions: Question[];
+  kind: "questions" | "headlines" | string;
+  questions?: Question[];
+  headlines?: string[];
 }
 
 export interface Message {
@@ -30,6 +31,17 @@ export interface Message {
   kind: MessageKind;
   text: string;
   payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface Attachment {
+  id: string;
+  kind: "pdf" | "url";
+  url: string;
+  url_kind: "site" | "page" | "profile" | "";
+  label: string;
+  status: "pending" | "ready" | "failed";
+  error: string;
   created_at: string;
 }
 
@@ -42,6 +54,7 @@ export interface Conversation {
   messages: Message[];
   pending_interrupt: PendingInterrupt | Record<string, never>;
   artifacts: { post_ids: string[] };
+  attachments: Attachment[];
   created_at: string;
   updated_at: string;
 }
@@ -64,10 +77,13 @@ export interface PaginatedConversations {
 }
 
 export interface AgentSettings {
+  post_count: number;
+  use_hashtags: boolean;
   use_emoji: boolean;
   use_knowledge: boolean;
   use_ai_image: boolean;
-  make_longer: boolean;
+  ignore_headline: boolean;
+  ignore_grilling: boolean;
 }
 
 export interface SpanNode {
