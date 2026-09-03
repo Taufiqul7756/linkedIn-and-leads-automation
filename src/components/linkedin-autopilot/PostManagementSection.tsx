@@ -232,7 +232,7 @@ type ScheduleTarget = { post: PostType; mode: "schedule" | "reschedule" } | null
 
 const PAGE_SIZE_OPTIONS = [2, 5, 10, 15, 20];
 
-export default function PostManagementSection({ mode }: { mode: "agent" | "manual" }) {
+export default function PostManagementSection({ mode }: { mode?: "agent" | "manual" }) {
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
