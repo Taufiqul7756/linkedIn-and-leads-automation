@@ -679,8 +679,6 @@ POST   conversations/f4d6…/messages/                  202
       the agent both mean by "post 2".
 - [ ] Panel `PATCH`es partially; `post_count` bounded 1–20 client-side.
 - [ ] `use_ai_image: false` → no image placeholder in the draft card.
-- [ ] Drafts loaded into Tiptap from `body_blocks` (`{type:"doc",...}`), falling
-      back to `body` when it is `{}`; edits `PATCH`ed back as `body_blocks`.
-- [ ] Do **not** append `hashtags` array under the body — tags are already in
-      the last line of `body_blocks` when `use_hashtags` is on.
+- [ ] Drafts loaded into Tiptap from `body_blocks`, falling back to `body`
+      when it is `{}`; edits `PATCH`ed back as `body_blocks`.
 - [ ] `409` and `404` handled distinctly from `400`.

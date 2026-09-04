@@ -16,13 +16,29 @@ function formatSuggestedDate(iso: string | null): string {
   return `${days[d.getDay()]}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() >= 12 ? "PM" : "AM"}`;
 }
 
-function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): React.ReactNode {
+type TiptapInline = { type: string; text?: string; marks?: { type: string }[] };
+type TiptapNode = { type: string; attrs?: Record<string, unknown>; content?: unknown[] };
+
+function renderBlocks(blocksInput: unknown, fallback: string): React.ReactNode {
+  // New Tiptap doc format
+  if (blocksInput && typeof blocksInput === "object" && !Array.isArray(blocksInput)) {
+    const doc = blocksInput as { type?: string; content?: unknown[] };
+    if (doc.type === "doc" && Array.isArray(doc.content) && doc.content.length > 0) {
+      return renderTiptapNodes(doc.content);
+    }
+    return <span>{fallback}</span>;
+  }
+
+  // Legacy array or string
   let blocks: BlockNode[] = [];
   if (Array.isArray(blocksInput)) {
-    blocks = blocksInput;
-  } else {
+    blocks = blocksInput as BlockNode[];
+  } else if (typeof blocksInput === "string") {
     try {
       const parsed = JSON.parse(blocksInput);
+      if (parsed?.type === "doc" && Array.isArray(parsed.content) && parsed.content.length > 0) {
+        return renderTiptapNodes(parsed.content);
+      }
       if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
     } catch {
       /* ignore */
@@ -54,6 +70,56 @@ function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): Reac
                   </span>
                 </li>
               ))}
+            </ul>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+}
+
+function renderTiptapNodes(nodes: unknown[]): React.ReactNode {
+  return (
+    <>
+      {(nodes as TiptapNode[]).map((node, i) => {
+        if (node.type === "paragraph") {
+          const inlines = (node.content ?? []) as TiptapInline[];
+          return (
+            <p key={i} className={i > 0 ? "mt-2" : undefined}>
+              {inlines.map((inline, j) =>
+                inline.marks?.some((m) => m.type === "bold") ? (
+                  <strong key={j}>{inline.text}</strong>
+                ) : (
+                  <span key={j}>{inline.text}</span>
+                )
+              )}
+            </p>
+          );
+        }
+        if (node.type === "bulletList") {
+          const marker = (node.attrs?.marker as string) ?? "•";
+          const items = (node.content ?? []) as TiptapNode[];
+          return (
+            <ul key={i} className={i > 0 ? "mt-2 space-y-1" : "space-y-1"}>
+              {items.map((item, j) => {
+                const para = ((item.content ?? []) as TiptapNode[])[0];
+                const inlines = (para?.content ?? []) as TiptapInline[];
+                return (
+                  <li key={j} className="flex gap-1">
+                    <span className="shrink-0 text-gray-400">{marker}</span>
+                    <span>
+                      {inlines.map((inline, k) =>
+                        inline.marks?.some((m) => m.type === "bold") ? (
+                          <strong key={k}>{inline.text}</strong>
+                        ) : (
+                          <span key={k}>{inline.text}</span>
+                        )
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           );
         }
