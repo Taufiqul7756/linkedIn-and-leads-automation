@@ -67,22 +67,36 @@ function formatSuggestedDate(iso: string | null): string {
   return `${days[d.getDay()]}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() >= 12 ? "PM" : "AM"}`;
 }
 
-function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): React.ReactNode {
+// Render body_blocks for DraftCard preview.
+// Handles new Tiptap doc format ({type:"doc",content:[...]}) and legacy array format.
+function renderBlocks(blocksInput: unknown, fallback: string): React.ReactNode {
+  // New Tiptap doc format
+  if (blocksInput && typeof blocksInput === "object" && !Array.isArray(blocksInput)) {
+    const doc = blocksInput as { type?: string; content?: unknown[] };
+    if (doc.type === "doc" && Array.isArray(doc.content) && doc.content.length > 0) {
+      return renderTiptapNodes(doc.content);
+    }
+    return <span>{fallback}</span>;
+  }
+
+  // Legacy array or string
   let blocks: BlockNode[] = [];
   if (Array.isArray(blocksInput)) {
-    blocks = blocksInput;
-  } else {
+    blocks = blocksInput as BlockNode[];
+  } else if (typeof blocksInput === "string") {
     try {
       const parsed = JSON.parse(blocksInput);
+      // String-encoded Tiptap doc
+      if (parsed?.type === "doc" && Array.isArray(parsed.content) && parsed.content.length > 0) {
+        return renderTiptapNodes(parsed.content);
+      }
       if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
     } catch {
       /* ignore */
     }
   }
 
-  if (blocks.length === 0) {
-    return <span>{fallback}</span>;
-  }
+  if (blocks.length === 0) return <span>{fallback}</span>;
 
   return (
     <>
@@ -123,13 +137,81 @@ function renderBlocks(blocksInput: BlockNode[] | string, fallback: string): Reac
   );
 }
 
-function getBodyPreview(blocksInput: BlockNode[] | string, fallback: string): string {
+type TiptapInline = { type: string; text?: string; marks?: { type: string }[] };
+type TiptapNode = { type: string; attrs?: Record<string, unknown>; content?: unknown[] };
+
+function renderTiptapNodes(nodes: unknown[]): React.ReactNode {
+  return (
+    <>
+      {(nodes as TiptapNode[]).map((node, i) => {
+        const isFirst = i === 0;
+        if (node.type === "paragraph") {
+          const inlines = (node.content ?? []) as TiptapInline[];
+          return (
+            <p key={i} className={cn(!isFirst && "mt-3")}>
+              {inlines.map((inline, j) =>
+                inline.marks?.some((m) => m.type === "bold") ? (
+                  <strong key={j}>{inline.text}</strong>
+                ) : (
+                  <span key={j}>{inline.text}</span>
+                )
+              )}
+            </p>
+          );
+        }
+        if (node.type === "bulletList") {
+          const marker = (node.attrs?.marker as string) ?? "•";
+          const tight = (node.attrs?.tight as boolean) ?? false;
+          const items = (node.content ?? []) as TiptapNode[];
+          return (
+            <ul key={i} className={cn("space-y-1", !isFirst && !tight && "mt-3")}>
+              {items.map((item, j) => {
+                const para = ((item.content ?? []) as TiptapNode[])[0];
+                const inlines = (para?.content ?? []) as TiptapInline[];
+                return (
+                  <li key={j} className="flex gap-1.5">
+                    <span className="shrink-0 text-gray-400">{marker}</span>
+                    <span>
+                      {inlines.map((inline, k) =>
+                        inline.marks?.some((m) => m.type === "bold") ? (
+                          <strong key={k}>{inline.text}</strong>
+                        ) : (
+                          <span key={k}>{inline.text}</span>
+                        )
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+}
+
+function getBodyPreview(blocksInput: unknown, fallback: string): string {
+  // New Tiptap doc format
+  if (blocksInput && typeof blocksInput === "object" && !Array.isArray(blocksInput)) {
+    const doc = blocksInput as { type?: string; content?: unknown[] };
+    if (doc.type === "doc" && Array.isArray(doc.content)) {
+      return extractTiptapText(doc.content) || fallback;
+    }
+    return fallback;
+  }
+
+  // Legacy array or string
   let blocks: BlockNode[] = [];
   if (Array.isArray(blocksInput)) {
-    blocks = blocksInput;
-  } else {
+    blocks = blocksInput as BlockNode[];
+  } else if (typeof blocksInput === "string") {
     try {
       const parsed = JSON.parse(blocksInput);
+      if (parsed?.type === "doc" && Array.isArray(parsed.content)) {
+        return extractTiptapText(parsed.content) || fallback;
+      }
       if (Array.isArray(parsed) && parsed.length > 0) blocks = parsed;
     } catch {
       /* ignore */
@@ -141,6 +223,23 @@ function getBodyPreview(blocksInput: BlockNode[] | string, fallback: string): st
       if (block.type === "paragraph") return block.spans.map((s) => s.text);
       if (block.type === "list")
         return block.items.flatMap((item) => item.spans.map((s) => s.text));
+      return [];
+    })
+    .join(" ");
+}
+
+function extractTiptapText(nodes: unknown[]): string {
+  return (nodes as TiptapNode[])
+    .flatMap((node) => {
+      if (node.type === "paragraph") {
+        return ((node.content ?? []) as TiptapInline[]).map((i) => i.text ?? "");
+      }
+      if (node.type === "bulletList") {
+        return ((node.content ?? []) as TiptapNode[]).flatMap((item) => {
+          const para = ((item.content ?? []) as TiptapNode[])[0];
+          return ((para?.content ?? []) as TiptapInline[]).map((i) => i.text ?? "");
+        });
+      }
       return [];
     })
     .join(" ");
@@ -2067,7 +2166,16 @@ export default function AutomationView() {
 
       <KnowledgeBaseModal isOpen={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
 
-      <EditDraftModal post={editPost} onClose={() => setEditPost(null)} />
+      <EditDraftModal
+        post={editPost}
+        onClose={() => setEditPost(null)}
+        onSave={() => {
+          if (conversation?.artifacts.post_ids.length) {
+            fetchPosts(conversation.artifacts.post_ids);
+          }
+          setEditPost(null);
+        }}
+      />
 
       <AllDraftsModal
         isOpen={viewAllOpen}

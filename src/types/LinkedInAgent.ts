@@ -118,7 +118,7 @@ export interface AgentPost {
   writer_model: string;
   headline: string;
   body: string;
-  body_blocks: BlockNode[] | string;
+  body_blocks: object | string;
   hashtags: string;
   cta: string | null;
   image_url: string;

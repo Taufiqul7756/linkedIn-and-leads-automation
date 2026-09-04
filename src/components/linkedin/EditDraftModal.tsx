@@ -1,27 +1,57 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { LuX, LuPencil, LuPlus, LuSettings, LuSend, LuImage, LuUpload } from "react-icons/lu";
+import {
+  LuX,
+  LuPencil,
+  LuPlus,
+  LuSettings,
+  LuSend,
+  LuImage,
+  LuUpload,
+  LuLoader,
+} from "react-icons/lu";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
 import TiptapEditor from "@/components/ui/TiptapEditor";
+import { useWorkspace } from "@/context/WorkspaceContext";
+import { postsService } from "@/service/postsService";
+import { extractErrorMessage } from "@/utils/extractErrorMessage";
+import toast from "react-hot-toast";
 
-// ─── convert legacy body_blocks → Tiptap JSON ─────────────────────────────────
+// ─── convert body_blocks → Tiptap JSON ────────────────────────────────────────
 
-function bodyBlocksToTiptap(blocksInput: BlockNode[] | string): object {
-  let blocks: BlockNode[] = [];
-  if (Array.isArray(blocksInput)) {
-    blocks = blocksInput;
-  } else {
+// Handles new Tiptap doc format ({type:"doc",...}), legacy array format, or plain text fallback.
+function getInitialContent(post: AgentPost): object {
+  const bb = post.body_blocks;
+
+  // New format: already a Tiptap doc object
+  if (bb && typeof bb === "object" && !Array.isArray(bb)) {
+    const doc = bb as { type?: string };
+    if (doc.type === "doc") return bb as object;
+    // {} means absent — fall through to body
+  }
+
+  // String: try JSON parsing (could be encoded Tiptap doc or legacy array)
+  if (typeof bb === "string" && bb) {
     try {
-      const parsed = JSON.parse(blocksInput);
-      // Already Tiptap JSON (has type: "doc")
-      if (parsed && parsed.type === "doc") return parsed;
-      if (Array.isArray(parsed)) blocks = parsed;
+      const parsed = JSON.parse(bb);
+      if (parsed?.type === "doc") return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return legacyBlocksToTiptap(parsed);
     } catch {
       /* ignore */
     }
   }
 
+  // Legacy array format
+  if (Array.isArray(bb) && (bb as BlockNode[]).length > 0) {
+    return legacyBlocksToTiptap(bb as BlockNode[]);
+  }
+
+  // Fallback to body plain text
+  return post.body ? plainTextToTiptap(post.body) : { type: "doc", content: [] };
+}
+
+function legacyBlocksToTiptap(blocks: BlockNode[]): object {
   const content = blocks
     .map((block) => {
       if (block.type === "paragraph") {
@@ -55,7 +85,6 @@ function bodyBlocksToTiptap(blocksInput: BlockNode[] | string): object {
       return null;
     })
     .filter(Boolean);
-
   return { type: "doc", content };
 }
 
@@ -105,9 +134,12 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 interface Props {
   post: AgentPost | null;
   onClose: () => void;
+  onSave?: () => void;
 }
 
-export default function EditDraftModal({ post, onClose }: Props) {
+export default function EditDraftModal({ post, onClose, onSave }: Props) {
+  const { activeWorkspace } = useWorkspace();
+  const workspaceId = activeWorkspace?.id ?? "";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
@@ -117,6 +149,7 @@ export default function EditDraftModal({ post, onClose }: Props) {
   const [useImage, setUseImage] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Re-initialise when post changes
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -127,14 +160,7 @@ export default function EditDraftModal({ post, onClose }: Props) {
     setUseImage(!!post.image_url || post.image_status !== "none");
     setScheduledDate(isoToDateInput(post.suggested_publish_at));
     setScheduledTime(isoToTimeInput(post.suggested_publish_at));
-
-    if (post.body_blocks) {
-      setBodyJson(bodyBlocksToTiptap(post.body_blocks));
-    } else if (post.body) {
-      setBodyJson(plainTextToTiptap(post.body));
-    } else {
-      setBodyJson({ type: "doc", content: [] });
-    }
+    setBodyJson(getInitialContent(post));
     // Remount the editor with fresh content
     setEditorKey((k) => k + 1);
   }, [post?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -149,6 +175,28 @@ export default function EditDraftModal({ post, onClose }: Props) {
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [post, onClose]);
+
+  const handleSave = async () => {
+    if (!post || !workspaceId) return;
+    setSaving(true);
+    try {
+      let suggested_publish_at: string | null = null;
+      if (scheduledDate) {
+        suggested_publish_at = `${scheduledDate}T${scheduledTime || "00:00"}:00`;
+      }
+      await postsService(workspaceId).patchPost(post.id, {
+        body_blocks: bodyJson,
+        suggested_publish_at,
+      });
+      toast.success("Draft saved.");
+      onSave?.();
+      onClose();
+    } catch (err) {
+      toast.error(extractErrorMessage(err) || "Failed to save draft.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!post) return null;
 
@@ -202,35 +250,42 @@ export default function EditDraftModal({ post, onClose }: Props) {
             />
           </div>
 
-          {/* Mini composer — ask for changes */}
-          <div className="rounded-xl border border-gray-200 px-4 py-3">
+          {/* Mini composer — ask for changes (disabled, coming soon) */}
+          <div className="rounded-xl border border-gray-200 px-4 py-3 opacity-50 pointer-events-none select-none">
             <textarea
               value={changeMsg}
               onChange={(e) => setChangeMsg(e.target.value)}
               placeholder={`Ask for changes, or "show all drafts"...`}
               rows={2}
-              className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
+              disabled
+              className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
             />
             <div className="mt-2 flex items-center justify-between">
               {/* Knowledge chip */}
               <span className="flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
                 Using your knowledge base
-                <button className="text-teal-400 hover:text-teal-600">
+                <button disabled className="text-teal-400">
                   <LuX className="h-3 w-3" />
                 </button>
               </span>
 
               {/* Action buttons */}
               <div className="flex items-center gap-1.5">
-                <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100">
+                <button
+                  disabled
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
+                >
                   <LuPlus className="h-3.5 w-3.5" />
                 </button>
-                <button className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100">
+                <button
+                  disabled
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
+                >
                   <LuSettings className="h-3.5 w-3.5" />
                 </button>
                 <button
-                  disabled={!changeMsg.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  disabled
+                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
                 >
                   Send
                   <LuSend className="h-3 w-3" />
@@ -301,7 +356,12 @@ export default function EditDraftModal({ post, onClose }: Props) {
           >
             Cancel
           </button>
-          <button className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+          >
+            {saving && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
             Save changes
           </button>
         </div>
