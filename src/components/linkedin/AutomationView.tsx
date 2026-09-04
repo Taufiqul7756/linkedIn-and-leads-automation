@@ -11,7 +11,6 @@ import {
   LuDatabase,
   LuX,
   LuLoader,
-  LuSquare,
   LuClock,
   LuPencil,
   LuCheck,
@@ -21,6 +20,7 @@ import {
   LuUpload,
   LuTrash2,
   LuFilter,
+  LuBot,
 } from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -46,14 +46,23 @@ import type {
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const PROMPT_SUGGESTIONS = [
-  { text: "Give me 5 drafts for LinkedIn", tag: null },
-  { text: "Write a launch announcement", tag: null },
-  { text: "Draft a hiring post", tag: null },
-  {
-    text: `5 thought-leadership posts for SaaS, confident & punchy tone, 3 hashtags, spread over 2 weeks`,
-    tag: "All details included · skips questions",
-  },
+// const PROMPT_SUGGESTIONS = [
+//   { text: "Give me 5 drafts for LinkedIn", tag: null },
+//   { text: "Write a launch announcement", tag: null },
+//   { text: "Draft a hiring post", tag: null },
+//   {
+//     text: `5 thought-leadership posts for SaaS, confident & punchy tone, 3 hashtags, spread over 2 weeks`,
+//     tag: "All details included · skips questions",
+//   },
+// ];
+
+const CYCLING_PLACEHOLDERS = [
+  "e.g. Give me 5 LinkedIn drafts about our brand…",
+  "e.g. Write a thought-leadership post about AI trends…",
+  "e.g. Draft a hiring post for a senior engineer…",
+  "e.g. 3 posts about our Q3 launch, bold & punchy tone…",
+  "e.g. Write a personal story post about team culture…",
+  "e.g. Generate posts about our product launch this week…",
 ];
 
 const POLL_INTERVAL_MS = 2000;
@@ -716,9 +725,15 @@ function DraftsSection({
       </div>
 
       {/* Generate more */}
-      <button className="mt-3 flex items-center gap-1.5 text-sm text-blue-600 transition-colors hover:text-blue-700">
+      <button
+        disabled
+        className="mt-3 flex items-center gap-1.5 text-sm text-gray-400 cursor-not-allowed"
+      >
         <LuPlus className="h-4 w-4" />
         Generate more drafts
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+          Coming soon
+        </span>
       </button>
     </div>
   );
@@ -752,8 +767,9 @@ function ThinkingIndicator() {
 
   return (
     <div className="flex items-start gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-        <LuPlus className="h-4 w-4 text-white" />
+      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+        <LuBot className="h-4 w-4 text-white" />
+        <span className="absolute inset-0 rounded-xl animate-ping bg-blue-400 opacity-30" />
       </div>
       <div className="flex items-center gap-3 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3">
         <div className="flex items-center gap-1">
@@ -878,6 +894,9 @@ export default function AutomationView() {
   const [restoringConv, setRestoringConv] = useState(true);
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [placeholderVisible, setPlaceholderVisible] = useState(true);
+  const [isFocused, setIsFocused] = useState(false);
 
   // Settings
   const [settings, setSettings] = useState<AgentSettings>({
@@ -1050,6 +1069,20 @@ export default function AutomationView() {
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
+  // ── cycle placeholder text ──
+  useEffect(() => {
+    const status = conversation?.status;
+    if (status === "running" || status === "awaiting_input") return;
+    const iv = setInterval(() => {
+      setPlaceholderVisible(false);
+      setTimeout(() => {
+        setPlaceholderIdx((i) => (i + 1) % CYCLING_PLACEHOLDERS.length);
+        setPlaceholderVisible(true);
+      }, 300);
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [conversation?.status]);
+
   // ── restore conversation on mount ──
   // Priority: ?conv= URL param → last conversation from history → empty state
   useEffect(() => {
@@ -1095,10 +1128,10 @@ export default function AutomationView() {
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [conversation?.id]);
 
-  // ── scroll to bottom on new messages ──
+  // ── scroll to bottom only when new messages or posts arrive (not on every poll status update) ──
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversation?.messages, conversation?.status, posts]);
+  }, [conversation?.messages?.length, posts.length]);
 
   // ── load settings once ──
   useEffect(() => {
@@ -1541,7 +1574,7 @@ export default function AutomationView() {
           <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
-                <LuPlus className="h-4 w-4 text-white" />
+                <LuBot className="h-4 w-4 text-white" />
               </div>
               <span className="font-semibold text-gray-900">Agent composer</span>
             </div>
@@ -1569,11 +1602,543 @@ export default function AutomationView() {
             </div>
           </div>
 
-          {/* Body row — history panel + chat */}
+          {/* Body row — chat + history panel */}
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            {/* History panel */}
+            {/* Chat column */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {/* Messages area */}
+              <div className="flex-1 overflow-y-auto px-5 py-6">
+                {/* Loading state while restoring conversation */}
+                {restoringConv && (
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                      <LuBot className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-400">
+                      <LuLoader className="h-4 w-4 animate-spin" />
+                      Loading conversation…
+                    </div>
+                  </div>
+                )}
+
+                {/* Welcome message — only after restore completes with no conversation */}
+                {!restoringConv && !conversation && (
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                      <LuBot className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                      Tell me what you want and I&apos;ll research your brand, ask a couple of quick
+                      questions, then draft posts right here for you to approve.
+                    </div>
+                  </div>
+                )}
+
+                {/* Conversation messages */}
+                {conversation?.messages.map((msg) => {
+                  if (msg.role === "user") {
+                    // Answer message — empty text, render summary from payload.answers
+                    if (!msg.text && msg.kind === "text") {
+                      const answers = msg.payload.answers as
+                        Record<string, string | string[]> | undefined;
+                      if (!answers) return null;
+                      const parts: string[] = [];
+                      for (const [key, val] of Object.entries(answers)) {
+                        if (Array.isArray(val)) {
+                          parts.push(
+                            key === "headlines"
+                              ? `Approved ${val.length} headline${val.length !== 1 ? "s" : ""}`
+                              : `${val.length} selected`
+                          );
+                        } else if (val) {
+                          parts.push(val);
+                        }
+                      }
+                      const summary = parts.join(" · ");
+                      return (
+                        <div key={msg.id} className="mt-4 flex justify-end">
+                          <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-100 px-4 py-3 text-sm leading-relaxed text-blue-800">
+                            {summary || "✓ Answered"}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={msg.id} className="mt-4 flex justify-end">
+                        <div className="max-w-md break-words rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
+                          {msg.text}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Agent messages — edit turn
+                  if (msg.kind === "edit") {
+                    const field = msg.payload.field as "text" | "image" | undefined;
+                    return (
+                      <div key={msg.id} className="mt-4 flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
+                          <LuPencil className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+                            <LuPencil className="h-3 w-3" />
+                            {field === "image" ? "Image updated" : "Post edited"}
+                          </div>
+                          {msg.text && (
+                            <div className="break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                              {msg.text}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Agent messages — posts message: render inline with its own drafts
+                  if (msg.kind === "posts") {
+                    const msgPostIds = (msg.payload.post_ids as string[] | undefined) ?? [];
+                    const msgPosts = posts.filter((p) => msgPostIds.includes(p.id));
+                    return (
+                      <div key={msg.id} className="mt-4 flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                          <LuBot className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <div className="mb-3 inline-block break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                            {msg.text}
+                          </div>
+                          {msgPosts.length > 0 && (
+                            <DraftsSection
+                              posts={msgPosts}
+                              onEdit={setEditPost}
+                              onViewAll={(p) => {
+                                setViewAllPosts(p);
+                                setViewAllOpen(true);
+                              }}
+                              onApprove={handleApprovePost}
+                              onReject={handleRejectPost}
+                              approvingIds={approvingIds}
+                              rejectingIds={rejectingIds}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={msg.id} className="mt-4 flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                        <LuBot className="h-4 w-4 text-white" />
+                      </div>
+                      <div
+                        className={cn(
+                          "max-w-xl break-words rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
+                          msg.kind === "error"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-gray-50 text-gray-700"
+                        )}
+                      >
+                        {msg.text}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Awaiting input — headline round */}
+                {isAwaiting && isHeadlineInterrupt && pendingInterrupt && (
+                  <div className="mt-4 flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                      <LuBot className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <HeadlinesForm
+                        headlines={pendingInterrupt.headlines ?? []}
+                        submitting={answering}
+                        onSubmit={(headlines) => handleAnswer({ headlines })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Awaiting input — question form */}
+                {isAwaiting &&
+                  !isHeadlineInterrupt &&
+                  pendingInterrupt &&
+                  piQuestions.length > 0 && (
+                    <div className="mt-4 flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                        <LuBot className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="inline-block max-w-xl break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                          Great — a few quick things so I draft the right posts. You can change any
+                          of these.
+                        </div>
+                        <GrillForm
+                          questions={piQuestions}
+                          onSubmit={handleAnswer}
+                          submitting={answering}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                {/* Running indicator */}
+                {isRunning && (
+                  <div className="mt-4">
+                    <ThinkingIndicator />
+                  </div>
+                )}
+
+                {/* Terminal states */}
+                {isTerminal && (
+                  <div className="mt-4 flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-400">
+                      <LuBot className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                      {conversation?.status === "archived" ? (
+                        <>
+                          This conversation was archived after 7 days.{" "}
+                          <button
+                            onClick={handleNewChat}
+                            className="font-medium text-blue-600 hover:underline"
+                          >
+                            Start a new one
+                          </button>
+                        </>
+                      ) : (
+                        "Generation stopped. You can keep chatting or send a new message."
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input area */}
+              <div className="shrink-0 px-5 py-4">
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-md">
+                  {/* Textarea + cycling placeholder */}
+                  <div className="relative px-4 pt-3 pb-1">
+                    {!message && !isFocused && !isRunning && !isAwaiting && (
+                      <div
+                        className="pointer-events-none absolute inset-x-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 transition-opacity duration-300"
+                        style={{ opacity: placeholderVisible ? 1 : 0 }}
+                      >
+                        {CYCLING_PLACEHOLDERS[placeholderIdx]}
+                      </div>
+                    )}
+                    <textarea
+                      ref={textareaRef}
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      onFocus={() => setIsFocused(true)}
+                      onBlur={() => setIsFocused(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && canSend && message.trim()) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      placeholder={
+                        isAwaiting
+                          ? "Answer the questions above…"
+                          : isRunning
+                            ? "Agent is working…"
+                            : ""
+                      }
+                      disabled={isRunning || isAwaiting}
+                      rows={2}
+                      className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
+                    />
+                  </div>
+
+                  {/* Attachment chips */}
+                  {(conversation?.attachments?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-1.5 px-4 pb-2">
+                      {conversation!.attachments.map((a: Attachment) => {
+                        const isPending = a.status === "pending";
+                        const isFailed = a.status === "failed";
+                        const chipCls = isFailed
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : isPending
+                            ? "border-gray-200 bg-gray-50 text-gray-500"
+                            : "border-blue-200 bg-blue-50 text-blue-700";
+                        return (
+                          <span
+                            key={a.id}
+                            title={isFailed ? a.error : undefined}
+                            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${chipCls}`}
+                          >
+                            {isPending ? (
+                              <LuLoader className="h-3 w-3 shrink-0 animate-spin" />
+                            ) : a.kind === "url" ? (
+                              <LuLink className="h-3 w-3 shrink-0" />
+                            ) : (
+                              <LuPaperclip className="h-3 w-3 shrink-0" />
+                            )}
+                            <span className="max-w-[140px] truncate">{a.label}</span>
+                            {isFailed && (
+                              <span className="shrink-0 text-[10px] text-red-400">Failed</span>
+                            )}
+                            <button
+                              onClick={() => handleDeleteAttachment(a.id)}
+                              className="shrink-0 opacity-60 hover:opacity-100"
+                            >
+                              <LuX className="h-3 w-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Hidden file input — PDF only */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      e.target.value = "";
+                      setPlusOpen(false);
+                      handleFileAttach(file);
+                    }}
+                  />
+
+                  <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
+                    {/* Prompt suggestions — coming soon */}
+                    <button
+                      disabled
+                      className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-400 cursor-not-allowed"
+                    >
+                      <LuZap className="h-3.5 w-3.5" />
+                      Prompt suggestions
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+                        Coming soon
+                      </span>
+                    </button>
+
+                    {/* Right-side actions */}
+                    <div className="flex items-center gap-2">
+                      {/* Plus — file / URL attach */}
+                      <div ref={plusRef} className="relative">
+                        <button
+                          onClick={() => setPlusOpen((v) => !v)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition-colors hover:bg-gray-100 hover:border-gray-400"
+                        >
+                          <LuPlus className="h-4 w-4" />
+                        </button>
+
+                        {plusOpen && (
+                          <div className="absolute bottom-full right-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
+                            {(conversation?.attachments?.length ?? 0) >= 5 && (
+                              <p className="mb-2 text-center text-xs text-amber-600">
+                                Maximum 5 attachments reached.
+                              </p>
+                            )}
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={
+                                uploadingAttachment || (conversation?.attachments?.length ?? 0) >= 5
+                              }
+                              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {uploadingAttachment ? (
+                                <LuLoader className="h-4 w-4 animate-spin text-gray-400" />
+                              ) : (
+                                <LuUpload className="h-4 w-4 text-gray-400" />
+                              )}
+                              {uploadingAttachment ? "Uploading…" : "Upload a PDF"}
+                            </button>
+                            <div className="mt-2 flex gap-2">
+                              <input
+                                type="url"
+                                placeholder="Paste a URL"
+                                value={urlInput}
+                                onChange={(e) => setUrlInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleUrlAttach(urlInput);
+                                }}
+                                className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                              />
+                              <button
+                                disabled={
+                                  !urlInput.trim() ||
+                                  addingUrl ||
+                                  (conversation?.attachments?.length ?? 0) >= 5
+                                }
+                                onClick={() => handleUrlAttach(urlInput)}
+                                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {addingUrl ? (
+                                  <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  "Add"
+                                )}
+                              </button>
+                            </div>
+                            <p className="mt-2 text-center text-[10px] text-gray-400">
+                              PDF or URL · used only in this conversation
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Settings */}
+                      <div ref={settingsRef} className="relative">
+                        <button
+                          onClick={() => setSettingsOpen((v) => !v)}
+                          className={cn(
+                            "flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition-colors hover:bg-gray-100 hover:border-gray-400",
+                            settingsSaving && "opacity-50"
+                          )}
+                        >
+                          <LuSettings className="h-4 w-4" />
+                        </button>
+
+                        {settingsOpen && (
+                          <div className="absolute bottom-full right-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                            <div className="flex items-center justify-between px-4 py-3">
+                              <span className="text-sm font-semibold text-gray-900">
+                                Composer settings
+                              </span>
+                              <button
+                                onClick={() => setSettingsOpen(false)}
+                                className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                              >
+                                <LuX className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+
+                            <div className="divide-y divide-gray-100 px-4 pb-4">
+                              {/* Post count */}
+                              <div className="flex items-center justify-between gap-3 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">
+                                    Posts per batch
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    How many drafts per run (1–20)
+                                  </p>
+                                </div>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={20}
+                                  value={settings.post_count}
+                                  onChange={(e) => {
+                                    const n = Math.min(20, Math.max(1, Number(e.target.value)));
+                                    if (!isNaN(n)) handleSettingChange("post_count", n);
+                                  }}
+                                  className="w-16 rounded-lg border border-gray-200 px-2 py-1.5 text-center text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                                />
+                              </div>
+
+                              {/* Content toggles */}
+                              <div className="flex items-start justify-between gap-3 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">Use emoji</p>
+                                  <p className="text-xs text-gray-400">
+                                    Sprinkle emoji into drafts
+                                  </p>
+                                </div>
+                                <Toggle
+                                  checked={settings.use_emoji}
+                                  onChange={(v) => handleSettingChange("use_emoji", v)}
+                                />
+                              </div>
+                              <div className="flex items-start justify-between gap-3 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">Use hashtags</p>
+                                  <p className="text-xs text-gray-400">
+                                    Add hashtags to each draft
+                                  </p>
+                                </div>
+                                <Toggle
+                                  checked={settings.use_hashtags}
+                                  onChange={(v) => handleSettingChange("use_hashtags", v)}
+                                />
+                              </div>
+                              <div className="flex items-start justify-between gap-3 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">Use AI image</p>
+                                  <p className="text-xs text-gray-400">
+                                    Generate a visual for each draft
+                                  </p>
+                                </div>
+                                <Toggle
+                                  checked={settings.use_ai_image}
+                                  onChange={(v) => handleSettingChange("use_ai_image", v)}
+                                />
+                              </div>
+                              <div className="flex items-start justify-between gap-3 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">
+                                    Use knowledge base
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    Ground drafts in your connected sources
+                                  </p>
+                                </div>
+                                <Toggle
+                                  checked={settings.use_knowledge}
+                                  onChange={(v) => handleSettingChange("use_knowledge", v)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Send / Cancel — mutually exclusive */}
+                      {showCancel ? (
+                        <button
+                          onClick={handleCancel}
+                          disabled={cancelling}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {cancelling ? (
+                            <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <span className="h-3 w-3 bg-white" />
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleSend}
+                          disabled={!canSend || !message.trim() || sending}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors",
+                            canSend && message.trim()
+                              ? "bg-blue-600 hover:bg-blue-700"
+                              : "bg-blue-600 opacity-50"
+                          )}
+                        >
+                          {sending ? (
+                            <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <LuSend className="h-3.5 w-3.5" />
+                          )}
+                          Send
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* /chat column */}
+            </div>
+
+            {/* History panel — right side */}
             {historyOpen && (
-              <div className="flex w-60 shrink-0 flex-col border-r border-gray-100">
+              <div className="flex w-60 shrink-0 flex-col border-l border-gray-100">
                 <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
                   <span className="text-sm font-semibold text-gray-900">Chat history</span>
                   <button
@@ -1622,543 +2187,6 @@ export default function AutomationView() {
                 </div>
               </div>
             )}
-
-            {/* Chat column */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {/* Messages area */}
-              <div className="flex-1 overflow-y-auto px-5 py-6">
-                {/* Loading state while restoring conversation */}
-                {restoringConv && (
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                      <LuPlus className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-400">
-                      <LuLoader className="h-4 w-4 animate-spin" />
-                      Loading conversation…
-                    </div>
-                  </div>
-                )}
-
-                {/* Welcome message — only after restore completes with no conversation */}
-                {!restoringConv && !conversation && (
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                      <LuPlus className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                      Tell me what you want and I&apos;ll research your brand, ask a couple of quick
-                      questions, then draft posts right here for you to approve.
-                    </div>
-                  </div>
-                )}
-
-                {/* Conversation messages */}
-                {conversation?.messages.map((msg) => {
-                  if (msg.role === "user") {
-                    // Answer message — empty text, render summary from payload.answers
-                    if (!msg.text && msg.kind === "text") {
-                      const answers = msg.payload.answers as
-                        Record<string, string | string[]> | undefined;
-                      if (!answers) return null;
-                      const parts: string[] = [];
-                      for (const [key, val] of Object.entries(answers)) {
-                        if (Array.isArray(val)) {
-                          parts.push(
-                            key === "headlines"
-                              ? `Approved ${val.length} headline${val.length !== 1 ? "s" : ""}`
-                              : `${val.length} selected`
-                          );
-                        } else if (val) {
-                          parts.push(val);
-                        }
-                      }
-                      const summary = parts.join(" · ");
-                      return (
-                        <div key={msg.id} className="mt-4 flex justify-end">
-                          <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-100 px-4 py-3 text-sm leading-relaxed text-blue-800">
-                            {summary || "✓ Answered"}
-                          </div>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={msg.id} className="mt-4 flex justify-end">
-                        <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
-                          {msg.text}
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // Agent messages — edit turn
-                  if (msg.kind === "edit") {
-                    const field = msg.payload.field as "text" | "image" | undefined;
-                    return (
-                      <div key={msg.id} className="mt-4 flex items-start gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
-                          <LuPencil className="h-4 w-4 text-white" />
-                        </div>
-                        <div className="space-y-1">
-                          <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700">
-                            <LuPencil className="h-3 w-3" />
-                            {field === "image" ? "Image updated" : "Post edited"}
-                          </div>
-                          {msg.text && (
-                            <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                              {msg.text}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // Agent messages — posts message: render inline with its own drafts
-                  if (msg.kind === "posts") {
-                    const msgPostIds = (msg.payload.post_ids as string[] | undefined) ?? [];
-                    const msgPosts = posts.filter((p) => msgPostIds.includes(p.id));
-                    return (
-                      <div key={msg.id} className="mt-4 flex items-start gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                          <LuPlus className="h-4 w-4 text-white" />
-                        </div>
-                        <div className="flex-1 overflow-hidden">
-                          <div className="mb-3 inline-block rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                            {msg.text}
-                          </div>
-                          {msgPosts.length > 0 && (
-                            <DraftsSection
-                              posts={msgPosts}
-                              onEdit={setEditPost}
-                              onViewAll={(p) => {
-                                setViewAllPosts(p);
-                                setViewAllOpen(true);
-                              }}
-                              onApprove={handleApprovePost}
-                              onReject={handleRejectPost}
-                              approvingIds={approvingIds}
-                              rejectingIds={rejectingIds}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={msg.id} className="mt-4 flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                        <LuPlus className="h-4 w-4 text-white" />
-                      </div>
-                      <div
-                        className={cn(
-                          "max-w-xl rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
-                          msg.kind === "error"
-                            ? "bg-red-50 text-red-700"
-                            : "bg-gray-50 text-gray-700"
-                        )}
-                      >
-                        {msg.text}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Awaiting input — headline round */}
-                {isAwaiting && isHeadlineInterrupt && pendingInterrupt && (
-                  <div className="mt-4 flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                      <LuPlus className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <HeadlinesForm
-                        headlines={pendingInterrupt.headlines ?? []}
-                        submitting={answering}
-                        onSubmit={(headlines) => handleAnswer({ headlines })}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Awaiting input — question form */}
-                {isAwaiting &&
-                  !isHeadlineInterrupt &&
-                  pendingInterrupt &&
-                  piQuestions.length > 0 && (
-                    <div className="mt-4 flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                        <LuPlus className="h-4 w-4 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="inline-block max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                          Great — a few quick things so I draft the right posts. You can change any
-                          of these.
-                        </div>
-                        <GrillForm
-                          questions={piQuestions}
-                          onSubmit={handleAnswer}
-                          submitting={answering}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                {/* Running indicator */}
-                {isRunning && (
-                  <div className="mt-4">
-                    <ThinkingIndicator />
-                  </div>
-                )}
-
-                {/* Terminal states */}
-                {isTerminal && (
-                  <div className="mt-4 flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-400">
-                      <LuPlus className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
-                      {conversation?.status === "archived" ? (
-                        <>
-                          This conversation was archived after 7 days.{" "}
-                          <button
-                            onClick={handleNewChat}
-                            className="font-medium text-blue-600 hover:underline"
-                          >
-                            Start a new one
-                          </button>
-                        </>
-                      ) : (
-                        "Generation stopped. You can keep chatting or send a new message."
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input area */}
-              <div className="shrink-0 border-t border-gray-100 px-5 py-4">
-                <textarea
-                  ref={textareaRef}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && canSend && message.trim()) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder={
-                    isAwaiting
-                      ? "Answer the questions above…"
-                      : isRunning
-                        ? "Agent is working…"
-                        : "e.g. Give me 5 LinkedIn drafts about our brand..."
-                  }
-                  disabled={isRunning || isAwaiting}
-                  rows={2}
-                  className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
-                />
-
-                {/* Attachment chips */}
-                {(conversation?.attachments?.length ?? 0) > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {conversation!.attachments.map((a: Attachment) => {
-                      const isPending = a.status === "pending";
-                      const isFailed = a.status === "failed";
-                      const chipCls = isFailed
-                        ? "border-red-200 bg-red-50 text-red-700"
-                        : isPending
-                          ? "border-gray-200 bg-gray-50 text-gray-500"
-                          : "border-blue-200 bg-blue-50 text-blue-700";
-                      return (
-                        <span
-                          key={a.id}
-                          title={isFailed ? a.error : undefined}
-                          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${chipCls}`}
-                        >
-                          {isPending ? (
-                            <LuLoader className="h-3 w-3 shrink-0 animate-spin" />
-                          ) : a.kind === "url" ? (
-                            <LuLink className="h-3 w-3 shrink-0" />
-                          ) : (
-                            <LuPaperclip className="h-3 w-3 shrink-0" />
-                          )}
-                          <span className="max-w-[140px] truncate">{a.label}</span>
-                          {isFailed && (
-                            <span className="shrink-0 text-[10px] text-red-400">Failed</span>
-                          )}
-                          <button
-                            onClick={() => handleDeleteAttachment(a.id)}
-                            className="shrink-0 opacity-60 hover:opacity-100"
-                          >
-                            <LuX className="h-3 w-3" />
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Hidden file input — PDF only */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    e.target.value = "";
-                    setPlusOpen(false);
-                    handleFileAttach(file);
-                  }}
-                />
-
-                <div className="mt-3 flex items-center justify-between">
-                  {/* Prompt suggestions */}
-                  <div ref={promptRef} className="relative">
-                    <button
-                      onClick={() => setPromptOpen((v) => !v)}
-                      disabled={isRunning || isAwaiting}
-                      className="flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
-                    >
-                      <LuZap className="h-3.5 w-3.5" />
-                      Prompt suggestions
-                    </button>
-
-                    {promptOpen && (
-                      <div className="absolute bottom-full left-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                        <div className="divide-y divide-gray-100">
-                          {PROMPT_SUGGESTIONS.map((s, i) => (
-                            <button
-                              key={i}
-                              onClick={() => {
-                                setMessage(s.text);
-                                setPromptOpen(false);
-                              }}
-                              className="w-full px-4 py-3 text-left transition-colors hover:bg-gray-50"
-                            >
-                              <p className="text-sm text-gray-800">{s.text}</p>
-                              {s.tag && (
-                                <span className="mt-1 inline-block text-xs font-medium text-teal-600">
-                                  {s.tag}
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right-side actions */}
-                  <div className="flex items-center gap-2">
-                    {/* Cancel */}
-                    {showCancel && (
-                      <button
-                        onClick={handleCancel}
-                        disabled={cancelling}
-                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        {cancelling ? (
-                          <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <LuSquare className="h-3.5 w-3.5" />
-                        )}
-                        Cancel
-                      </button>
-                    )}
-
-                    {/* Plus — file / URL attach */}
-                    <div ref={plusRef} className="relative">
-                      <button
-                        onClick={() => setPlusOpen((v) => !v)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100"
-                      >
-                        <LuPlus className="h-4 w-4" />
-                      </button>
-
-                      {plusOpen && (
-                        <div className="absolute bottom-full right-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
-                          {(conversation?.attachments?.length ?? 0) >= 5 && (
-                            <p className="mb-2 text-center text-xs text-amber-600">
-                              Maximum 5 attachments reached.
-                            </p>
-                          )}
-                          <button
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={
-                              uploadingAttachment || (conversation?.attachments?.length ?? 0) >= 5
-                            }
-                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50 disabled:opacity-50"
-                          >
-                            {uploadingAttachment ? (
-                              <LuLoader className="h-4 w-4 animate-spin text-gray-400" />
-                            ) : (
-                              <LuUpload className="h-4 w-4 text-gray-400" />
-                            )}
-                            {uploadingAttachment ? "Uploading…" : "Upload a PDF"}
-                          </button>
-                          <div className="mt-2 flex gap-2">
-                            <input
-                              type="url"
-                              placeholder="Paste a URL"
-                              value={urlInput}
-                              onChange={(e) => setUrlInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleUrlAttach(urlInput);
-                              }}
-                              className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-                            />
-                            <button
-                              disabled={
-                                !urlInput.trim() ||
-                                addingUrl ||
-                                (conversation?.attachments?.length ?? 0) >= 5
-                              }
-                              onClick={() => handleUrlAttach(urlInput)}
-                              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                            >
-                              {addingUrl ? (
-                                <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                "Add"
-                              )}
-                            </button>
-                          </div>
-                          <p className="mt-2 text-center text-[10px] text-gray-400">
-                            PDF or URL · used only in this conversation
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Settings */}
-                    <div ref={settingsRef} className="relative">
-                      <button
-                        onClick={() => setSettingsOpen((v) => !v)}
-                        className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition-colors hover:bg-gray-100",
-                          settingsSaving && "opacity-50"
-                        )}
-                      >
-                        <LuSettings className="h-4 w-4" />
-                      </button>
-
-                      {settingsOpen && (
-                        <div className="absolute bottom-full right-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                          <div className="flex items-center justify-between px-4 py-3">
-                            <span className="text-sm font-semibold text-gray-900">
-                              Composer settings
-                            </span>
-                            <button
-                              onClick={() => setSettingsOpen(false)}
-                              className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
-                            >
-                              <LuX className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-
-                          <div className="divide-y divide-gray-100 px-4 pb-4">
-                            {/* Post count */}
-                            <div className="flex items-center justify-between gap-3 py-3">
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">Posts per batch</p>
-                                <p className="text-xs text-gray-400">
-                                  How many drafts per run (1–20)
-                                </p>
-                              </div>
-                              <input
-                                type="number"
-                                min={1}
-                                max={20}
-                                value={settings.post_count}
-                                onChange={(e) => {
-                                  const n = Math.min(20, Math.max(1, Number(e.target.value)));
-                                  if (!isNaN(n)) handleSettingChange("post_count", n);
-                                }}
-                                className="w-16 rounded-lg border border-gray-200 px-2 py-1.5 text-center text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-                              />
-                            </div>
-
-                            {/* Content toggles */}
-                            <div className="flex items-start justify-between gap-3 py-3">
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">Use emoji</p>
-                                <p className="text-xs text-gray-400">Sprinkle emoji into drafts</p>
-                              </div>
-                              <Toggle
-                                checked={settings.use_emoji}
-                                onChange={(v) => handleSettingChange("use_emoji", v)}
-                              />
-                            </div>
-                            <div className="flex items-start justify-between gap-3 py-3">
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">Use hashtags</p>
-                                <p className="text-xs text-gray-400">Add hashtags to each draft</p>
-                              </div>
-                              <Toggle
-                                checked={settings.use_hashtags}
-                                onChange={(v) => handleSettingChange("use_hashtags", v)}
-                              />
-                            </div>
-                            <div className="flex items-start justify-between gap-3 py-3">
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">Use AI image</p>
-                                <p className="text-xs text-gray-400">
-                                  Generate a visual for each draft
-                                </p>
-                              </div>
-                              <Toggle
-                                checked={settings.use_ai_image}
-                                onChange={(v) => handleSettingChange("use_ai_image", v)}
-                              />
-                            </div>
-                            <div className="flex items-start justify-between gap-3 py-3">
-                              <div>
-                                <p className="text-sm font-medium text-gray-800">
-                                  Use knowledge base
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  Ground drafts in your connected sources
-                                </p>
-                              </div>
-                              <Toggle
-                                checked={settings.use_knowledge}
-                                onChange={(v) => handleSettingChange("use_knowledge", v)}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Send */}
-                    <button
-                      onClick={handleSend}
-                      disabled={!canSend || !message.trim() || sending}
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors",
-                        canSend && message.trim()
-                          ? "bg-blue-600 hover:bg-blue-700"
-                          : "bg-blue-600 opacity-50"
-                      )}
-                    >
-                      {sending ? (
-                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <LuSend className="h-3.5 w-3.5" />
-                      )}
-                      Send
-                    </button>
-                  </div>
-                </div>
-              </div>
-              {/* /chat column */}
-            </div>
             {/* /body row */}
           </div>
         </div>
