@@ -1665,7 +1665,7 @@ export default function AutomationView() {
                     }
                     return (
                       <div key={msg.id} className="mt-4 flex justify-end">
-                        <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
+                        <div className="max-w-md break-words rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
                           {msg.text}
                         </div>
                       </div>
@@ -1686,7 +1686,7 @@ export default function AutomationView() {
                             {field === "image" ? "Image updated" : "Post edited"}
                           </div>
                           {msg.text && (
-                            <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                            <div className="break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
                               {msg.text}
                             </div>
                           )}
@@ -1705,7 +1705,7 @@ export default function AutomationView() {
                           <LuBot className="h-4 w-4 text-white" />
                         </div>
                         <div className="flex-1 overflow-hidden">
-                          <div className="mb-3 inline-block rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                          <div className="mb-3 inline-block break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
                             {msg.text}
                           </div>
                           {msgPosts.length > 0 && (
@@ -1734,7 +1734,7 @@ export default function AutomationView() {
                       </div>
                       <div
                         className={cn(
-                          "max-w-xl rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
+                          "max-w-xl break-words rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
                           msg.kind === "error"
                             ? "bg-red-50 text-red-700"
                             : "bg-gray-50 text-gray-700"
@@ -1772,7 +1772,7 @@ export default function AutomationView() {
                         <LuBot className="h-4 w-4 text-white" />
                       </div>
                       <div className="flex-1">
-                        <div className="inline-block max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                        <div className="inline-block max-w-xl break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
                           Great — a few quick things so I draft the right posts. You can change any
                           of these.
                         </div>
@@ -1798,7 +1798,7 @@ export default function AutomationView() {
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-400">
                       <LuBot className="h-4 w-4 text-white" />
                     </div>
-                    <div className="rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                    <div className="break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
                       {conversation?.status === "archived" ? (
                         <>
                           This conversation was archived after 7 days.{" "}
