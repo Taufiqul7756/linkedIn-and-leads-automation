@@ -1602,60 +1602,8 @@ export default function AutomationView() {
             </div>
           </div>
 
-          {/* Body row — history panel + chat */}
+          {/* Body row — chat + history panel */}
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            {/* History panel */}
-            {historyOpen && (
-              <div className="flex w-60 shrink-0 flex-col border-r border-gray-100">
-                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
-                  <span className="text-sm font-semibold text-gray-900">Chat history</span>
-                  <button
-                    onClick={() => setHistoryOpen(false)}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-                  >
-                    <LuX className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-2">
-                  <button
-                    onClick={handleNewChat}
-                    className="mb-4 mt-1 flex w-full items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-600 transition-colors hover:bg-blue-100"
-                  >
-                    <LuPlus className="h-3.5 w-3.5" />
-                    New chat
-                  </button>
-                  {historyLoading ? (
-                    <div className="flex items-center gap-2 px-3 py-6 text-sm text-gray-400">
-                      <LuLoader className="h-4 w-4 animate-spin" />
-                      Loading…
-                    </div>
-                  ) : !history?.results.length ? (
-                    <p className="px-3 py-6 text-sm text-gray-400">No conversations yet.</p>
-                  ) : (
-                    groupConversations(history.results).map((group) => (
-                      <div key={group.label} className="mb-4">
-                        <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                          {group.label}
-                        </p>
-                        {group.items.map((item) => (
-                          <HistoryItem
-                            key={item.id}
-                            item={item}
-                            active={item.id === conversation?.id}
-                            onClick={() => handleLoadConversation(item.id)}
-                            onDelete={(e) => {
-                              e.stopPropagation();
-                              handleDeleteConversation(item.id);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Chat column */}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {/* Messages area */}
@@ -2187,6 +2135,58 @@ export default function AutomationView() {
               </div>
               {/* /chat column */}
             </div>
+
+            {/* History panel — right side */}
+            {historyOpen && (
+              <div className="flex w-60 shrink-0 flex-col border-l border-gray-100">
+                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
+                  <span className="text-sm font-semibold text-gray-900">Chat history</span>
+                  <button
+                    onClick={() => setHistoryOpen(false)}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                  >
+                    <LuX className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2">
+                  <button
+                    onClick={handleNewChat}
+                    className="mb-4 mt-1 flex w-full items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-600 transition-colors hover:bg-blue-100"
+                  >
+                    <LuPlus className="h-3.5 w-3.5" />
+                    New chat
+                  </button>
+                  {historyLoading ? (
+                    <div className="flex items-center gap-2 px-3 py-6 text-sm text-gray-400">
+                      <LuLoader className="h-4 w-4 animate-spin" />
+                      Loading…
+                    </div>
+                  ) : !history?.results.length ? (
+                    <p className="px-3 py-6 text-sm text-gray-400">No conversations yet.</p>
+                  ) : (
+                    groupConversations(history.results).map((group) => (
+                      <div key={group.label} className="mb-4">
+                        <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                          {group.label}
+                        </p>
+                        {group.items.map((item) => (
+                          <HistoryItem
+                            key={item.id}
+                            item={item}
+                            active={item.id === conversation?.id}
+                            onClick={() => handleLoadConversation(item.id)}
+                            onDelete={(e) => {
+                              e.stopPropagation();
+                              handleDeleteConversation(item.id);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
             {/* /body row */}
           </div>
         </div>
