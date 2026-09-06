@@ -8,6 +8,7 @@ import {
   LuSettings,
   LuSend,
   LuImage,
+  LuVideo,
   LuUpload,
   LuLoader,
 } from "react-icons/lu";
@@ -20,18 +21,14 @@ import toast from "react-hot-toast";
 
 // ─── convert body_blocks → Tiptap JSON ────────────────────────────────────────
 
-// Handles new Tiptap doc format ({type:"doc",...}), legacy array format, or plain text fallback.
 function getInitialContent(post: AgentPost): object {
   const bb = post.body_blocks;
 
-  // New format: already a Tiptap doc object
   if (bb && typeof bb === "object" && !Array.isArray(bb)) {
     const doc = bb as { type?: string };
     if (doc.type === "doc") return bb as object;
-    // {} means absent — fall through to body
   }
 
-  // String: try JSON parsing (could be encoded Tiptap doc or legacy array)
   if (typeof bb === "string" && bb) {
     try {
       const parsed = JSON.parse(bb);
@@ -42,12 +39,10 @@ function getInitialContent(post: AgentPost): object {
     }
   }
 
-  // Legacy array format
   if (Array.isArray(bb) && (bb as BlockNode[]).length > 0) {
     return legacyBlocksToTiptap(bb as BlockNode[]);
   }
 
-  // Fallback to body plain text
   return post.body ? plainTextToTiptap(post.body) : { type: "doc", content: [] };
 }
 
@@ -111,24 +106,6 @@ function isoToTimeInput(iso: string | null): string {
   return `${hh}:${mm}`;
 }
 
-// ─── toggle ───────────────────────────────────────────────────────────────────
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${checked ? "bg-blue-600" : "bg-gray-200"}`}
-    >
-      <span
-        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"}`}
-      />
-    </button>
-  );
-}
-
 // ─── main component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -141,12 +118,18 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
   const [bodyJson, setBodyJson] = useState<object>({ type: "doc", content: [] });
   const [editorKey, setEditorKey] = useState(0);
   const [changeMsg, setChangeMsg] = useState("");
-  const [useImage, setUseImage] = useState(false);
+  const [mediaTab, setMediaTab] = useState<"image" | "video">("image");
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [videoRemoved, setVideoRemoved] = useState(false);
+  const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
+  const [newVideoPreview, setNewVideoPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [saving, setSaving] = useState(false);
@@ -157,11 +140,14 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
     if (!post) return;
     setTitle(post.headline ?? "");
     setChangeMsg("");
-    setUseImage(!!post.image_url || post.image_status !== "none");
+    setMediaTab(post.media_type === "video" ? "video" : "image");
+    setImageRemoved(false);
+    setVideoRemoved(false);
+    setNewImagePreview(null);
+    setNewVideoPreview(null);
     setScheduledDate(isoToDateInput(post.suggested_publish_at));
     setScheduledTime(isoToTimeInput(post.suggested_publish_at));
     setBodyJson(getInitialContent(post));
-    // Remount the editor with fresh content
     setEditorKey((k) => k + 1);
   }, [post?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -176,6 +162,42 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
     return () => document.removeEventListener("keydown", h);
   }, [post, onClose]);
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !post) return;
+    setNewImagePreview(URL.createObjectURL(file));
+    setImageRemoved(false);
+    setIsUploading(true);
+    try {
+      await postsService(workspaceId).uploadImage(post.id, file);
+      toast.success("Image uploaded.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+      setNewImagePreview(null);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !post) return;
+    setNewVideoPreview(URL.createObjectURL(file));
+    setVideoRemoved(false);
+    setIsUploading(true);
+    try {
+      await postsService(workspaceId).uploadVideo(post.id, file);
+      toast.success("Video uploaded.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+      setNewVideoPreview(null);
+    } finally {
+      setIsUploading(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  };
+
   const handleSave = async () => {
     if (!post || !workspaceId) return;
     setSaving(true);
@@ -187,6 +209,8 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
       await postsService(workspaceId).patchPost(post.id, {
         body_blocks: bodyJson,
         suggested_publish_at,
+        ...(imageRemoved ? { image_url: "" } : {}),
+        ...(videoRemoved ? { video_url: "" } : {}),
       });
       toast.success("Draft saved.");
       onSave?.();
@@ -199,6 +223,13 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   };
 
   if (!post) return null;
+
+  const showExistingImage = !!post.image_url && !imageRemoved && !newImagePreview;
+  const showNewImagePreview = !!newImagePreview;
+  const showImageUpload = (imageRemoved || !post.image_url) && !newImagePreview;
+  const showExistingVideo = !!post.video_url && !videoRemoved && !newVideoPreview;
+  const showNewVideoPreview = !!newVideoPreview;
+  const showVideoUpload = (videoRemoved || !post.video_url) && !newVideoPreview;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -262,15 +293,12 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
                 className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
               />
               <div className="mt-2 flex items-center justify-between">
-                {/* Knowledge chip */}
                 <span className="flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
                   Using your knowledge base
                   <button disabled className="text-teal-400">
                     <LuX className="h-3 w-3" />
                   </button>
                 </span>
-
-                {/* Action buttons */}
                 <div className="flex items-center gap-1.5">
                   <button
                     disabled
@@ -299,37 +327,201 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
             </span>
           </div>
 
-          {/* Image */}
+          {/* Media — Image + Video tabs */}
           <div>
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Image</span>
-              <Toggle checked={useImage} onChange={setUseImage} />
-            </div>
+            <p className="mb-3 text-sm font-medium text-gray-700">Media</p>
 
-            {useImage && (
-              <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
-                {post.image_url ? (
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={post.image_url} alt="" className="h-48 w-full object-cover" />
-                  </div>
-                ) : (
-                  <div className="flex h-48 items-center justify-center">
-                    <LuImage className="h-10 w-10 text-gray-300" />
-                  </div>
-                )}
-                <div className="flex justify-end border-t border-gray-200 bg-white px-3 py-2">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
-                  >
-                    <LuUpload className="h-3.5 w-3.5" />
-                    Change image
-                  </button>
-                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" />
-                </div>
+            <>
+              {/* Tabs */}
+              <div className="mb-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("image")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    mediaTab === "image"
+                      ? "bg-blue-600 text-white"
+                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <LuImage className="h-3.5 w-3.5" />
+                  Image
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("video")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    mediaTab === "video"
+                      ? "bg-blue-600 text-white"
+                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <LuVideo className="h-3.5 w-3.5" />
+                  Video
+                </button>
               </div>
-            )}
+
+              {/* Image tab */}
+              {mediaTab === "image" && (
+                <>
+                  {showExistingImage && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={post.image_url}
+                        alt="Post image"
+                        className="w-full object-cover"
+                        style={{ maxHeight: 220 }}
+                      />
+                      <button
+                        onClick={() => setImageRemoved(true)}
+                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                      >
+                        <LuX className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {showNewImagePreview && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={newImagePreview!}
+                        alt="New post image"
+                        className="w-full object-cover"
+                        style={{ maxHeight: 220 }}
+                      />
+                      {isUploading ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <LuLoader className="h-6 w-6 animate-spin text-white" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setNewImagePreview(null);
+                            if (fileInputRef.current) fileInputRef.current.value = "";
+                          }}
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                        >
+                          <LuX className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {showImageUpload && (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
+                    >
+                      <LuUpload className="h-5 w-5" />
+                      <span className="text-sm font-medium">Click to upload an image</span>
+                      <span className="text-xs">PNG, JPG, WEBP</span>
+                    </button>
+                  )}
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+
+                  {imageRemoved && !newImagePreview && post.image_url && (
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      Original image removed.{" "}
+                      <button
+                        onClick={() => setImageRemoved(false)}
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        Undo
+                      </button>
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* Video tab */}
+              {mediaTab === "video" && (
+                <>
+                  {showExistingVideo && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      <video
+                        src={post.video_url}
+                        controls
+                        className="w-full"
+                        style={{ maxHeight: 220 }}
+                      />
+                      <button
+                        onClick={() => setVideoRemoved(true)}
+                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                      >
+                        <LuX className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {showNewVideoPreview && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      <video
+                        src={newVideoPreview!}
+                        controls
+                        className="w-full"
+                        style={{ maxHeight: 220 }}
+                      />
+                      {isUploading ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <LuLoader className="h-6 w-6 animate-spin text-white" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setNewVideoPreview(null);
+                            if (videoInputRef.current) videoInputRef.current.value = "";
+                          }}
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                        >
+                          <LuX className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {showVideoUpload && (
+                    <button
+                      onClick={() => videoInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
+                    >
+                      <LuUpload className="h-5 w-5" />
+                      <span className="text-sm font-medium">Click to upload a video</span>
+                      <span className="text-xs">MP4, MOV, M4V, WEBM · up to 500 MB</span>
+                    </button>
+                  )}
+
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
+                    className="hidden"
+                    onChange={handleVideoChange}
+                  />
+
+                  {videoRemoved && !newVideoPreview && post.video_url && (
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      Original video removed.{" "}
+                      <button
+                        onClick={() => setVideoRemoved(false)}
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        Undo
+                      </button>
+                    </p>
+                  )}
+                </>
+              )}
+            </>
           </div>
 
           {/* Scheduled time */}
@@ -363,7 +555,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || isUploading}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
           >
             {saving && <LuLoader className="h-3.5 w-3.5 animate-spin" />}

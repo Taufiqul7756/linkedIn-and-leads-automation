@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   LuPencil,
-  LuRefreshCw,
   LuImage,
   LuGlobe,
   LuCheck,
@@ -23,23 +22,9 @@ import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
-import type { PostType, RegeneratePostBody } from "@/types/Post";
+import type { PostType } from "@/types/Post";
 import EditPostModal from "./EditPostModal";
 import RejectConfirmModal from "./RejectConfirmModal";
-import RegeneratePostConfirmModal, {
-  type RegeneratePostOptions,
-} from "./RegeneratePostConfirmModal";
-
-function parseHashtags(raw: unknown): string[] {
-  if (!raw) return [];
-  const items: string[] = Array.isArray(raw)
-    ? raw.map(String)
-    : String(raw)
-        .split(/[\s,]+/)
-        .map((t) => t.trim())
-        .filter(Boolean);
-  return items.filter((t) => t.length > 0).map((t) => (t.startsWith("#") ? t : `#${t}`));
-}
 
 function ImagePromptDropdown({
   prompt,
@@ -230,9 +215,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [imagePrompts, setImagePrompts] = useState<Record<string, string>>({});
-  const [regenerateTarget, setRegenerateTarget] = useState<PostType | null>(null);
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
-  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   const { data: textGeneratingFlag } = useQuery<number | null>({
     queryKey: ["posts-text-generating"],
@@ -320,23 +303,6 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
       onError: (error: unknown) => {
         toast.error(extractErrorMessage(error));
         setRejectingId(null);
-      },
-    }
-  );
-
-  const regeneratePostMutation = useMutationWithTokenRefresh(
-    ({ id, opts }: { id: string; opts: RegeneratePostBody }) =>
-      postsService(workspaceId).regeneratePost(id, opts),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId], exact: false });
-        toast.success("Post regenerated!");
-        setRegeneratingId(null);
-        setRegenerateTarget(null);
-      },
-      onError: (error: unknown) => {
-        toast.error(extractErrorMessage(error) || "Failed to regenerate post.");
-        setRegeneratingId(null);
       },
     }
   );
@@ -493,7 +459,6 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
       {!isLoading && posts.length > 0 && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {posts.map((post) => {
-            const hashtags = parseHashtags(post.hashtags);
             const isApproving = approvingId === post.id;
 
             return (
@@ -547,16 +512,6 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                   />
                 ) : null}
 
-                {hashtags.length > 0 && (
-                  <div className="mb-4 flex flex-wrap gap-1.5">
-                    {hashtags.map((tag) => (
-                      <span key={tag} className="text-xs font-medium text-blue-600">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
                 {/* Suggested publish time */}
                 <div className="mb-3 flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
                   <LuCalendarClock className="h-3.5 w-3.5 shrink-0 text-gray-400" />
@@ -600,18 +555,6 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                       <LuPencil className="h-3.5 w-3.5" />
                       Edit
                     </button>
-                    <div className="relative">
-                      <button
-                        disabled
-                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-400 opacity-50 cursor-not-allowed"
-                      >
-                        <LuRefreshCw className="h-3.5 w-3.5" />
-                        Regenerate Post
-                      </button>
-                      <span className="absolute -top-2 -right-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
-                        Soon
-                      </span>
-                    </div>
                     <ImagePromptDropdown
                       prompt={imagePrompts[post.id] ?? ""}
                       onPromptChange={(val) =>
@@ -644,23 +587,6 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
           })}
         </div>
       )}
-
-      <RegeneratePostConfirmModal
-        key={regenerateTarget?.id ?? "no-regenerate"}
-        isOpen={regenerateTarget !== null}
-        onClose={() => {
-          if (!regeneratingId) setRegenerateTarget(null);
-        }}
-        isConfirming={regeneratingId === regenerateTarget?.id}
-        onConfirm={(opts: RegeneratePostOptions) => {
-          if (!regenerateTarget) return;
-          setRegeneratingId(regenerateTarget.id);
-          const body: RegeneratePostBody = {};
-          if (opts.makeLonger) body.mode = "extend";
-          if (opts.instruction.trim()) body.instruction = opts.instruction.trim();
-          regeneratePostMutation.mutate({ id: regenerateTarget.id, opts: body });
-        }}
-      />
 
       <EditPostModal
         key={editPost?.id ?? "no-post"}

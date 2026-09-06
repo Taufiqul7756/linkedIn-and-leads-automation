@@ -29,8 +29,6 @@ function plainTextToTiptap(text: string): object {
   return { type: "doc", content };
 }
 
-// Same strategy as EditDraftModal: prefer body_blocks (Tiptap JSON) over plain text body.
-// PostType doesn't declare body_blocks but the API returns it after it's been saved.
 function getInitialContent(post: PostType): object {
   const p = post as PostType & { body_blocks?: unknown };
   const bb = p.body_blocks;
@@ -289,195 +287,197 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
           <div>
             <p className="mb-2.5 text-sm font-medium text-gray-700">Media</p>
 
-            {/* Tabs */}
-            <div className="mb-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setMediaTab("image")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  mediaTab === "image"
-                    ? "bg-blue-600 text-white"
-                    : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                <LuImage className="h-3.5 w-3.5" />
-                Image
-              </button>
-              <button
-                type="button"
-                onClick={() => setMediaTab("video")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  mediaTab === "video"
-                    ? "bg-blue-600 text-white"
-                    : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                <LuVideo className="h-3.5 w-3.5" />
-                Video
-              </button>
-            </div>
+            <>
+              {/* Tabs */}
+              <div className="mb-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("image")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    mediaTab === "image"
+                      ? "bg-blue-600 text-white"
+                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <LuImage className="h-3.5 w-3.5" />
+                  Image
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("video")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    mediaTab === "video"
+                      ? "bg-blue-600 text-white"
+                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  <LuVideo className="h-3.5 w-3.5" />
+                  Video
+                </button>
+              </div>
 
-            {/* Image tab */}
-            {mediaTab === "image" && (
-              <>
-                {showExistingImage && (
-                  <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={post.image_url}
-                      alt="Post image"
-                      className="w-full object-cover"
-                      style={{ maxHeight: 220 }}
-                    />
-                    <button
-                      onClick={() => setImageRemoved(true)}
-                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                    >
-                      <LuX className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {showNewImagePreview && (
-                  <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={newImagePreview!}
-                      alt="New post image"
-                      className="w-full object-cover"
-                      style={{ maxHeight: 220 }}
-                    />
-                    {isUploading ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                        <LuLoader className="h-6 w-6 animate-spin text-white" />
-                      </div>
-                    ) : (
+              {/* Image tab */}
+              {mediaTab === "image" && (
+                <>
+                  {showExistingImage && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={post.image_url}
+                        alt="Post image"
+                        className="w-full object-cover"
+                        style={{ maxHeight: 220 }}
+                      />
                       <button
-                        onClick={() => {
-                          setNewImagePreview(null);
-                          if (fileInputRef.current) fileInputRef.current.value = "";
-                        }}
+                        onClick={() => setImageRemoved(true)}
                         className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
                       >
                         <LuX className="h-3.5 w-3.5" />
                       </button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                {showImageUpload && (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
-                  >
-                    <LuUpload className="h-5 w-5" />
-                    <span className="text-sm font-medium">Click to upload an image</span>
-                    <span className="text-xs">PNG, JPG, WEBP</span>
-                  </button>
-                )}
+                  {showNewImagePreview && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={newImagePreview!}
+                        alt="New post image"
+                        className="w-full object-cover"
+                        style={{ maxHeight: 220 }}
+                      />
+                      {isUploading ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <LuLoader className="h-6 w-6 animate-spin text-white" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setNewImagePreview(null);
+                            if (fileInputRef.current) fileInputRef.current.value = "";
+                          }}
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                        >
+                          <LuX className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-
-                {imageRemoved && !newImagePreview && post.image_url && (
-                  <p className="mt-1.5 text-xs text-gray-400">
-                    Original image removed.{" "}
+                  {showImageUpload && (
                     <button
-                      onClick={() => setImageRemoved(false)}
-                      className="font-medium text-blue-600 hover:underline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
                     >
-                      Undo
+                      <LuUpload className="h-5 w-5" />
+                      <span className="text-sm font-medium">Click to upload an image</span>
+                      <span className="text-xs">PNG, JPG, WEBP</span>
                     </button>
-                  </p>
-                )}
-              </>
-            )}
+                  )}
 
-            {/* Video tab */}
-            {mediaTab === "video" && (
-              <>
-                {showExistingVideo && (
-                  <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                    <video
-                      src={post.video_url}
-                      controls
-                      className="w-full"
-                      style={{ maxHeight: 220 }}
-                    />
-                    <button
-                      onClick={() => setVideoRemoved(true)}
-                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                    >
-                      <LuX className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
 
-                {showNewVideoPreview && (
-                  <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                    <video
-                      src={newVideoPreview!}
-                      controls
-                      className="w-full"
-                      style={{ maxHeight: 220 }}
-                    />
-                    {isUploading ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                        <LuLoader className="h-6 w-6 animate-spin text-white" />
-                      </div>
-                    ) : (
+                  {imageRemoved && !newImagePreview && post.image_url && (
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      Original image removed.{" "}
                       <button
-                        onClick={() => {
-                          setNewVideoPreview(null);
-                          if (videoInputRef.current) videoInputRef.current.value = "";
-                        }}
+                        onClick={() => setImageRemoved(false)}
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        Undo
+                      </button>
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* Video tab */}
+              {mediaTab === "video" && (
+                <>
+                  {showExistingVideo && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      <video
+                        src={post.video_url}
+                        controls
+                        className="w-full"
+                        style={{ maxHeight: 220 }}
+                      />
+                      <button
+                        onClick={() => setVideoRemoved(true)}
                         className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
                       >
                         <LuX className="h-3.5 w-3.5" />
                       </button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                {showVideoUpload && (
-                  <button
-                    onClick={() => videoInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
-                  >
-                    <LuUpload className="h-5 w-5" />
-                    <span className="text-sm font-medium">Click to upload a video</span>
-                    <span className="text-xs">MP4, MOV, M4V, WEBM · up to 500 MB</span>
-                  </button>
-                )}
+                  {showNewVideoPreview && (
+                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
+                      <video
+                        src={newVideoPreview!}
+                        controls
+                        className="w-full"
+                        style={{ maxHeight: 220 }}
+                      />
+                      {isUploading ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <LuLoader className="h-6 w-6 animate-spin text-white" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setNewVideoPreview(null);
+                            if (videoInputRef.current) videoInputRef.current.value = "";
+                          }}
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                        >
+                          <LuX className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
-                  className="hidden"
-                  onChange={handleVideoChange}
-                />
-
-                {videoRemoved && !newVideoPreview && post.video_url && (
-                  <p className="mt-1.5 text-xs text-gray-400">
-                    Original video removed.{" "}
+                  {showVideoUpload && (
                     <button
-                      onClick={() => setVideoRemoved(false)}
-                      className="font-medium text-blue-600 hover:underline"
+                      onClick={() => videoInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
                     >
-                      Undo
+                      <LuUpload className="h-5 w-5" />
+                      <span className="text-sm font-medium">Click to upload a video</span>
+                      <span className="text-xs">MP4, MOV, M4V, WEBM · up to 500 MB</span>
                     </button>
-                  </p>
-                )}
-              </>
-            )}
+                  )}
+
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
+                    className="hidden"
+                    onChange={handleVideoChange}
+                  />
+
+                  {videoRemoved && !newVideoPreview && post.video_url && (
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      Original video removed.{" "}
+                      <button
+                        onClick={() => setVideoRemoved(false)}
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        Undo
+                      </button>
+                    </p>
+                  )}
+                </>
+              )}
+            </>
           </div>
 
           {/* Scheduled time */}

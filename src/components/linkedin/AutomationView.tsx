@@ -29,6 +29,7 @@ import { postsService } from "@/service/postsService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import Modal from "@/components/ui/Modal";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
@@ -894,6 +895,13 @@ export default function AutomationView() {
   const [restoringConv, setRestoringConv] = useState(true);
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
+  const [deleteConvConfirm, setDeleteConvConfirm] = useState<{
+    id: string;
+    checking: boolean;
+    scheduledCount: number;
+    publishedCount: number;
+  } | null>(null);
+  const [deletingConv, setDeletingConv] = useState(false);
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [placeholderVisible, setPlaceholderVisible] = useState(true);
   const [isFocused, setIsFocused] = useState(false);
@@ -1041,8 +1049,8 @@ export default function AutomationView() {
       if (conv.status === "running") return; // keep polling
       if (conv.attachments?.some((a) => a.status === "pending")) return; // keep polling for attachments
       stopPolling();
+      refreshHistory();
       if (conv.status === "completed") {
-        refreshHistory();
         if (conv.artifacts.post_ids.length > 0) {
           fetchPosts(conv.artifacts.post_ids);
         }
@@ -1197,6 +1205,7 @@ export default function AutomationView() {
         convId = newConv.id;
         setConversation(newConv);
         setPosts([]);
+        refreshHistory();
       }
 
       await svc().sendMessage(convId!, text);
@@ -1252,6 +1261,7 @@ export default function AutomationView() {
     const newConv = await svc().createConversation();
     setConversation(newConv);
     setPosts([]);
+    refreshHistory();
     return newConv.id;
   };
 
@@ -1387,16 +1397,42 @@ export default function AutomationView() {
     }
   };
 
-  // ── delete conversation ──
+  // ── delete conversation — open confirmation modal ──
+  const handleDeleteConversationClick = async (id: string) => {
+    setDeleteConvConfirm({ id, checking: true, scheduledCount: 0, publishedCount: 0 });
+    try {
+      const conv = await svc().getConversation(id);
+      const postIds = conv.artifacts?.post_ids ?? [];
+      if (postIds.length > 0) {
+        const results = await Promise.all(
+          postIds.map((pid) => postsService(workspaceId!).getPost(pid))
+        );
+        const posts = results.filter((p): p is NonNullable<typeof p> => !!p);
+        const scheduledCount = posts.filter((p) => p.status === "scheduled").length;
+        const publishedCount = posts.filter((p) => p.status === "published").length;
+        setDeleteConvConfirm({ id, checking: false, scheduledCount, publishedCount });
+      } else {
+        setDeleteConvConfirm({ id, checking: false, scheduledCount: 0, publishedCount: 0 });
+      }
+    } catch {
+      setDeleteConvConfirm({ id, checking: false, scheduledCount: 0, publishedCount: 0 });
+    }
+  };
+
+  // ── delete conversation — confirmed ──
   const handleDeleteConversation = async (id: string) => {
+    setDeletingConv(true);
     try {
       await svc().deleteConversation(id);
       setHistory((prev) =>
         prev ? { ...prev, results: prev.results.filter((c) => c.id !== id) } : prev
       );
       if (conversation?.id === id) handleNewChat();
+      setDeleteConvConfirm(null);
     } catch {
       toast.error("Failed to delete conversation");
+    } finally {
+      setDeletingConv(false);
     }
   };
 
@@ -1424,12 +1460,13 @@ export default function AutomationView() {
   const isTerminal = conversation?.status === "cancelled" || conversation?.status === "archived";
   const hasPendingAttachments =
     conversation?.attachments?.some((a) => a.status === "pending") ?? false;
+  const isDraft = conversation?.status === "draft";
   const canSend =
     !sending &&
     !isRunning &&
     !isAwaiting &&
     !hasPendingAttachments &&
-    (!conversation || isCompleted || isFailed || isTerminal || !conversation);
+    (!conversation || isDraft || isCompleted || isFailed || isTerminal);
   const showCancel = isRunning || isAwaiting;
 
   const pendingInterrupt =
@@ -2177,7 +2214,7 @@ export default function AutomationView() {
                             onClick={() => handleLoadConversation(item.id)}
                             onDelete={(e) => {
                               e.stopPropagation();
-                              handleDeleteConversation(item.id);
+                              handleDeleteConversationClick(item.id);
                             }}
                           />
                         ))}
@@ -2191,6 +2228,65 @@ export default function AutomationView() {
           </div>
         </div>
       </div>
+
+      {/* Delete conversation confirmation modal */}
+      <Modal
+        isOpen={!!deleteConvConfirm}
+        onClose={() => !deletingConv && setDeleteConvConfirm(null)}
+        title="Delete conversation"
+        width="sm"
+        disableBackdropClose={deletingConv}
+      >
+        {deleteConvConfirm?.checking ? (
+          <div className="flex items-center justify-center py-6">
+            <LuLoader className="h-5 w-5 animate-spin text-gray-400" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Are you sure you want to delete this conversation? This action cannot be undone.
+            </p>
+
+            {(deleteConvConfirm?.scheduledCount ?? 0) > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <span className="font-semibold">
+                  {deleteConvConfirm!.scheduledCount} scheduled{" "}
+                  {deleteConvConfirm!.scheduledCount === 1 ? "post" : "posts"}
+                </span>{" "}
+                associated with this conversation will also be deleted.
+              </div>
+            )}
+
+            {(deleteConvConfirm?.publishedCount ?? 0) > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <span className="font-semibold">
+                  {deleteConvConfirm!.publishedCount} published{" "}
+                  {deleteConvConfirm!.publishedCount === 1 ? "post" : "posts"}
+                </span>{" "}
+                associated with this conversation will be removed from the post management table.
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setDeleteConvConfirm(null)}
+                disabled={deletingConv}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteConversation(deleteConvConfirm!.id)}
+                disabled={deletingConv}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingConv && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <KnowledgeBaseModal isOpen={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
 
