@@ -251,47 +251,52 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
           </div>
 
           {/* Mini composer — ask for changes (disabled, coming soon) */}
-          <div className="rounded-xl border border-gray-200 px-4 py-3 opacity-50 pointer-events-none select-none">
-            <textarea
-              value={changeMsg}
-              onChange={(e) => setChangeMsg(e.target.value)}
-              placeholder={`Ask for changes, or "show all drafts"...`}
-              rows={2}
-              disabled
-              className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
-            />
-            <div className="mt-2 flex items-center justify-between">
-              {/* Knowledge chip */}
-              <span className="flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
-                Using your knowledge base
-                <button disabled className="text-teal-400">
-                  <LuX className="h-3 w-3" />
-                </button>
-              </span>
+          <div className="relative">
+            <div className="rounded-xl border border-gray-200 px-4 py-3 opacity-50 pointer-events-none select-none">
+              <textarea
+                value={changeMsg}
+                onChange={(e) => setChangeMsg(e.target.value)}
+                placeholder={`Ask for changes, or "show all drafts"...`}
+                rows={2}
+                disabled
+                className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
+              />
+              <div className="mt-2 flex items-center justify-between">
+                {/* Knowledge chip */}
+                <span className="flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
+                  Using your knowledge base
+                  <button disabled className="text-teal-400">
+                    <LuX className="h-3 w-3" />
+                  </button>
+                </span>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  disabled
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
-                >
-                  <LuPlus className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  disabled
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
-                >
-                  <LuSettings className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  disabled
-                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
-                >
-                  Send
-                  <LuSend className="h-3 w-3" />
-                </button>
+                {/* Action buttons */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    disabled
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
+                  >
+                    <LuPlus className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    disabled
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
+                  >
+                    <LuSettings className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    disabled
+                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
+                  >
+                    Send
+                    <LuSend className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
             </div>
+            <span className="absolute -top-2 -right-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
+              Soon
+            </span>
           </div>
 
           {/* Image */}
