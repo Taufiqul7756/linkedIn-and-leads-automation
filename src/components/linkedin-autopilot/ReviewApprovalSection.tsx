@@ -509,13 +509,18 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                       <LuPencil className="h-3.5 w-3.5" />
                       Edit
                     </button>
-                    <button
-                      onClick={() => setRegenerateTarget(post)}
-                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-                    >
-                      <LuRefreshCw className="h-3.5 w-3.5" />
-                      Regenerate Post
-                    </button>
+                    <div className="relative">
+                      <button
+                        disabled
+                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-400 opacity-50 cursor-not-allowed"
+                      >
+                        <LuRefreshCw className="h-3.5 w-3.5" />
+                        Regenerate Post
+                      </button>
+                      <span className="absolute -top-2 -right-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
+                        Soon
+                      </span>
+                    </div>
                     <ImagePromptDropdown
                       prompt={imagePrompts[post.id] ?? ""}
                       onPromptChange={(val) =>
