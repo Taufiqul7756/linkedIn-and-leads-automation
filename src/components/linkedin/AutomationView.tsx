@@ -1407,8 +1407,9 @@ export default function AutomationView() {
         const results = await Promise.all(
           postIds.map((pid) => postsService(workspaceId!).getPost(pid))
         );
-        const scheduledCount = results.filter((p) => p.status === "scheduled").length;
-        const publishedCount = results.filter((p) => p.status === "published").length;
+        const posts = results.filter((p): p is NonNullable<typeof p> => !!p);
+        const scheduledCount = posts.filter((p) => p.status === "scheduled").length;
+        const publishedCount = posts.filter((p) => p.status === "published").length;
         setDeleteConvConfirm({ id, checking: false, scheduledCount, publishedCount });
       } else {
         setDeleteConvConfirm({ id, checking: false, scheduledCount: 0, publishedCount: 0 });
