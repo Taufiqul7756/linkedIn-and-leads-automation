@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   LuPencil,
@@ -15,6 +15,7 @@ import {
   LuChevronRight,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
+import { cn } from "@/utils/cn";
 import Modal from "@/components/ui/Modal";
 import { postsService } from "@/service/postsService";
 import { linkedinService } from "@/service/linkedinService";
@@ -115,6 +116,96 @@ function ImagePromptDropdown({
       )}
     </div>
   );
+}
+
+// ─── Rich-text body rendering (mirrors AutomationView) ───────────────────────
+
+type TiptapInline = { type: string; text?: string; marks?: { type: string }[] };
+type TiptapBlockNode = { type: string; attrs?: Record<string, unknown>; content?: unknown[] };
+
+function renderTiptapNodes(nodes: unknown[]): React.ReactNode {
+  return (
+    <>
+      {(nodes as TiptapBlockNode[]).map((node, i) => {
+        const isFirst = i === 0;
+        if (node.type === "paragraph") {
+          const inlines = (node.content ?? []) as TiptapInline[];
+          return (
+            <p key={i} className={cn(!isFirst && "mt-2")}>
+              {inlines.map((inline, j) => {
+                const bold = inline.marks?.some((m) => m.type === "bold");
+                const italic = inline.marks?.some((m) => m.type === "italic");
+                const strike = inline.marks?.some((m) => m.type === "strike");
+                let el: React.ReactNode = inline.text;
+                if (strike) el = <s>{el}</s>;
+                if (italic) el = <em>{el}</em>;
+                if (bold) el = <strong>{el}</strong>;
+                return <span key={j}>{el}</span>;
+              })}
+            </p>
+          );
+        }
+        if (node.type === "bulletList" || node.type === "orderedList") {
+          const items = (node.content ?? []) as TiptapBlockNode[];
+          const Tag = node.type === "orderedList" ? "ol" : "ul";
+          return (
+            <Tag
+              key={i}
+              className={cn(
+                "space-y-0.5 pl-4",
+                !isFirst && "mt-2",
+                node.type === "orderedList" ? "list-decimal" : "list-disc"
+              )}
+            >
+              {items.map((item, j) => {
+                const para = ((item.content ?? []) as TiptapBlockNode[])[0];
+                const inlines = (para?.content ?? []) as TiptapInline[];
+                return (
+                  <li key={j}>
+                    {inlines.map((inline, k) => {
+                      const bold = inline.marks?.some((m) => m.type === "bold");
+                      const italic = inline.marks?.some((m) => m.type === "italic");
+                      let el: React.ReactNode = inline.text;
+                      if (italic) el = <em>{el}</em>;
+                      if (bold) el = <strong>{el}</strong>;
+                      return <span key={k}>{el}</span>;
+                    })}
+                  </li>
+                );
+              })}
+            </Tag>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+}
+
+function renderBodyBlocks(post: PostType): React.ReactNode {
+  const p = post as PostType & { body_blocks?: unknown };
+  const bb = p.body_blocks;
+
+  if (bb && typeof bb === "object" && !Array.isArray(bb)) {
+    const doc = bb as { type?: string; content?: unknown[] };
+    if (doc.type === "doc" && Array.isArray(doc.content) && doc.content.length > 0) {
+      return renderTiptapNodes(doc.content);
+    }
+  }
+
+  if (typeof bb === "string" && bb) {
+    try {
+      const parsed = JSON.parse(bb);
+      if (parsed?.type === "doc" && Array.isArray(parsed.content) && parsed.content.length > 0) {
+        return renderTiptapNodes(parsed.content);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Fallback: plain text
+  return <span className="whitespace-pre-line">{post.body}</span>;
 }
 
 function getInitials(name: string) {
@@ -428,8 +519,8 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                   </span>
                 </div>
 
-                <div className="mb-3 flex-1 whitespace-pre-line text-sm leading-relaxed text-gray-700">
-                  {post.body}
+                <div className="mb-3 flex-1 text-sm leading-relaxed text-gray-700">
+                  {renderBodyBlocks(post)}
                 </div>
 
                 {post.image_status === "pending" ? (
