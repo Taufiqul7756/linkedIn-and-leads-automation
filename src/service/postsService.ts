@@ -15,10 +15,18 @@ export const postsService = (workspaceId: string) => ({
     get<PostStatsType>(
       `/workspaces/${workspaceId}/content/posts/stats/${state ? `?state=${state}` : ""}`
     ),
-  getDraftPosts: (state?: "agent" | "manual", page?: number, pageSize = 10) =>
-    get<PaginatedPosts>(
-      `/workspaces/${workspaceId}/content/posts/?status=draft${state ? `&state=${state}` : ""}${page && page > 1 ? `&page=${page}` : ""}&page_size=${pageSize}`
-    ),
+  getDraftPosts: (
+    state?: "agent" | "manual",
+    page?: number,
+    pageSize = 10,
+    conversation?: string
+  ) => {
+    const q = new URLSearchParams({ status: "draft", page_size: String(pageSize) });
+    if (state) q.set("state", state);
+    if (page && page > 1) q.set("page", String(page));
+    if (conversation) q.set("conversation", conversation);
+    return get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?${q.toString()}`);
+  },
   getAllPosts: (status?: string, page?: number, pageSize = 10, state?: "agent" | "manual") => {
     const q = new URLSearchParams();
     if (status && status !== "all") {

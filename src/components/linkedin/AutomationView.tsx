@@ -1429,6 +1429,9 @@ export default function AutomationView() {
       );
       if (conversation?.id === id) handleNewChat();
       setDeleteConvConfirm(null);
+      queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
     } catch {
       toast.error("Failed to delete conversation");
     } finally {

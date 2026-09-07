@@ -12,12 +12,16 @@ import {
   LuCalendarClock,
   LuChevronLeft,
   LuChevronRight,
+  LuChevronDown,
+  LuMessageSquare,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
 import Modal from "@/components/ui/Modal";
 import { postsService } from "@/service/postsService";
 import { linkedinService } from "@/service/linkedinService";
+import { linkedinAgentService } from "@/service/linkedinAgentService";
+import type { ConversationListItem } from "@/types/LinkedInAgent";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -210,6 +214,9 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
   const workspaceId = activeWorkspace?.id ?? "";
 
   const [page, setPage] = useState(1);
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [convDropdownOpen, setConvDropdownOpen] = useState(false);
+  const convDropdownRef = useRef<HTMLDivElement>(null);
   const [editPost, setEditPost] = useState<PostType | null>(null);
   const [rejectPost, setRejectPost] = useState<PostType | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -234,9 +241,27 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
   const isPolling = baseline !== null && baseline !== undefined;
   const baselineCount = typeof baseline === "number" ? baseline : 0;
 
+  const { data: conversationsData } = useQueryWithTokenRefresh(
+    ["agent-conversations-filter", workspaceId],
+    () => linkedinAgentService(workspaceId).getConversations(1, 50),
+    { enabled: !!workspaceId }
+  );
+  const conversations: ConversationListItem[] = conversationsData?.results ?? [];
+
+  useEffect(() => {
+    if (!convDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (convDropdownRef.current && !convDropdownRef.current.contains(e.target as Node))
+        setConvDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [convDropdownOpen]);
+
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
-    ["posts", "draft", workspaceId, mode, page],
-    () => postsService(workspaceId).getDraftPosts(mode, page, PAGE_SIZE),
+    ["posts", "draft", workspaceId, mode, page, selectedConvId],
+    () =>
+      postsService(workspaceId).getDraftPosts(mode, page, PAGE_SIZE, selectedConvId ?? undefined),
     {
       enabled: !!workspaceId,
       refetchInterval: isPolling
@@ -365,7 +390,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
     try {
       await postsService(workspaceId).patchPost(postId, { suggested_publish_at: newIso });
       queryClient.setQueryData(
-        ["posts", "draft", workspaceId, mode, page],
+        ["posts", "draft", workspaceId, mode, page, selectedConvId],
         (
           old:
             | { count: number; next: string | null; previous: string | null; results: PostType[] }
@@ -389,6 +414,12 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
     }
   };
 
+  const handleSelectConv = (id: string | null) => {
+    setSelectedConvId(id);
+    setPage(1);
+    setConvDropdownOpen(false);
+  };
+
   const handleApprove = (id: string) => {
     setApprovingId(id);
     approveMutation.mutate(id);
@@ -409,6 +440,64 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
             <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
               {totalCount} awaiting
             </span>
+          )}
+          {conversations.length > 0 && (
+            <div ref={convDropdownRef} className="relative">
+              <div className="flex items-center">
+                <button
+                  onClick={() => setConvDropdownOpen((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+                    selectedConvId
+                      ? "rounded-r-none border-r-0 border-violet-300 bg-violet-50 text-violet-700"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  )}
+                >
+                  <LuMessageSquare className="h-3 w-3" />
+                  {selectedConvId
+                    ? conversations.find((c) => c.id === selectedConvId)?.title || "Untitled"
+                    : "All conversations"}
+                  {!selectedConvId && <LuChevronDown className="h-3 w-3" />}
+                </button>
+                {selectedConvId && (
+                  <button
+                    onClick={() => handleSelectConv(null)}
+                    className="flex self-stretch items-center rounded-r-lg border border-violet-300 bg-violet-50 px-1.5 text-violet-400 transition-colors hover:bg-violet-100 hover:text-violet-700"
+                    title="Clear filter"
+                  >
+                    <LuX className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              {convDropdownOpen && (
+                <div className="absolute left-0 top-full z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                  <button
+                    onClick={() => handleSelectConv(null)}
+                    className={cn(
+                      "w-full px-3 py-2 text-left text-xs transition-colors hover:bg-gray-50",
+                      !selectedConvId ? "font-semibold text-violet-700" : "text-gray-700"
+                    )}
+                  >
+                    All conversations
+                  </button>
+                  <div className="my-1 border-t border-gray-100" />
+                  {conversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => handleSelectConv(conv.id)}
+                      className={cn(
+                        "w-full truncate px-3 py-2 text-left text-xs transition-colors hover:bg-gray-50",
+                        selectedConvId === conv.id
+                          ? "font-semibold text-violet-700"
+                          : "text-gray-700"
+                      )}
+                    >
+                      {conv.title || "Untitled conversation"}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
         {totalCount > PAGE_SIZE && (
