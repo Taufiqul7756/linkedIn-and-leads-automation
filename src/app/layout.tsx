@@ -1,23 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import Navbar from "@/components/layout/Navbar";
 import Sidebar from "@/components/layout/Sidebar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "AI Agent Demo",
+  title: "Creative Genie",
   description: "Next.js 16 App Router starter",
+  icons: {
+    icon: "/cg-fav.svg",
+    shortcut: "/cg-fav.svg",
+  },
 };
 
 export default function RootLayout({
@@ -26,12 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      suppressHydrationWarning
-    >
-      <body className="h-screen overflow-hidden bg-[#E9ECF5]">
+    <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="h-screen overflow-hidden bg-page-bg">
         <Providers>
           <div className="flex h-full w-full gap-[10px]">
             <Sidebar />

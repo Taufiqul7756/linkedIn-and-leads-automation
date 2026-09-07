@@ -2,7 +2,15 @@
 
 import { useRef, useState } from "react";
 import { FaLinkedinIn } from "react-icons/fa";
-import { LuChevronDown, LuLoader, LuRefreshCw, LuTrash2, LuUpload } from "react-icons/lu";
+import {
+  LuChevronDown,
+  LuLoader,
+  LuRefreshCw,
+  LuTrash2,
+  LuUpload,
+  LuUser,
+  LuCheck,
+} from "react-icons/lu";
 import toast from "react-hot-toast";
 import Modal from "@/components/ui/Modal";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -11,7 +19,7 @@ import { agentService } from "@/service/agentService";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
-import type { ProfileDocument, ProfileWebsite } from "@/types/Agent";
+import type { LinkedInProfile, ProfileDocument, ProfileWebsite } from "@/types/Agent";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -192,13 +200,14 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
   const [docPurpose, setDocPurpose] = useState<DisplayPurpose>("knowledge");
   const [addingUrl, setAddingUrl] = useState(false);
   const [addingProfile, setAddingProfile] = useState(false);
+  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
   const [deletingSiteId, setDeletingSiteId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<{
     id: string;
     name: string;
-    kind: "site" | "doc";
+    kind: "site" | "doc" | "profile";
   } | null>(null);
   const [recrawlingId, setRecrawlingId] = useState<string | null>(null);
 
@@ -230,10 +239,25 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
     }
   );
 
+  const { data: profilesData, isLoading: profilesLoading } = useQueryWithTokenRefresh(
+    ["linkedin-profiles", workspaceId],
+    () => agentService(workspaceId).getProfiles(),
+    {
+      enabled: !!workspaceId && isOpen,
+      refetchInterval: (query) => {
+        const items =
+          (query.state.data as { results?: LinkedInProfile[] } | undefined)?.results ?? [];
+        return items.some((p) => !isTerminal(p.status)) ? 3000 : false;
+      },
+    }
+  );
+
   const docs: ProfileDocument[] =
     (docsData as { results?: ProfileDocument[] } | undefined)?.results ?? [];
   const sites: ProfileWebsite[] =
     (sitesData as { results?: ProfileWebsite[] } | undefined)?.results ?? [];
+  const profiles: LinkedInProfile[] =
+    (profilesData as { results?: LinkedInProfile[] } | undefined)?.results ?? [];
 
   const knowledgeSites = sites.filter((s) => !isTone(s.purpose));
   const knowledgeDocs = docs.filter((d) => !isTone(d.purpose));
@@ -241,7 +265,22 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
   const toneDocs = docs.filter((d) => isTone(d.purpose));
   const knowledgeCount = knowledgeSites.length + knowledgeDocs.length;
   const toneCount = toneSites.length + toneDocs.length;
-  const totalCount = docs.length + sites.length;
+  const totalCount = docs.length + sites.length + profiles.length;
+
+  const deleteProfileMutation = useMutationWithTokenRefresh(
+    (id: string) => agentService(workspaceId).deleteProfile(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["linkedin-profiles", workspaceId] });
+        toast.success("Profile removed.");
+        setDeletingProfileId(null);
+      },
+      onError: (err: unknown) => {
+        toast.error(extractErrorMessage(err));
+        setDeletingProfileId(null);
+      },
+    }
+  );
 
   const deleteDocMutation = useMutationWithTokenRefresh(
     (id: string) => agentService(workspaceId).deleteAgentDocument(id),
@@ -294,8 +333,8 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
     if (!url || !workspaceId) return;
     setAddingProfile(true);
     try {
-      await agentService(workspaceId).addAgentWebsite(url, "knowledge", false);
-      queryClient.invalidateQueries({ queryKey: ["agent-websites", workspaceId] });
+      await agentService(workspaceId).createProfile(url);
+      queryClient.invalidateQueries({ queryKey: ["linkedin-profiles", workspaceId] });
       setProfileInput("");
       toast.success("LinkedIn profile added.");
     } catch (err) {
@@ -334,14 +373,17 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
     }
   };
 
-  const handleRequestDelete = (id: string, name: string, kind: "site" | "doc") =>
+  const handleRequestDelete = (id: string, name: string, kind: "site" | "doc" | "profile") =>
     setConfirmTarget({ id, name, kind });
 
   const handleCancelDelete = () => setConfirmTarget(null);
 
   const handleConfirmDelete = () => {
     if (!confirmTarget) return;
-    if (confirmTarget.kind === "site") {
+    if (confirmTarget.kind === "profile") {
+      setDeletingProfileId(confirmTarget.id);
+      deleteProfileMutation.mutate(confirmTarget.id);
+    } else if (confirmTarget.kind === "site") {
       setDeletingSiteId(confirmTarget.id);
       deleteSiteMutation.mutate(confirmTarget.id);
     } else {
@@ -351,7 +393,7 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
     setConfirmTarget(null);
   };
 
-  const isLoading = docsLoading || sitesLoading;
+  const isLoading = docsLoading || sitesLoading || profilesLoading;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Knowledge base" width="2xl">
@@ -390,19 +432,22 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
         </button>
       </div>
 
-      {/* LinkedIn profile row */}
+      {/* LinkedIn profile row — disabled if a profile already exists */}
       <div className="mb-3 flex items-center gap-2">
         <input
           type="text"
-          placeholder="linkedin.com/in/username"
+          placeholder={
+            profiles.length > 0 ? "Remove existing profile first" : "linkedin.com/in/username"
+          }
           value={profileInput}
           onChange={(e) => setProfileInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAddProfile()}
-          className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3.5 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+          disabled={profiles.length > 0}
+          className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3.5 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
         />
         <button
           onClick={handleAddProfile}
-          disabled={!profileInput.trim() || addingProfile}
+          disabled={!profileInput.trim() || addingProfile || profiles.length > 0}
           className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
           {addingProfile ? (
@@ -461,6 +506,57 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
         </p>
       ) : (
         <div className="space-y-5">
+          {/* LinkedIn Profiles — always at top */}
+          {profiles.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                LinkedIn Profile · {profiles.length}
+              </p>
+              <div className="rounded-xl border border-gray-100 px-4">
+                {profiles.map((p) => {
+                  const username =
+                    p.profile_url.match(/linkedin\.com\/in\/([^/?#]+)/)?.[1] ?? p.profile_url;
+                  const summary = (p.facets as { summary?: string } | null)?.summary ?? null;
+                  const isDeleting = deletingProfileId === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-3 border-b border-gray-100 py-3 last:border-0"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                        <LuUser className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-900">{username}</p>
+                        <p className="truncate text-xs text-blue-500">{p.profile_url}</p>
+                        {summary && (
+                          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{summary}</p>
+                        )}
+                      </div>
+                      <StatusBadge status={p.status} />
+                      {p.status === "ready" ? (
+                        <LuCheck className="h-4 w-4 shrink-0 text-green-500" strokeWidth={2.5} />
+                      ) : p.status === "pending" || p.status === "fetching" ? (
+                        <LuLoader className="h-4 w-4 shrink-0 animate-spin text-amber-400" />
+                      ) : null}
+                      <button
+                        onClick={() => handleRequestDelete(p.id, username, "profile")}
+                        disabled={isDeleting}
+                        className="shrink-0 text-gray-300 transition-colors hover:text-red-400 disabled:opacity-50"
+                      >
+                        {isDeleting ? (
+                          <LuLoader className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <LuTrash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {knowledgeCount > 0 && (
             <div>
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">

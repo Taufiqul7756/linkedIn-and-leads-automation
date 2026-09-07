@@ -9,8 +9,6 @@ import {
   LuTrash2,
   LuListFilter,
   LuCheck,
-  LuChevronLeft,
-  LuChevronRight,
   LuList,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
@@ -28,6 +26,7 @@ import ViewPostModal from "./ViewPostModal";
 import RejectConfirmModal from "./RejectConfirmModal";
 import PlansHistoryModal from "./PlansHistoryModal";
 import PlanDetailModal from "./PlanDetailModal";
+import Pagination from "@/components/ui/Pagination";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDate(iso: string | null | undefined): string {
@@ -99,6 +98,9 @@ function EngagementCell({
   status: StatusKey;
   engagement: PostEngagement | null;
 }) {
+  if (status === "published" && !engagement) {
+    return <span className="text-xs text-gray-400">Coming soon</span>;
+  }
   if (status === "published" && engagement) {
     return (
       <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -403,17 +405,6 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
               Plans
             </button>
           )}
-          <select
-            value={pageSize}
-            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-            className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-600 focus:border-blue-500 focus:outline-none"
-          >
-            {PAGE_SIZE_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s} / page
-              </option>
-            ))}
-          </select>
           <FilterDropdown active={activeFilter} onChange={handleFilterChange} />
         </div>
       </div>
@@ -613,32 +604,18 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
             </tbody>
           </table>
         </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3">
-          <p className="text-xs text-gray-400">
-            {totalCount > 0 ? `Page ${page} · ${totalCount} total` : "No posts"}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => p - 1)}
-              disabled={!hasPrev}
-              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-40"
-            >
-              <LuChevronLeft className="h-4 w-4" />
-              Previous
-            </button>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={!hasNext}
-              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-40"
-            >
-              Next
-              <LuChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        hasPrev={hasPrev}
+        hasNext={hasNext}
+        onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
+      />
 
       <RejectConfirmModal
         isOpen={deleteTarget !== null}

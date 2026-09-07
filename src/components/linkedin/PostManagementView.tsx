@@ -85,7 +85,7 @@ function PostManagementContent() {
 
 export default function PostManagementView() {
   return (
-    <div className="flex-1 bg-[#E9ECF5] px-4 py-4">
+    <div className="flex-1 px-4 py-4">
       <Suspense fallback={null}>
         <PostManagementContent />
       </Suspense>

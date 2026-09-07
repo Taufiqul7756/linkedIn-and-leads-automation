@@ -3,21 +3,20 @@ import React, { useState, useEffect, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   LuPencil,
-  LuImage,
-  LuGlobe,
   LuCheck,
   LuLoader,
-  LuSparkles,
   LuX,
   LuCalendarClock,
-  LuChevronLeft,
-  LuChevronRight,
+  LuChevronDown,
+  LuMessageSquare,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
 import Modal from "@/components/ui/Modal";
 import { postsService } from "@/service/postsService";
 import { linkedinService } from "@/service/linkedinService";
+import { linkedinAgentService } from "@/service/linkedinAgentService";
+import type { ConversationListItem } from "@/types/LinkedInAgent";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -25,83 +24,7 @@ import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import type { PostType } from "@/types/Post";
 import EditPostModal from "./EditPostModal";
 import RejectConfirmModal from "./RejectConfirmModal";
-
-function ImagePromptDropdown({
-  prompt,
-  onPromptChange,
-  onGenerate,
-  isGenerating,
-}: {
-  prompt: string;
-  onPromptChange: (val: string) => void;
-  onGenerate: () => void;
-  isGenerating: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const wasGenerating = useRef(false);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  useEffect(() => {
-    if (wasGenerating.current && !isGenerating) setOpen(false);
-    wasGenerating.current = isGenerating;
-  }, [isGenerating]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-      >
-        <LuImage className="h-3.5 w-3.5" />
-        Regenerate Image
-      </button>
-
-      {open && (
-        <div className="absolute left-1/2 top-full z-30 mt-1.5 w-96 -translate-x-1/2 rounded-xl border border-blue-100 bg-blue-50 p-3.5 shadow-lg">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-blue-700">Image prompt</span>
-            <button
-              onClick={() => setOpen(false)}
-              className="text-blue-300 transition-colors hover:text-blue-500"
-            >
-              <LuX className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <textarea
-            rows={3}
-            value={prompt}
-            onChange={(e) => onPromptChange(e.target.value)}
-            placeholder="Describe the image you want to generate…"
-            className="w-full resize-none rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-          />
-          <div className="mt-2 flex justify-center">
-            <button
-              onClick={onGenerate}
-              disabled={!prompt.trim() || isGenerating}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isGenerating ? (
-                <LuLoader className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <LuSparkles className="h-3.5 w-3.5" />
-              )}
-              {isGenerating ? "Generating…" : "Generate Image"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import Pagination from "@/components/ui/Pagination";
 
 // ─── Rich-text body rendering (mirrors AutomationView) ───────────────────────
 
@@ -202,7 +125,7 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [4, 8, 12, 16, 20];
 
 export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manual" }) {
   const queryClient = useQueryClient();
@@ -210,12 +133,14 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
   const workspaceId = activeWorkspace?.id ?? "";
 
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(8);
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [convDropdownOpen, setConvDropdownOpen] = useState(false);
+  const convDropdownRef = useRef<HTMLDivElement>(null);
   const [editPost, setEditPost] = useState<PostType | null>(null);
   const [rejectPost, setRejectPost] = useState<PostType | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [imagePrompts, setImagePrompts] = useState<Record<string, string>>({});
-  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
 
   const { data: textGeneratingFlag } = useQuery<number | null>({
     queryKey: ["posts-text-generating"],
@@ -234,9 +159,27 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
   const isPolling = baseline !== null && baseline !== undefined;
   const baselineCount = typeof baseline === "number" ? baseline : 0;
 
+  const { data: conversationsData } = useQueryWithTokenRefresh(
+    ["agent-conversations-filter", workspaceId],
+    () => linkedinAgentService(workspaceId).getConversations(1, 50),
+    { enabled: !!workspaceId }
+  );
+  const conversations: ConversationListItem[] = conversationsData?.results ?? [];
+
+  useEffect(() => {
+    if (!convDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (convDropdownRef.current && !convDropdownRef.current.contains(e.target as Node))
+        setConvDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [convDropdownOpen]);
+
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
-    ["posts", "draft", workspaceId, mode, page],
-    () => postsService(workspaceId).getDraftPosts(mode, page, PAGE_SIZE),
+    ["posts", "draft", workspaceId, mode, page, pageSize, selectedConvId],
+    () =>
+      postsService(workspaceId).getDraftPosts(mode, page, pageSize, selectedConvId ?? undefined),
     {
       enabled: !!workspaceId,
       refetchInterval: isPolling
@@ -307,29 +250,6 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
     }
   );
 
-  const generateImageMutation = useMutationWithTokenRefresh(
-    ({ id, prompt }: { id: string; prompt: string }) =>
-      postsService(workspaceId).generateImage(id, prompt),
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId], exact: false });
-        toast.success("Image generated!");
-        setGeneratingImageId(null);
-      },
-      onError: (error: unknown) => {
-        toast.error(extractErrorMessage(error) || "Failed to generate image.");
-        setGeneratingImageId(null);
-      },
-    }
-  );
-
-  const handleGenerateImage = (postId: string) => {
-    const prompt = imagePrompts[postId]?.trim();
-    if (!prompt) return;
-    setGeneratingImageId(postId);
-    generateImageMutation.mutate({ id: postId, prompt });
-  };
-
   const [publishModalPost, setPublishModalPost] = useState<PostType | null>(null);
   const [publishDraft, setPublishDraft] = useState("");
   const [savingPublish, setSavingPublish] = useState(false);
@@ -365,7 +285,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
     try {
       await postsService(workspaceId).patchPost(postId, { suggested_publish_at: newIso });
       queryClient.setQueryData(
-        ["posts", "draft", workspaceId, mode, page],
+        ["posts", "draft", workspaceId, mode, page, pageSize, selectedConvId],
         (
           old:
             | { count: number; next: string | null; previous: string | null; results: PostType[] }
@@ -389,6 +309,12 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
     }
   };
 
+  const handleSelectConv = (id: string | null) => {
+    setSelectedConvId(id);
+    setPage(1);
+    setConvDropdownOpen(false);
+  };
+
   const handleApprove = (id: string) => {
     setApprovingId(id);
     approveMutation.mutate(id);
@@ -402,7 +328,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <h2 className="text-base font-semibold text-gray-900">Review &amp; Approval</h2>
           {!isLoading && totalCount > 0 && (
@@ -410,28 +336,65 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
               {totalCount} awaiting
             </span>
           )}
+          {conversations.length > 0 && (
+            <div ref={convDropdownRef} className="relative">
+              <div className="flex items-center">
+                <button
+                  onClick={() => setConvDropdownOpen((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+                    selectedConvId
+                      ? "rounded-r-none border-r-0 border-violet-300 bg-violet-50 text-violet-700"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  )}
+                >
+                  <LuMessageSquare className="h-3 w-3" />
+                  {selectedConvId
+                    ? conversations.find((c) => c.id === selectedConvId)?.title || "Untitled"
+                    : "All conversations"}
+                  {!selectedConvId && <LuChevronDown className="h-3 w-3" />}
+                </button>
+                {selectedConvId && (
+                  <button
+                    onClick={() => handleSelectConv(null)}
+                    className="flex self-stretch items-center rounded-r-lg border border-violet-300 bg-violet-50 px-1.5 text-violet-400 transition-colors hover:bg-violet-100 hover:text-violet-700"
+                    title="Clear filter"
+                  >
+                    <LuX className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              {convDropdownOpen && (
+                <div className="absolute left-0 top-full z-20 mt-1 max-h-64 w-64 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                  <button
+                    onClick={() => handleSelectConv(null)}
+                    className={cn(
+                      "w-full px-3 py-2 text-left text-xs transition-colors hover:bg-gray-50",
+                      !selectedConvId ? "font-semibold text-violet-700" : "text-gray-700"
+                    )}
+                  >
+                    All conversations
+                  </button>
+                  <div className="my-1 border-t border-gray-100" />
+                  {conversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => handleSelectConv(conv.id)}
+                      className={cn(
+                        "w-full truncate px-3 py-2 text-left text-xs transition-colors hover:bg-gray-50",
+                        selectedConvId === conv.id
+                          ? "font-semibold text-violet-700"
+                          : "text-gray-700"
+                      )}
+                    >
+                      {conv.title || "Untitled conversation"}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        {totalCount > PAGE_SIZE && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">
-              Page {page} of {Math.ceil(totalCount / PAGE_SIZE)}
-            </span>
-            <button
-              onClick={() => setPage((p) => p - 1)}
-              disabled={!hasPrev}
-              className="flex items-center rounded-lg border border-gray-200 p-1.5 text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
-            >
-              <LuChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={!hasNext}
-              className="flex items-center rounded-lg border border-gray-200 p-1.5 text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
-            >
-              <LuChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
       </div>
 
       {isLoading && (
@@ -457,136 +420,142 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
       )}
 
       {!isLoading && posts.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-8 lg:grid-cols-4">
           {posts.map((post) => {
             const isApproving = approvingId === post.id;
+            const isRejecting = rejectingId === post.id;
+            const hasImage = !!post.image_url;
 
             return (
-              <div
-                key={post.id}
-                className="flex flex-col rounded-xl border border-gray-200 bg-white p-5"
-              >
-                <div className="mb-3 flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700">
-                      {getInitials(accountName)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{accountName}</p>
-                      <div className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
-                        <span>Draft preview</span>
-                        <LuGlobe className="h-3 w-3" />
-                      </div>
-                    </div>
-                  </div>
-                  <span className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-600">
-                    Draft
-                  </span>
+              // Outer wrapper: overflow-visible so floating buttons protrude above top border
+              <div key={post.id} className="group relative h-80">
+                {/* Floating approve / reject buttons */}
+                <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
+                  <button
+                    onClick={() => handleApprove(post.id)}
+                    disabled={isApproving || isRejecting}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500 disabled:opacity-50"
+                    title="Approve"
+                  >
+                    {isApproving ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuCheck className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setRejectPost(post)}
+                    disabled={isApproving || isRejecting}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400 disabled:opacity-50"
+                    title="Delete"
+                  >
+                    {isRejecting ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuX className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                 </div>
 
-                <div className="mb-3 flex-1 text-sm leading-relaxed text-gray-700">
-                  {renderBodyBlocks(post)}
-                </div>
-
-                {post.image_status === "pending" ? (
-                  <div className="mb-3 flex h-40 w-full items-center justify-center rounded-lg border border-dashed border-blue-200 bg-blue-50">
-                    <div className="flex flex-col items-center gap-2">
-                      <LuLoader className="h-5 w-5 animate-spin text-blue-400" />
-                      <span className="text-xs text-blue-400">Generating image…</span>
-                    </div>
-                  </div>
-                ) : post.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={post.image_url}
-                    alt="Post image"
-                    className="mb-3 w-full rounded-lg object-cover"
-                    style={{ maxHeight: 220 }}
-                  />
-                ) : post.video_url ? (
-                  <video
-                    src={post.video_url}
-                    controls
-                    className="mb-3 w-full rounded-lg"
-                    style={{ maxHeight: 220 }}
-                  />
-                ) : null}
-
-                {/* Suggested publish time */}
-                <div className="mb-3 flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                  <LuCalendarClock className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                  {post.suggested_publish_at ? (
-                    <div className="flex flex-1 items-center justify-between gap-2">
-                      <div>
-                        <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                          Suggested
-                        </span>
-                        <span className="text-xs text-gray-700">
-                          {formatSuggested(post.suggested_publish_at)}
-                        </span>
+                {/* Card — overflow-hidden clips body text at card boundary */}
+                <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4">
+                  {/* Header: avatar + name + Draft badge */}
+                  <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[11px] font-bold text-violet-700">
+                        {getInitials(accountName)}
                       </div>
+                      <p className="truncate text-sm font-bold text-gray-900">{accountName}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                      Draft
+                    </span>
+                  </div>
+
+                  {/* Headline */}
+                  {post.headline && (
+                    <p className="mb-1.5 line-clamp-1 shrink-0 text-xs text-gray-500">
+                      {post.headline}
+                    </p>
+                  )}
+
+                  {/* Suggested time */}
+                  {post.suggested_publish_at && (
+                    <div className="mb-2 flex shrink-0 items-center gap-1.5 text-xs text-gray-500">
+                      <LuCalendarClock className="h-3.5 w-3.5 shrink-0" />
+                      <span className="font-medium">
+                        {formatSuggested(post.suggested_publish_at)}
+                      </span>
                       <button
                         onClick={() => openPublishModal(post)}
-                        className="shrink-0 text-gray-400 hover:text-blue-500"
+                        className="text-gray-400 transition-colors hover:text-blue-500"
                         title="Edit suggested time"
                       >
-                        <LuPencil className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-1 items-center justify-between gap-2">
-                      <span className="text-xs text-gray-400">No suggested publish time</span>
-                      <button
-                        onClick={() => openPublishModal(post)}
-                        className="text-xs font-medium text-blue-500 hover:text-blue-700"
-                      >
-                        Add
+                        <LuPencil className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   )}
-                </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => setEditPost(post)}
-                      className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-                    >
-                      <LuPencil className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                    <ImagePromptDropdown
-                      prompt={imagePrompts[post.id] ?? ""}
-                      onPromptChange={(val) =>
-                        setImagePrompts((prev) => ({ ...prev, [post.id]: val }))
-                      }
-                      onGenerate={() => handleGenerateImage(post.id)}
-                      isGenerating={generatingImageId === post.id}
+                  {/* Image */}
+                  {post.image_status === "pending" ? (
+                    <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-blue-200 bg-blue-50">
+                      <div className="flex flex-col items-center gap-1">
+                        <LuLoader className="h-4 w-4 animate-spin text-blue-400" />
+                        <span className="text-[10px] text-blue-400">Generating image…</span>
+                      </div>
+                    </div>
+                  ) : hasImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={post.image_url}
+                      alt=""
+                      className="mb-2 h-32 w-full shrink-0 rounded-xl object-cover"
                     />
+                  ) : post.video_url ? (
+                    <video
+                      src={post.video_url}
+                      controls
+                      className="mb-2 h-32 w-full shrink-0 rounded-xl object-cover"
+                    />
+                  ) : null}
+
+                  {/* Body */}
+                  <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600">
+                    {post.image_status === "pending" || hasImage || post.video_url ? (
+                      <p className="line-clamp-3">{post.body}</p>
+                    ) : (
+                      renderBodyBlocks(post)
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setRejectPost(post)}
-                      disabled={isApproving}
-                      className="rounded-lg border border-red-200 px-3.5 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => handleApprove(post.id)}
-                      disabled={isApproving}
-                      className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-60"
-                    >
-                      <LuCheck className="h-3.5 w-3.5" />
-                      {isApproving ? "Approving…" : "Approve"}
-                    </button>
-                  </div>
+
+                  {/* Edit — pinned bottom-right, sits above overflow-hidden via absolute on outer */}
+                  <button
+                    onClick={() => setEditPost(post)}
+                    className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 opacity-0 shadow-sm transition-all group-hover:opacity-100 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    <LuPencil className="h-3 w-3" />
+                    Edit
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      <Pagination
+        page={page}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        hasPrev={hasPrev}
+        hasNext={hasNext}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
 
       <EditPostModal
         key={editPost?.id ?? "no-post"}

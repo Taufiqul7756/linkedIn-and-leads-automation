@@ -325,8 +325,8 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
                       <img
                         src={post.image_url}
                         alt="Post image"
-                        className="w-full object-cover"
-                        style={{ maxHeight: 220 }}
+                        className="w-full object-contain"
+                        style={{ maxHeight: 280 }}
                       />
                       <button
                         onClick={() => setImageRemoved(true)}
@@ -343,8 +343,8 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
                       <img
                         src={newImagePreview!}
                         alt="New post image"
-                        className="w-full object-cover"
-                        style={{ maxHeight: 220 }}
+                        className="w-full object-contain"
+                        style={{ maxHeight: 280 }}
                       />
                       {isUploading ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -407,7 +407,7 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
                         src={post.video_url}
                         controls
                         className="w-full"
-                        style={{ maxHeight: 220 }}
+                        style={{ maxHeight: 280 }}
                       />
                       <button
                         onClick={() => setVideoRemoved(true)}
@@ -424,7 +424,7 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
                         src={newVideoPreview!}
                         controls
                         className="w-full"
-                        style={{ maxHeight: 220 }}
+                        style={{ maxHeight: 280 }}
                       />
                       {isUploading ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40">
