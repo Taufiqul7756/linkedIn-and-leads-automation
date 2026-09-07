@@ -98,6 +98,9 @@ function EngagementCell({
   status: StatusKey;
   engagement: PostEngagement | null;
 }) {
+  if (status === "published" && !engagement) {
+    return <span className="text-xs text-gray-400">Coming soon</span>;
+  }
   if (status === "published" && engagement) {
     return (
       <div className="flex items-center gap-3 text-xs text-gray-500">
