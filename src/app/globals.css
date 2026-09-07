@@ -27,12 +27,14 @@
   --background: #ffffff;
   --foreground: #171717;
   --page-bg: #e9ecf5;
+  --sidebar-bg: #3b1970;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-page-bg: var(--page-bg);
+  --color-sidebar-bg: #3b1970;
   --font-sans: var(--font-inter);
   --font-mono: ui-monospace, monospace;
 }

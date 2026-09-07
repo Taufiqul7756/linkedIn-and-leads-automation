@@ -17,6 +17,7 @@ import {
   LuZap,
 } from "react-icons/lu";
 import { FaLinkedinIn } from "react-icons/fa";
+import Image from "next/image";
 import { cn } from "@/utils/cn";
 import { useAuth } from "@/context/AuthContext";
 import { authService } from "@/service/authService";
@@ -106,28 +107,27 @@ export default function Sidebar() {
   return (
     <aside
       className={cn(
-        "flex h-screen shrink-0 flex-col overflow-hidden bg-[#1a1740] transition-[width] duration-300 ease-in-out",
-        collapsed ? "w-[68px]" : "w-64"
+        "flex h-screen shrink-0 flex-col overflow-hidden bg-sidebar-bg transition-[width] duration-300 ease-in-out",
+        collapsed ? "w-17" : "w-64"
       )}
     >
       {/* Logo + collapse toggle */}
       <div
         className={cn(
-          "flex h-14 shrink-0 items-center border-b border-white/10",
+          "flex h-14 shrink-0 items-center border-b border-white/10 mt-2",
           collapsed ? "justify-center px-3" : "justify-between px-5"
         )}
       >
         {collapsed ? (
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400">
-            <span className="text-sm font-bold text-white">R</span>
-          </div>
+          <Image src="/cg-fav.png" alt="Logo" width={32} height={32} className="shrink-0" />
         ) : (
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400">
-              <span className="text-sm font-bold text-white">R</span>
-            </div>
-            <span className="font-semibold text-white">Relay</span>
-          </div>
+          <Image
+            src="/cg-logo.png"
+            alt="CodeFusion AI"
+            width={120}
+            height={32}
+            className="shrink-0"
+          />
         )}
 
         <button
@@ -191,7 +191,7 @@ export default function Sidebar() {
                     className={cn(
                       "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
                       pathname === href || pathname.startsWith(href + "/")
-                        ? "bg-white/15 font-medium text-white"
+                        ? "bg-gray-100 font-medium text-gray-900"
                         : "text-white/60 hover:bg-white/10 hover:text-white"
                     )}
                   >
@@ -206,7 +206,7 @@ export default function Sidebar() {
                   >
                     <span className="text-xs text-white/20">•</span>
                     <span className="flex-1">{label}</span>
-                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/40">
+                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-white/40">
                       Soon
                     </span>
                   </span>
@@ -281,12 +281,12 @@ export default function Sidebar() {
       <div ref={userMenuRef} className="relative shrink-0 border-t border-white/10 p-3">
         {/* Popup menu */}
         {userMenuOpen && (
-          <div className="absolute bottom-full left-3 right-3 z-30 mb-1 overflow-hidden rounded-xl border border-white/10 bg-[#1a1740] shadow-lg">
+          <div className="absolute bottom-full left-3 right-3 z-30 mb-1 overflow-hidden rounded-xl border border-white/10 bg-sidebar-bg shadow-lg">
             <div className="p-1">
               <Link
                 href="/settings"
                 onClick={() => setUserMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <LuSettings className="h-4 w-4" />
                 Settings
@@ -309,12 +309,12 @@ export default function Sidebar() {
 
         {/* Trigger */}
         {!mounted ? (
-          <div className="h-10 w-full animate-pulse rounded-lg bg-white/10" />
+          <div className="h-10 w-full animate-pulse rounded-lg bg-gray-100" />
         ) : collapsed ? (
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
             title={displayName}
-            className="flex w-full items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-white/10"
+            className="flex w-full items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-gray-100"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/30 text-xs font-bold text-violet-300">
               {initials}
@@ -323,7 +323,7 @@ export default function Sidebar() {
         ) : (
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
-            className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-white/10"
+            className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-gray-100"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/30 text-xs font-bold text-violet-300">
               {initials}

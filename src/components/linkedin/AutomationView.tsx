@@ -20,8 +20,8 @@ import {
   LuUpload,
   LuTrash2,
   LuFilter,
-  LuBot,
 } from "react-icons/lu";
+import Image from "next/image";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinAgentService } from "@/service/linkedinAgentService";
@@ -768,9 +768,9 @@ function ThinkingIndicator() {
 
   return (
     <div className="flex items-start gap-3">
-      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-        <LuBot className="h-4 w-4 text-white" />
-        <span className="absolute inset-0 rounded-xl animate-ping bg-blue-400 opacity-30" />
+      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+        <Image src="/cg-fav.svg" alt="Agent" width={16} height={16} className="shrink-0" />
+        <span className="absolute inset-0 rounded-xl animate-ping bg-blue-300 opacity-30" />
       </div>
       <div className="flex items-center gap-3 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3">
         <div className="flex items-center gap-1">
@@ -1613,8 +1613,8 @@ export default function AutomationView() {
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
-                <LuBot className="h-4 w-4 text-white" />
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white">
+                <Image src="/cg-fav.svg" alt="Agent" width={16} height={16} className="shrink-0" />
               </div>
               <span className="font-semibold text-gray-900">Agent composer</span>
             </div>
@@ -1651,8 +1651,14 @@ export default function AutomationView() {
                 {/* Loading state while restoring conversation */}
                 {restoringConv && (
                   <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                      <LuBot className="h-4 w-4 text-white" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                      <Image
+                        src="/cg-fav.svg"
+                        alt="Agent"
+                        width={16}
+                        height={16}
+                        className="shrink-0"
+                      />
                     </div>
                     <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-400">
                       <LuLoader className="h-4 w-4 animate-spin" />
@@ -1664,8 +1670,14 @@ export default function AutomationView() {
                 {/* Welcome message — only after restore completes with no conversation */}
                 {!restoringConv && !conversation && (
                   <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                      <LuBot className="h-4 w-4 text-white" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                      <Image
+                        src="/cg-fav.svg"
+                        alt="Agent"
+                        width={16}
+                        height={16}
+                        className="shrink-0"
+                      />
                     </div>
                     <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
                       Tell me what you want and I&apos;ll research your brand, ask a couple of quick
@@ -1741,8 +1753,14 @@ export default function AutomationView() {
                     const msgPosts = posts.filter((p) => msgPostIds.includes(p.id));
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                          <LuBot className="h-4 w-4 text-white" />
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                          <Image
+                            src="/cg-fav.svg"
+                            alt="Agent"
+                            width={16}
+                            height={16}
+                            className="shrink-0"
+                          />
                         </div>
                         <div className="flex-1 overflow-hidden">
                           <div className="mb-3 inline-block break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
@@ -1769,8 +1787,14 @@ export default function AutomationView() {
 
                   return (
                     <div key={msg.id} className="mt-4 flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                        <LuBot className="h-4 w-4 text-white" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                        <Image
+                          src="/cg-fav.svg"
+                          alt="Agent"
+                          width={16}
+                          height={16}
+                          className="shrink-0"
+                        />
                       </div>
                       <div
                         className={cn(
@@ -1789,8 +1813,14 @@ export default function AutomationView() {
                 {/* Awaiting input — headline round */}
                 {isAwaiting && isHeadlineInterrupt && pendingInterrupt && (
                   <div className="mt-4 flex items-start gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                      <LuBot className="h-4 w-4 text-white" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                      <Image
+                        src="/cg-fav.svg"
+                        alt="Agent"
+                        width={16}
+                        height={16}
+                        className="shrink-0"
+                      />
                     </div>
                     <div className="flex-1">
                       <HeadlinesForm
@@ -1808,8 +1838,14 @@ export default function AutomationView() {
                   pendingInterrupt &&
                   piQuestions.length > 0 && (
                     <div className="mt-4 flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-                        <LuBot className="h-4 w-4 text-white" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                        <Image
+                          src="/cg-fav.svg"
+                          alt="Agent"
+                          width={16}
+                          height={16}
+                          className="shrink-0"
+                        />
                       </div>
                       <div className="flex-1">
                         <div className="inline-block max-w-xl break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
@@ -1836,7 +1872,13 @@ export default function AutomationView() {
                 {isTerminal && (
                   <div className="mt-4 flex items-start gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-400">
-                      <LuBot className="h-4 w-4 text-white" />
+                      <Image
+                        src="/cg-fav.svg"
+                        alt="Agent"
+                        width={16}
+                        height={16}
+                        className="shrink-0"
+                      />
                     </div>
                     <div className="break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm text-gray-500">
                       {conversation?.status === "archived" ? (

@@ -11,8 +11,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "AI Agent Demo",
+  title: "Creative Genie",
   description: "Next.js 16 App Router starter",
+  icons: {
+    icon: "/cg-fav.svg",
+    shortcut: "/cg-fav.svg",
+  },
 };
 
 export default function RootLayout({
