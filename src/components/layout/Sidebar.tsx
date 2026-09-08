@@ -286,7 +286,7 @@ export default function Sidebar() {
               <Link
                 href="/settings"
                 onClick={() => setUserMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-white/10 hover:text-white"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
               >
                 <LuSettings className="h-4 w-4" />
                 Settings
@@ -314,7 +314,7 @@ export default function Sidebar() {
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
             title={displayName}
-            className="flex w-full items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-gray-100"
+            className="flex w-full items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-white/10"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/30 text-xs font-bold text-violet-300">
               {initials}
@@ -323,7 +323,7 @@ export default function Sidebar() {
         ) : (
           <button
             onClick={() => setUserMenuOpen((v) => !v)}
-            className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-gray-100"
+            className="flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-white/10"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500/30 text-xs font-bold text-violet-300">
               {initials}
