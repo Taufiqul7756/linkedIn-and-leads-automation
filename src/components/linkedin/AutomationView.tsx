@@ -931,6 +931,13 @@ export default function AutomationView() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [message]);
+
   const svc = useCallback(() => linkedinAgentService(workspaceId), [workspaceId]);
   const queryClient = useQueryClient();
 
@@ -1935,7 +1942,7 @@ export default function AutomationView() {
                       }
                       disabled={isRunning || isAwaiting}
                       rows={2}
-                      className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
+                      className="w-full resize-none break-all bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
                     />
                   </div>
 
