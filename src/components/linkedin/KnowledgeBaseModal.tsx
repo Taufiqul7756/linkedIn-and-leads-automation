@@ -84,22 +84,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function PurposeDropdown({ value }: { value: string }) {
-  return (
-    <div className="relative shrink-0">
-      <select
-        value={isTone(value) ? "tone" : "knowledge"}
-        onChange={() => {}}
-        className="appearance-none rounded border border-gray-200 bg-white py-1 pl-2.5 pr-6 text-xs font-medium text-gray-700 outline-none"
-      >
-        <option value="knowledge">Knowledge</option>
-        <option value="tone">Tone / style</option>
-      </select>
-      <LuChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
-    </div>
-  );
-}
-
 // ─── SiteRow and DocRow are defined outside to avoid remounting ───────────────
 
 interface SiteRowProps {
@@ -119,7 +103,6 @@ function SiteRow({ site, recrawlingId, deletingSiteId, onRecrawl, onRequestDelet
         <p className="truncate text-sm font-medium text-gray-900">{site.url}</p>
         <p className="text-xs text-gray-400">crawled {timeAgo(site.created_at)}</p>
       </div>
-      <PurposeDropdown value={site.purpose} />
       <StatusBadge status={site.status} />
       <button
         onClick={() => onRecrawl(site.id)}
@@ -164,7 +147,6 @@ function DocRow({ doc, deletingDocId, onRequestDelete }: DocRowProps) {
         <p className="truncate text-sm font-medium text-gray-900">{doc.filename}</p>
         <p className="text-xs text-gray-400">{meta}</p>
       </div>
-      <PurposeDropdown value={doc.purpose} />
       <StatusBadge status={doc.status} />
       <button
         onClick={() => onRequestDelete(doc.id, doc.filename, "doc")}
