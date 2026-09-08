@@ -1689,28 +1689,28 @@ export default function AutomationView() {
                 {/* Conversation messages */}
                 {conversation?.messages.map((msg) => {
                   if (msg.role === "user") {
-                    // Answer message — empty text, render summary from payload.answers
+                    // Answer message — empty text, render Q&A pairs from payload.questions
                     if (!msg.text && msg.kind === "text") {
-                      const answers = msg.payload.answers as
-                        Record<string, string | string[]> | undefined;
-                      if (!answers) return null;
-                      const parts: string[] = [];
-                      for (const [key, val] of Object.entries(answers)) {
-                        if (Array.isArray(val)) {
-                          parts.push(
-                            key === "headlines"
-                              ? `Approved ${val.length} headline${val.length !== 1 ? "s" : ""}`
-                              : `${val.length} selected`
-                          );
-                        } else if (val) {
-                          parts.push(val);
-                        }
-                      }
-                      const summary = parts.join(" · ");
+                      const questions = msg.payload.questions as
+                        { id: string; question: string; answer: string | string[] }[] | undefined;
+                      if (!questions?.length) return null;
+                      const filled = questions.filter((q) =>
+                        Array.isArray(q.answer) ? q.answer.length > 0 : !!q.answer
+                      );
+                      if (!filled.length) return null;
                       return (
                         <div key={msg.id} className="mt-4 flex justify-end">
-                          <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-100 px-4 py-3 text-sm leading-relaxed text-blue-800">
-                            {summary || "✓ Answered"}
+                          <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-50 px-4 py-3 text-sm">
+                            <div className="space-y-2.5">
+                              {filled.map((q) => (
+                                <div key={q.id}>
+                                  <p className="text-xs font-medium text-blue-400">{q.question}</p>
+                                  <p className="mt-0.5 text-sm text-blue-800">
+                                    {Array.isArray(q.answer) ? q.answer.join(", ") : q.answer}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       );
