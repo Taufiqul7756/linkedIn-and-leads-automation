@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import AccountsView from "@/components/linkedin/AccountsView";
 
 export default function AccountsPage() {
-  return <AccountsView />;
+  return (
+    <Suspense>
+      <AccountsView />
+    </Suspense>
+  );
 }

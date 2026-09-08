@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { LuBook } from "react-icons/lu";
 import { FaLinkedinIn } from "react-icons/fa";
 import toast from "react-hot-toast";
@@ -17,9 +18,45 @@ export default function AccountsView() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
+
+  const code = searchParams.get("code");
+  const state = searchParams.get("state");
+
+  const cleanOAuthParams = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("code");
+    params.delete("state");
+    const qs = params.toString();
+    router.replace(`/linkedin/accounts${qs ? `?${qs}` : ""}`);
+  };
+
+  useEffect(() => {
+    if (!code || !state) return;
+    const sessionKey = `linkedin_callback_${state}`;
+    if (sessionStorage.getItem(sessionKey)) {
+      cleanOAuthParams();
+      return;
+    }
+    sessionStorage.setItem(sessionKey, "1");
+    linkedinService(workspaceId)
+      .handleCallback(code, state)
+      .then((result) => {
+        if (result) {
+          queryClient.invalidateQueries({ queryKey: ["linkedin-account"] });
+          toast.success("LinkedIn account connected!");
+        } else {
+          toast.error("Failed to connect LinkedIn account.");
+        }
+      })
+      .catch(() => toast.error("Failed to connect LinkedIn account."))
+      .finally(() => cleanOAuthParams());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, state]);
 
   const { data: account, isLoading: accountLoading } = useQueryWithTokenRefresh(
     ["linkedin-account", workspaceId],
