@@ -17,17 +17,6 @@ function formatDateTime(iso: string | null | undefined): string {
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 }
 
-function parseHashtags(raw: unknown): string[] {
-  if (!raw) return [];
-  const items = Array.isArray(raw)
-    ? raw.map(String)
-    : String(raw)
-        .split(/[\s,]+/)
-        .map((t) => t.trim())
-        .filter(Boolean);
-  return items.filter((t) => t.length > 0).map((t) => (t.startsWith("#") ? t : `#${t}`));
-}
-
 const STATUS_STYLES: Record<string, string> = {
   published: "bg-green-100 text-green-700",
   scheduled: "bg-blue-100 text-blue-700",
@@ -72,46 +61,7 @@ export default function ViewPostModal({ isOpen, onClose, postId }: ViewPostModal
             >
               {post.status}
             </span>
-            {post.tone && (
-              <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-500">
-                {post.tone}
-              </span>
-            )}
-            {post.length && (
-              <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-500">
-                {post.length}
-              </span>
-            )}
-            {post.content_style && (
-              <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                {post.content_style.replace(/_/g, " ")}
-              </span>
-            )}
           </div>
-
-          <div className="whitespace-pre-line text-sm leading-relaxed text-gray-800">
-            {post.body}
-          </div>
-
-          {post.image_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={post.image_url}
-              alt="Post image"
-              className="w-full rounded-xl object-cover"
-              style={{ maxHeight: 260 }}
-            />
-          )}
-
-          {parseHashtags(post.hashtags).length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {parseHashtags(post.hashtags).map((tag) => (
-                <span key={tag} className="text-xs font-medium text-blue-600">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
@@ -127,6 +77,20 @@ export default function ViewPostModal({ isOpen, onClose, postId }: ViewPostModal
               <p className="text-xs text-gray-700">{formatDateTime(post.published_at)}</p>
             </div>
           </div>
+
+          <div className="whitespace-pre-line text-sm leading-relaxed text-gray-800">
+            {post.body}
+          </div>
+
+          {post.image_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={post.image_url}
+              alt="Post image"
+              className="w-full rounded-xl object-cover"
+              style={{ maxHeight: 260 }}
+            />
+          )}
 
           {post.status === "published" && post.engagement && (
             <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
