@@ -56,7 +56,6 @@ export default function Sidebar() {
       const next = !prev;
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
       if (next) {
-        setLeadsOpen(false);
         setLinkedInOpen(false);
         setUserMenuOpen(false);
       }

@@ -85,6 +85,11 @@ export const postsService = (workspaceId: string) => ({
     ),
   getDraftsByPlan: (planId: string) =>
     get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?plan=${planId}&state=agent`),
+  getPostsForCalendar: (state?: "agent" | "manual") => {
+    const q = new URLSearchParams({ exclude_status: "draft", page_size: "200" });
+    if (state) q.set("state", state);
+    return get<PaginatedPosts>(`/workspaces/${workspaceId}/content/posts/?${q.toString()}`);
+  },
   suggestPrompts: (body: SuggestPromptsBody) =>
     post<SuggestPromptsResponse>(`/workspaces/${workspaceId}/content/posts/suggest_prompts/`, body),
 });

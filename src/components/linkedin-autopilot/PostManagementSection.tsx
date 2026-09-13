@@ -10,6 +10,9 @@ import {
   LuListFilter,
   LuCheck,
   LuList,
+  LuCalendar,
+  LuCalendarDays,
+  LuTable2,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
@@ -27,6 +30,8 @@ import RejectConfirmModal from "./RejectConfirmModal";
 import PlansHistoryModal from "./PlansHistoryModal";
 import PlanDetailModal from "./PlanDetailModal";
 import Pagination from "@/components/ui/Pagination";
+import CalendarMonthView from "./CalendarMonthView";
+import CalendarWeekView from "./CalendarWeekView";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDate(iso: string | null | undefined): string {
@@ -250,6 +255,7 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [planDetailTarget, setPlanDetailTarget] = useState<MarketingPlan | null>(null);
   const [plansHistoryOpen, setPlansHistoryOpen] = useState(false);
+  const [calView, setCalView] = useState<"month" | "week" | "list">("list");
 
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
     ["posts", "all", workspaceId, mode, activeFilter, page, pageSize],
@@ -279,6 +285,13 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
     (plansData?.results ?? []).forEach((p) => m.set(p.id, p));
     return m;
   }, [plansData]);
+
+  const { data: calPostsData } = useQueryWithTokenRefresh(
+    ["posts", "calendar", workspaceId, mode],
+    () => postsService(workspaceId).getPostsForCalendar(mode),
+    { enabled: !!workspaceId, staleTime: 0 }
+  );
+  const calPosts = calPostsData?.results ?? [];
 
   const colCount = mode === "agent" ? 9 : 8;
 
@@ -323,6 +336,7 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
     {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+        queryClient.refetchQueries({ queryKey: ["posts", "calendar", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         toast.success(
           scheduleTarget?.mode === "reschedule" ? "Post rescheduled!" : "Post scheduled!"
@@ -349,6 +363,7 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
     try {
       await postsService(workspaceId).rejectPost(deleteTarget.id);
       queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+      queryClient.refetchQueries({ queryKey: ["posts", "calendar", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
       toast.success("Post deleted.");
@@ -363,6 +378,7 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
     setIsDeleting(true);
     await Promise.all([...selected].map((id) => postsService(workspaceId).rejectPost(id)));
     queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+    queryClient.refetchQueries({ queryKey: ["posts", "calendar", workspaceId] });
     queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
     queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
     setSelected(new Set());
@@ -373,249 +389,290 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
   return (
     <div>
       {/* Section header */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <div className="mb-4 space-y-3">
+        <div>
           <h2 className="text-base font-semibold text-gray-900">Post Management</h2>
-          {selectedCount >= 2 && (
-            <>
-              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                {selectedCount} selected
-              </span>
-              <button
-                onClick={handleBulkDelete}
-                disabled={isDeleting}
-                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3.5 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
-              >
-                <LuTrash2 className="h-4 w-4" />
-                {isDeleting ? "Deleting…" : "Delete"}
-              </button>
-            </>
-          )}
+          <p className="text-xs text-gray-400">
+            Schedule your LinkedIn posts for optimal engagement
+          </p>
         </div>
-        <div className="flex items-center gap-3 sm:self-auto">
-          <span className="hidden text-xs text-gray-400 md:inline">
-            {totalCount > 0 && `${totalCount} posts`}
-          </span>
-          {mode === "agent" && (
-            <button
-              onClick={() => setPlansHistoryOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-            >
-              <LuList className="h-4 w-4" />
-              Plans
-            </button>
-          )}
-          <FilterDropdown active={activeFilter} onChange={handleFilterChange} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Left: view toggle + bulk actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-0.5">
+              {(
+                [
+                  { key: "month", label: "Month", Icon: LuCalendarDays },
+                  { key: "week", label: "Week", Icon: LuCalendar },
+                  { key: "list", label: "List", Icon: LuTable2 },
+                ] as const
+              ).map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setCalView(key)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    calView === key ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            {calView === "list" && selectedCount >= 2 && (
+              <>
+                <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                  {selectedCount} selected
+                </span>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                  className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3.5 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                >
+                  <LuTrash2 className="h-4 w-4" />
+                  {isDeleting ? "Deleting…" : "Delete"}
+                </button>
+              </>
+            )}
+          </div>
+          {/* Right: post count + plans + filter */}
+          <div className="flex items-center gap-3">
+            {calView === "list" && (
+              <span className="hidden text-xs text-gray-400 md:inline">
+                {totalCount > 0 && `${totalCount} posts`}
+              </span>
+            )}
+            {mode === "agent" && (
+              <button
+                onClick={() => setPlansHistoryOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                <LuList className="h-4 w-4" />
+                Plans
+              </button>
+            )}
+            {calView === "list" && (
+              <FilterDropdown active={activeFilter} onChange={handleFilterChange} />
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="w-10 px-4 py-3">
-                  <IndeterminateCheckbox
-                    checked={allSelected}
-                    indeterminate={someSelected}
-                    onChange={toggleAll}
-                  />
-                </th>
-                {[
-                  "POST",
-                  ...(mode === "agent" ? ["PLAN"] : []),
-                  "CREATED",
-                  "SCHEDULED",
-                  "PUBLISHED",
-                  "STATUS",
-                  "ENGAGEMENT",
-                  "ACTIONS",
-                ].map((col) => (
-                  <th
-                    key={col}
-                    className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400"
-                  >
-                    {col}
+      {calView === "month" && <CalendarMonthView posts={calPosts} onPostClick={setViewPostId} />}
+      {calView === "week" && <CalendarWeekView posts={calPosts} onPostClick={setViewPostId} />}
+
+      {/* Table — list view */}
+      {calView === "list" && (
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="w-10 px-4 py-3">
+                    <IndeterminateCheckbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={toggleAll}
+                    />
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {isLoading &&
-                [0, 1, 2, 3].map((i) => (
-                  <tr key={i}>
-                    <td colSpan={colCount} className="px-4 py-4">
-                      <div className="h-5 animate-pulse rounded bg-gray-100" />
+                  {[
+                    "POST",
+                    ...(mode === "agent" ? ["PLAN"] : []),
+                    "CREATED",
+                    "SCHEDULED",
+                    "PUBLISHED",
+                    "STATUS",
+                    "ENGAGEMENT",
+                    "ACTIONS",
+                  ].map((col) => (
+                    <th
+                      key={col}
+                      className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400"
+                    >
+                      {col}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {isLoading &&
+                  [0, 1, 2, 3].map((i) => (
+                    <tr key={i}>
+                      <td colSpan={colCount} className="px-4 py-4">
+                        <div className="h-5 animate-pulse rounded bg-gray-100" />
+                      </td>
+                    </tr>
+                  ))}
+
+                {!isLoading && posts.length === 0 && (
+                  <tr>
+                    <td colSpan={colCount} className="py-12 text-center text-sm text-gray-400">
+                      No posts found.
                     </td>
                   </tr>
-                ))}
+                )}
 
-              {!isLoading && posts.length === 0 && (
-                <tr>
-                  <td colSpan={colCount} className="py-12 text-center text-sm text-gray-400">
-                    No posts found.
-                  </td>
-                </tr>
-              )}
+                {!isLoading &&
+                  posts.map((post) => {
+                    const isSelected = selected.has(post.id);
+                    const tags = parseHashtags(post.hashtags);
 
-              {!isLoading &&
-                posts.map((post) => {
-                  const isSelected = selected.has(post.id);
-                  const tags = parseHashtags(post.hashtags);
-
-                  return (
-                    <tr
-                      key={post.id}
-                      onClick={() => setViewPostId(post.id)}
-                      className={cn(
-                        "group cursor-pointer transition-colors",
-                        isSelected ? "bg-blue-50" : "hover:bg-gray-50"
-                      )}
-                    >
-                      <td className="w-10 px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleRow(post.id)}
-                          className="h-4 w-4 rounded border-gray-300 accent-blue-600"
-                        />
-                      </td>
-                      <td className="max-w-xs px-5 py-4">
-                        <p className="line-clamp-2 text-sm text-gray-800">{post.body}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-1.5">
-                          {tags.slice(0, 3).map((t) => (
-                            <span key={t} className="text-xs text-blue-500">
-                              {t}
+                    return (
+                      <tr
+                        key={post.id}
+                        onClick={() => setViewPostId(post.id)}
+                        className={cn(
+                          "group cursor-pointer transition-colors",
+                          isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <td className="w-10 px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleRow(post.id)}
+                            className="h-4 w-4 rounded border-gray-300 accent-blue-600"
+                          />
+                        </td>
+                        <td className="max-w-xs px-5 py-4">
+                          <p className="line-clamp-2 text-sm text-gray-800">{post.body}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-1.5">
+                            {tags.slice(0, 3).map((t) => (
+                              <span key={t} className="text-xs text-blue-500">
+                                {t}
+                              </span>
+                            ))}
+                            {post.content_style && (
+                              <span className="text-xs text-gray-400">
+                                · {post.content_style.replace(/_/g, " ")}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {mode === "agent" && (
+                          <td className="px-5 py-4">
+                            {post.plan && planMap.has(post.plan) ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPlanDetailTarget(planMap.get(post.plan!)!);
+                                }}
+                                title={planMap.get(post.plan)?.title}
+                                className="max-w-[130px] truncate rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
+                              >
+                                {planMap.get(post.plan)?.title}
+                              </button>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                        )}
+                        <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-500">
+                          {formatDate(post.created_at)}
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-4 text-sm">
+                          {post.scheduled_at ? (
+                            <span className="font-medium text-blue-600">
+                              {formatDateTime(post.scheduled_at)}
                             </span>
-                          ))}
-                          {post.content_style && (
-                            <span className="text-xs text-gray-400">
-                              · {post.content_style.replace(/_/g, " ")}
+                          ) : post.suggested_publish_at && post.status === "approved" ? (
+                            <span className="text-gray-400" title="Suggested — not yet scheduled">
+                              {formatDateTime(post.suggested_publish_at)}
+                              <span className="ml-1 text-[10px] text-gray-300">suggested</span>
                             </span>
-                          )}
-                        </div>
-                      </td>
-                      {mode === "agent" && (
-                        <td className="px-5 py-4">
-                          {post.plan && planMap.has(post.plan) ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPlanDetailTarget(planMap.get(post.plan!)!);
-                              }}
-                              title={planMap.get(post.plan)?.title}
-                              className="max-w-[130px] truncate rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
-                            >
-                              {planMap.get(post.plan)?.title}
-                            </button>
                           ) : (
                             <span className="text-gray-300">—</span>
                           )}
                         </td>
-                      )}
-                      <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-500">
-                        {formatDate(post.created_at)}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-4 text-sm">
-                        {post.scheduled_at ? (
-                          <span className="font-medium text-blue-600">
-                            {formatDateTime(post.scheduled_at)}
-                          </span>
-                        ) : post.suggested_publish_at && post.status === "approved" ? (
-                          <span className="text-gray-400" title="Suggested — not yet scheduled">
-                            {formatDateTime(post.suggested_publish_at)}
-                            <span className="ml-1 text-[10px] text-gray-300">suggested</span>
-                          </span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-500">
-                        {post.published_at ? (
-                          formatDateTime(post.published_at)
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-                            STATUS_STYLES[post.status]
+                        <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-500">
+                          {post.published_at ? (
+                            formatDateTime(post.published_at)
+                          ) : (
+                            <span className="text-gray-300">—</span>
                           )}
-                        >
+                        </td>
+                        <td className="px-5 py-4">
                           <span
-                            className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOTS[post.status])}
-                          />
-                          {STATUS_LABELS[post.status]}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <EngagementCell status={post.status} engagement={post.engagement} />
-                      </td>
-                      <td
-                        className="whitespace-nowrap px-5 py-4"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center gap-2">
-                          {post.status === "published" && post.linkedin_urn && (
-                            <a
-                              href={`https://www.linkedin.com/feed/update/${post.linkedin_urn}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="rounded p-1 text-gray-400 transition-colors hover:text-gray-600"
-                            >
-                              <LuExternalLink className="h-4 w-4" />
-                            </a>
-                          )}
-                          {post.status === "approved" && (
-                            <button
-                              onClick={() => setScheduleTarget({ post, mode: "schedule" })}
-                              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                            >
-                              Schedule
-                            </button>
-                          )}
-                          {post.status === "scheduled" && (
-                            <button
-                              onClick={() => setScheduleTarget({ post, mode: "reschedule" })}
-                              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                            >
-                              Reschedule
-                            </button>
-                          )}
-                          {post.status === "failed" && (
-                            <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100">
-                              Retry
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleDeletePost(post.id)}
-                            className="rounded p-1 text-gray-400 transition-colors hover:text-red-500"
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                              STATUS_STYLES[post.status]
+                            )}
                           >
-                            <LuTrash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+                            <span
+                              className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOTS[post.status])}
+                            />
+                            {STATUS_LABELS[post.status]}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <EngagementCell status={post.status} engagement={post.engagement} />
+                        </td>
+                        <td
+                          className="whitespace-nowrap px-5 py-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center gap-2">
+                            {post.status === "published" && post.linkedin_urn && (
+                              <a
+                                href={`https://www.linkedin.com/feed/update/${post.linkedin_urn}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded p-1 text-gray-400 transition-colors hover:text-gray-600"
+                              >
+                                <LuExternalLink className="h-4 w-4" />
+                              </a>
+                            )}
+                            {post.status === "approved" && (
+                              <button
+                                onClick={() => setScheduleTarget({ post, mode: "schedule" })}
+                                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                              >
+                                Schedule
+                              </button>
+                            )}
+                            {post.status === "scheduled" && (
+                              <button
+                                onClick={() => setScheduleTarget({ post, mode: "reschedule" })}
+                                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                              >
+                                Reschedule
+                              </button>
+                            )}
+                            {post.status === "failed" && (
+                              <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100">
+                                Retry
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeletePost(post.id)}
+                              className="rounded p-1 text-gray-400 transition-colors hover:text-red-500"
+                            >
+                              <LuTrash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      <Pagination
-        page={page}
-        totalCount={totalCount}
-        pageSize={pageSize}
-        pageSizeOptions={PAGE_SIZE_OPTIONS}
-        hasPrev={hasPrev}
-        hasNext={hasNext}
-        onPageChange={setPage}
-        onPageSizeChange={handlePageSizeChange}
-      />
+      {calView === "list" && (
+        <Pagination
+          page={page}
+          totalCount={totalCount}
+          pageSize={pageSize}
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
+          onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      )}
 
       <RejectConfirmModal
         isOpen={deleteTarget !== null}
