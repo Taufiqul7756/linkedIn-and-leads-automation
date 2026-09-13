@@ -222,6 +222,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId], exact: false });
         queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+        queryClient.refetchQueries({ queryKey: ["posts", "calendar", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         toast.success("Post approved!");
         setApprovingId(null);

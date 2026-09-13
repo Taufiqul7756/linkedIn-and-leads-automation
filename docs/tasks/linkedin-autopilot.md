@@ -139,10 +139,36 @@
 - [x] `AgentKnowledgeUploadModal` distinct purpose color scheme: knowledge=blue · tone=violet · style=teal (AgentModeSection retains gray/purple/orange)
 - [x] `is_default` checkbox in "Ready to add" list restricted to `knowledge` purpose items only
 
+## Phase 13 — Calendar View & UI Fixes (branch: feature/calender-view-and-minor-ui-update)
+
+### Sidebar
+- [x] Leads Management parent item: disabled (non-expandable `div`, `cursor-not-allowed`, "Soon" badge)
+- [x] All Leads sub-items set to `live: false` — all show "Soon" badge
+
+### ViewPostModal
+- [x] Removed tone, length, content_style badges — only status badge remains
+- [x] Removed hashtags section after image
+- [x] Moved Scheduled / Published date grid to top (above post body)
+
+### Post Management — Calendar View
+- [x] Month / Week / List toggle in section header (black pill for active)
+- [x] Filter dropdown hidden when Month or Week is active
+- [x] `CalendarMonthView.tsx` — 6-week grid (Sun–Sat); today highlighted with violet ring; coloured post chips with time + body excerpt; "+N more" overflow; prev/next month navigation
+- [x] `CalendarWeekView.tsx` — 24-hour time grid; posts positioned absolutely at their scheduled hour/minute; "Today" button; prev/next week navigation; scrolls to 7am on mount
+- [x] `postsService.getPostsForCalendar(state?)` — fetches up to 200 non-draft posts (no date-range filter available in API; client-side date filtering)
+- [x] Calendar query: `staleTime: 0` (overrides global 5-min default) so invalidation always triggers immediate refetch
+- [x] Calendar query: `refetchQueries` (not `invalidateQueries`) used in schedule, single delete, and bulk delete handlers — forces immediate network call regardless of stale state
+- [x] `ReviewApprovalSection` approve action: also calls `refetchQueries(["posts","calendar",workspaceId])` — calendar updates when draft is approved
+
+### API limitations (calendar)
+- No date-range filter on posts API — calendar fetches up to 200 posts and filters client-side; posts beyond 200 may not appear on calendar
+- No username field on PostType — chips show `time · body excerpt` instead of username
+
 ## Phase 9 — Future
 
 - [ ] Real-time agent status polling (WebSocket)
-- [ ] Calendar view page
+- [ ] Date-range filter support from API for calendar (to show >200 posts)
+- [ ] Click-to-schedule from calendar cells
 - [ ] Bulk delete confirmation modal
 - [ ] Regenerate Post API wired
 - [ ] Refresh metrics button per post

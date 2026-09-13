@@ -32,22 +32,12 @@ const linkedInSubItems = [
 
 const LINKEDIN_ROOT = "/linkedin";
 
-const leadsSubItems = [
-  { label: "Leads Generate", href: "/leads/generate", live: true },
-  { label: "Leads Outreach", href: "/leads/outreach", live: false },
-  { label: "Leads by Niche", href: "/leads/niche", live: false },
-  { label: "Inbox", href: "/leads/inbox", live: false },
-];
-
-const LEADS_ROOT = "/leads";
-
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
 
   const [collapsed, setCollapsed] = useState(false);
-  const [leadsOpen, setLeadsOpen] = useState(pathname.startsWith(LEADS_ROOT));
   const [linkedInOpen, setLinkedInOpen] = useState(pathname.startsWith(LINKEDIN_ROOT));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -66,7 +56,6 @@ export default function Sidebar() {
       const next = !prev;
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
       if (next) {
-        setLeadsOpen(false);
         setLinkedInOpen(false);
         setUserMenuOpen(false);
       }
@@ -153,67 +142,23 @@ export default function Sidebar() {
 
         {/* Leads Management */}
         <div>
-          <button
-            onClick={() => {
-              if (collapsed) return;
-              setLeadsOpen((v) => !v);
-            }}
-            title={collapsed ? "Leads Management" : undefined}
+          <div
+            title="Coming soon"
             className={cn(
-              "flex w-full items-center rounded-lg py-2 text-sm font-medium transition-colors",
-              collapsed ? "justify-center px-0" : "gap-2.5 px-2.5",
-              pathname.startsWith(LEADS_ROOT)
-                ? "bg-white/15 text-white"
-                : "text-white/70 hover:bg-white/10 hover:text-white"
+              "flex w-full cursor-not-allowed items-center rounded-lg py-2 text-sm font-medium text-white/30",
+              collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
             )}
           >
             <LuLayoutGrid className="h-4 w-4 shrink-0" />
             {!collapsed && (
               <>
                 <span className="flex-1 text-left">Leads Management</span>
-                <LuChevronDown
-                  className={cn(
-                    "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-                    leadsOpen ? "rotate-0" : "-rotate-90"
-                  )}
-                />
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/40">
+                  Soon
+                </span>
               </>
             )}
-          </button>
-
-          {!collapsed && leadsOpen && (
-            <div className="mt-0.5 space-y-0.5 pl-3">
-              {leadsSubItems.map(({ label, href, live }) =>
-                live ? (
-                  <Link
-                    key={href}
-                    href={href}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors",
-                      pathname === href || pathname.startsWith(href + "/")
-                        ? "bg-gray-100 font-medium text-gray-900"
-                        : "text-white/60 hover:bg-white/10 hover:text-white"
-                    )}
-                  >
-                    <span className="text-xs text-white/30">•</span>
-                    <span className="flex-1">{label}</span>
-                  </Link>
-                ) : (
-                  <span
-                    key={href}
-                    title="Coming soon"
-                    className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-white/30"
-                  >
-                    <span className="text-xs text-white/20">•</span>
-                    <span className="flex-1">{label}</span>
-                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-white/40">
-                      Soon
-                    </span>
-                  </span>
-                )
-              )}
-            </div>
-          )}
+          </div>
         </div>
 
         {/* LinkedIn */}
