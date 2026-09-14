@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
+import { LuChevronLeft, LuChevronRight, LuGripVertical } from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import type { PostType } from "@/types/Post";
 
@@ -48,11 +48,15 @@ function fmtTime(iso: string): string {
 interface Props {
   posts: PostType[];
   onPostClick: (id: string) => void;
+  onDateChange?: (postId: string, newIso: string) => void;
 }
 
-export default function CalendarMonthView({ posts, onPostClick }: Props) {
+export default function CalendarMonthView({ posts, onPostClick, onDateChange }: Props) {
   const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const [current, setCurrent] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const year = current.getFullYear();
   const month = current.getMonth();
@@ -108,7 +112,7 @@ export default function CalendarMonthView({ posts, onPostClick }: Props) {
       </div>
 
       {/* Day name headers */}
-      <div className="grid grid-cols-7 border-b border-gray-100">
+      <div className="grid grid-cols-7 border-b border-gray-200">
         {DAY_NAMES.map((day) => (
           <div
             key={day}
@@ -128,17 +132,58 @@ export default function CalendarMonthView({ posts, onPostClick }: Props) {
             date.getDate() === today.getDate() &&
             date.getMonth() === today.getMonth() &&
             date.getFullYear() === today.getFullYear();
+          const isPast = date < todayMidnight;
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
           const isLastCol = idx % 7 === 6;
 
           return (
             <div
               key={idx}
+              onDragOver={(e) => {
+                if (isPast) {
+                  e.dataTransfer.dropEffect = "none";
+                  return;
+                }
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDropTargetKey(key);
+              }}
+              onDragEnter={(e) => {
+                if (isPast) return;
+                e.preventDefault();
+                setDropTargetKey(key);
+              }}
+              onDragLeave={(e) => {
+                if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+                setDropTargetKey((prev) => (prev === key ? null : prev));
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDropTargetKey(null);
+                if (isPast) return;
+                const postId = e.dataTransfer.getData("postId");
+                if (!postId || !onDateChange) return;
+                const post = posts.find((p) => p.id === postId);
+                if (!post) return;
+                const raw = post.scheduled_at ?? post.published_at ?? post.suggested_publish_at;
+                const existing = raw ? new Date(raw) : new Date();
+                if (
+                  existing.getFullYear() === date.getFullYear() &&
+                  existing.getMonth() === date.getMonth() &&
+                  existing.getDate() === date.getDate()
+                )
+                  return;
+                const newDate = new Date(date);
+                newDate.setHours(existing.getHours(), existing.getMinutes(), 0, 0);
+                onDateChange(postId, newDate.toISOString());
+              }}
               className={cn(
-                "min-h-[110px] border-b border-r border-gray-100 p-1.5",
+                "min-h-[110px] border-b border-r border-gray-200 p-1.5 transition-colors",
                 !inMonth && "bg-gray-50/40",
+                isPast && "bg-gray-100",
                 isToday && "ring-2 ring-inset ring-violet-500",
-                isLastCol && "border-r-0"
+                isLastCol && "border-r-0",
+                dropTargetKey === key && "bg-violet-50 ring-2 ring-inset ring-violet-300"
               )}
             >
               <span
@@ -159,15 +204,43 @@ export default function CalendarMonthView({ posts, onPostClick }: Props) {
                 {dayPosts.slice(0, 3).map((post) => {
                   const raw = post.scheduled_at ?? post.published_at ?? post.suggested_publish_at;
                   const time = raw ? fmtTime(raw) : "";
+                  const postDate = raw ? new Date(raw) : null;
+                  const isPostPast =
+                    post.status === "published" || (postDate ? postDate < today : isPast);
                   return (
-                    <button
+                    <div
                       key={post.id}
+                      draggable={!isPostPast}
                       onClick={() => onPostClick(post.id)}
+                      onDragStart={
+                        isPostPast
+                          ? undefined
+                          : (e) => {
+                              setDraggingId(post.id);
+                              e.dataTransfer.setData("postId", post.id);
+                              e.dataTransfer.effectAllowed = "move";
+                            }
+                      }
+                      onDragEnd={
+                        isPostPast
+                          ? undefined
+                          : () => {
+                              setDraggingId(null);
+                              setDropTargetKey(null);
+                            }
+                      }
                       className={cn(
-                        "flex w-full items-center gap-1 rounded px-1 py-0.5 text-left transition-opacity hover:opacity-75",
+                        "group/pill flex w-full items-center gap-0.5 rounded px-1 py-0.5 text-left select-none",
+                        isPostPast
+                          ? "cursor-pointer opacity-60"
+                          : "cursor-grab active:cursor-grabbing",
+                        !isPostPast && (draggingId === post.id ? "opacity-30" : "hover:opacity-80"),
                         STATUS_CHIP[post.status]
                       )}
                     >
+                      {!isPostPast && (
+                        <LuGripVertical className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover/pill:opacity-50 transition-opacity" />
+                      )}
                       <span
                         className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_DOT[post.status])}
                       />
@@ -175,7 +248,7 @@ export default function CalendarMonthView({ posts, onPostClick }: Props) {
                         {time && `${time} · `}
                         {post.body.slice(0, 20)}
                       </span>
-                    </button>
+                    </div>
                   );
                 })}
                 {dayPosts.length > 3 && (

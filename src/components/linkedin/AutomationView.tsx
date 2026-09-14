@@ -545,7 +545,9 @@ function DraftCard({
   isApproving: boolean;
   isRejecting: boolean;
 }) {
+  const isVideoActive = post.media_type === "video";
   const hasImage = !!post.image_url;
+  const hasVideo = !!post.video_url;
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
 
   const isDraft = post.status === "draft";
@@ -625,8 +627,14 @@ function DraftCard({
           </div>
         )}
 
-        {/* Image — spinner while generating, actual image when ready */}
-        {post.image_status === "pending" ? (
+        {/* Media — respects media_type field */}
+        {isVideoActive ? (
+          hasVideo ? (
+            <div className="mb-2 flex h-24 shrink-0 overflow-hidden rounded-xl">
+              <video src={post.video_url} className="h-full w-full object-cover" />
+            </div>
+          ) : null
+        ) : post.image_status === "pending" ? (
           <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-blue-200 bg-blue-50">
             <div className="flex flex-col items-center gap-1">
               <LuLoader className="h-4 w-4 animate-spin text-blue-400" />
@@ -640,23 +648,25 @@ function DraftCard({
           </div>
         ) : null}
 
-        {/* Body — rich text when no image (fills height); plain truncated when image present */}
+        {/* Body — rich text when no media (fills height); plain truncated when media present */}
         <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600">
-          {post.image_status === "pending" || hasImage ? (
+          {post.image_status === "pending" || hasImage || hasVideo ? (
             <p className="line-clamp-3">{getBodyPreview(post.body_blocks, post.body)}</p>
           ) : (
             renderBlocks(post.body_blocks, post.body)
           )}
         </div>
 
-        {/* Edit pencil — bottom right */}
-        <button
-          onClick={() => onEdit(post)}
-          className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-        >
-          <LuPencil className="h-3 w-3" />
-          Edit
-        </button>
+        {/* Edit pencil — bottom right, hidden for published posts */}
+        {post.status !== "published" && (
+          <button
+            onClick={() => onEdit(post)}
+            className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+          >
+            <LuPencil className="h-3 w-3" />
+            Edit
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2019,11 +2029,15 @@ export default function AutomationView() {
                       {/* Plus — file / URL attach */}
                       <div ref={plusRef} className="relative">
                         <button
-                          onClick={() => setPlusOpen((v) => !v)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition-colors hover:bg-gray-100 hover:border-gray-400"
+                          disabled
+                          title="Coming soon"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-300 cursor-not-allowed"
                         >
                           <LuPlus className="h-4 w-4" />
                         </button>
+                        <span className="absolute -top-2 -right-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold text-gray-400 leading-none">
+                          Soon
+                        </span>
 
                         {plusOpen && (
                           <div className="absolute bottom-full right-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
@@ -2345,7 +2359,13 @@ export default function AutomationView() {
       <EditDraftModal
         post={editPost}
         onClose={() => setEditPost(null)}
-        onSave={() => {
+        onSave={(activeMedia) => {
+          // Optimistically update media_type so the card reflects the change immediately
+          if (editPost) {
+            setPosts((prev) =>
+              prev.map((p) => (p.id === editPost.id ? { ...p, media_type: activeMedia } : p))
+            );
+          }
           if (conversation?.artifacts.post_ids.length) {
             fetchPosts(conversation.artifacts.post_ids);
           }

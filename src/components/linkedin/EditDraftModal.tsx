@@ -111,7 +111,7 @@ function isoToTimeInput(iso: string | null): string {
 interface Props {
   post: AgentPost | null;
   onClose: () => void;
-  onSave?: () => void;
+  onSave?: (activeMedia: "image" | "video") => void;
 }
 
 export default function EditDraftModal({ post, onClose, onSave }: Props) {
@@ -124,12 +124,13 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   const [bodyJson, setBodyJson] = useState<object>({ type: "doc", content: [] });
   const [editorKey, setEditorKey] = useState(0);
   const [changeMsg, setChangeMsg] = useState("");
-  const [mediaTab, setMediaTab] = useState<"image" | "video">("image");
+  const [activeMedia, setActiveMedia] = useState<"image" | "video">("image");
   const [imageRemoved, setImageRemoved] = useState(false);
   const [videoRemoved, setVideoRemoved] = useState(false);
   const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
   const [newVideoPreview, setNewVideoPreview] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [saving, setSaving] = useState(false);
@@ -140,7 +141,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
     if (!post) return;
     setTitle(post.headline ?? "");
     setChangeMsg("");
-    setMediaTab(post.media_type === "video" ? "video" : "image");
+    setActiveMedia(post.media_type === "video" ? "video" : "image");
     setImageRemoved(false);
     setVideoRemoved(false);
     setNewImagePreview(null);
@@ -167,7 +168,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
     if (!file || !post) return;
     setNewImagePreview(URL.createObjectURL(file));
     setImageRemoved(false);
-    setIsUploading(true);
+    setIsUploadingImage(true);
     try {
       await postsService(workspaceId).uploadImage(post.id, file);
       toast.success("Image uploaded.");
@@ -175,7 +176,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
       toast.error(extractErrorMessage(err));
       setNewImagePreview(null);
     } finally {
-      setIsUploading(false);
+      setIsUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -185,7 +186,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
     if (!file || !post) return;
     setNewVideoPreview(URL.createObjectURL(file));
     setVideoRemoved(false);
-    setIsUploading(true);
+    setIsUploadingVideo(true);
     try {
       await postsService(workspaceId).uploadVideo(post.id, file);
       toast.success("Video uploaded.");
@@ -193,7 +194,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
       toast.error(extractErrorMessage(err));
       setNewVideoPreview(null);
     } finally {
-      setIsUploading(false);
+      setIsUploadingVideo(false);
       if (videoInputRef.current) videoInputRef.current.value = "";
     }
   };
@@ -209,11 +210,12 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
       await postsService(workspaceId).patchPost(post.id, {
         body_blocks: bodyJson,
         suggested_publish_at,
+        media: activeMedia,
         ...(imageRemoved ? { image_url: "" } : {}),
         ...(videoRemoved ? { video_url: "" } : {}),
       });
       toast.success("Draft saved.");
-      onSave?.();
+      onSave?.(activeMedia);
       onClose();
     } catch (err) {
       toast.error(extractErrorMessage(err) || "Failed to save draft.");
@@ -223,6 +225,8 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   };
 
   if (!post) return null;
+
+  const isUploading = isUploadingImage || isUploadingVideo;
 
   const showExistingImage = !!post.image_url && !imageRemoved && !newImagePreview;
   const showNewImagePreview = !!newImagePreview;
@@ -327,201 +331,204 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
             </span>
           </div>
 
-          {/* Media — Image + Video tabs */}
+          {/* Media — Image + Video side by side */}
           <div>
-            <p className="mb-3 text-sm font-medium text-gray-700">Media</p>
+            <p className="mb-2.5 text-sm font-medium text-gray-700">Media</p>
+            <div className="grid grid-cols-2 gap-3">
+              {/* ── Image panel ── */}
+              <div
+                className={`rounded-xl border-2 p-3 transition-colors ${
+                  activeMedia === "image" ? "border-blue-400 bg-blue-50/30" : "border-gray-200"
+                }`}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                    <LuImage className="h-3.5 w-3.5" />
+                    Image
+                  </span>
+                  {activeMedia === "image" ? (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                      Active
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setActiveMedia("image")}
+                      className="text-[10px] font-medium text-blue-600 hover:underline"
+                    >
+                      Use for post
+                    </button>
+                  )}
+                </div>
 
-            <>
-              {/* Tabs */}
-              <div className="mb-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMediaTab("image")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    mediaTab === "image"
-                      ? "bg-blue-600 text-white"
-                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <LuImage className="h-3.5 w-3.5" />
-                  Image
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMediaTab("video")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    mediaTab === "video"
-                      ? "bg-blue-600 text-white"
-                      : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <LuVideo className="h-3.5 w-3.5" />
-                  Video
-                </button>
+                {showExistingImage && (
+                  <div className="relative overflow-hidden rounded-lg border border-gray-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={post.image_url}
+                      alt="Post image"
+                      className="h-36 w-full object-cover"
+                    />
+                    <button
+                      onClick={() => setImageRemoved(true)}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                    >
+                      <LuX className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+
+                {showNewImagePreview && (
+                  <div className="relative overflow-hidden rounded-lg border border-gray-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={newImagePreview!}
+                      alt="New post image"
+                      className="h-36 w-full object-cover"
+                    />
+                    {isUploadingImage ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <LuLoader className="h-5 w-5 animate-spin text-white" />
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setNewImagePreview(null);
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                      >
+                        <LuX className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {showImageUpload && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="flex h-36 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
+                  >
+                    <LuUpload className="h-4 w-4" />
+                    <span className="text-xs font-medium">Upload image</span>
+                    <span className="text-[10px]">PNG, JPG, WEBP</span>
+                  </button>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+
+                {imageRemoved && !newImagePreview && post.image_url && (
+                  <p className="mt-1.5 text-[10px] text-gray-400">
+                    Removed.{" "}
+                    <button
+                      onClick={() => setImageRemoved(false)}
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      Undo
+                    </button>
+                  </p>
+                )}
               </div>
 
-              {/* Image tab */}
-              {mediaTab === "image" && (
-                <>
-                  {showExistingImage && (
-                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={post.image_url}
-                        alt="Post image"
-                        className="w-full object-cover"
-                        style={{ maxHeight: 220 }}
-                      />
-                      <button
-                        onClick={() => setImageRemoved(true)}
-                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                      >
-                        <LuX className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  {showNewImagePreview && (
-                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={newImagePreview!}
-                        alt="New post image"
-                        className="w-full object-cover"
-                        style={{ maxHeight: 220 }}
-                      />
-                      {isUploading ? (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                          <LuLoader className="h-6 w-6 animate-spin text-white" />
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setNewImagePreview(null);
-                            if (fileInputRef.current) fileInputRef.current.value = "";
-                          }}
-                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                        >
-                          <LuX className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {showImageUpload && (
+              {/* ── Video panel ── */}
+              <div
+                className={`rounded-xl border-2 p-3 transition-colors ${
+                  activeMedia === "video" ? "border-blue-400 bg-blue-50/30" : "border-gray-200"
+                }`}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                    <LuVideo className="h-3.5 w-3.5" />
+                    Video
+                  </span>
+                  {activeMedia === "video" ? (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                      Active
+                    </span>
+                  ) : (
                     <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
+                      type="button"
+                      onClick={() => setActiveMedia("video")}
+                      className="text-[10px] font-medium text-blue-600 hover:underline"
                     >
-                      <LuUpload className="h-5 w-5" />
-                      <span className="text-sm font-medium">Click to upload an image</span>
-                      <span className="text-xs">PNG, JPG, WEBP</span>
+                      Use for post
                     </button>
                   )}
+                </div>
 
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-
-                  {imageRemoved && !newImagePreview && post.image_url && (
-                    <p className="mt-1.5 text-xs text-gray-400">
-                      Original image removed.{" "}
-                      <button
-                        onClick={() => setImageRemoved(false)}
-                        className="font-medium text-blue-600 hover:underline"
-                      >
-                        Undo
-                      </button>
-                    </p>
-                  )}
-                </>
-              )}
-
-              {/* Video tab */}
-              {mediaTab === "video" && (
-                <>
-                  {showExistingVideo && (
-                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                      <video
-                        src={post.video_url}
-                        controls
-                        className="w-full"
-                        style={{ maxHeight: 220 }}
-                      />
-                      <button
-                        onClick={() => setVideoRemoved(true)}
-                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                      >
-                        <LuX className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  {showNewVideoPreview && (
-                    <div className="relative overflow-hidden rounded-xl border border-gray-200">
-                      <video
-                        src={newVideoPreview!}
-                        controls
-                        className="w-full"
-                        style={{ maxHeight: 220 }}
-                      />
-                      {isUploading ? (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                          <LuLoader className="h-6 w-6 animate-spin text-white" />
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setNewVideoPreview(null);
-                            if (videoInputRef.current) videoInputRef.current.value = "";
-                          }}
-                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                        >
-                          <LuX className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {showVideoUpload && (
+                {showExistingVideo && (
+                  <div className="relative overflow-hidden rounded-lg border border-gray-200">
+                    <video src={post.video_url} controls className="h-36 w-full object-cover" />
                     <button
-                      onClick={() => videoInputRef.current?.click()}
-                      disabled={isUploading}
-                      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-8 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
+                      onClick={() => setVideoRemoved(true)}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
                     >
-                      <LuUpload className="h-5 w-5" />
-                      <span className="text-sm font-medium">Click to upload a video</span>
-                      <span className="text-xs">MP4, MOV, M4V, WEBM · up to 500 MB</span>
+                      <LuX className="h-3 w-3" />
                     </button>
-                  )}
+                  </div>
+                )}
 
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
-                    className="hidden"
-                    onChange={handleVideoChange}
-                  />
-
-                  {videoRemoved && !newVideoPreview && post.video_url && (
-                    <p className="mt-1.5 text-xs text-gray-400">
-                      Original video removed.{" "}
+                {showNewVideoPreview && (
+                  <div className="relative overflow-hidden rounded-lg border border-gray-200">
+                    <video src={newVideoPreview!} controls className="h-36 w-full object-cover" />
+                    {isUploadingVideo ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <LuLoader className="h-5 w-5 animate-spin text-white" />
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => setVideoRemoved(false)}
-                        className="font-medium text-blue-600 hover:underline"
+                        onClick={() => {
+                          setNewVideoPreview(null);
+                          if (videoInputRef.current) videoInputRef.current.value = "";
+                        }}
+                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
                       >
-                        Undo
+                        <LuX className="h-3 w-3" />
                       </button>
-                    </p>
-                  )}
-                </>
-              )}
-            </>
+                    )}
+                  </div>
+                )}
+
+                {showVideoUpload && (
+                  <button
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={isUploadingVideo}
+                    className="flex h-36 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
+                  >
+                    <LuUpload className="h-4 w-4" />
+                    <span className="text-xs font-medium">Upload video</span>
+                    <span className="text-[10px]">MP4, MOV, WEBM</span>
+                  </button>
+                )}
+
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
+                  className="hidden"
+                  onChange={handleVideoChange}
+                />
+
+                {videoRemoved && !newVideoPreview && post.video_url && (
+                  <p className="mt-1.5 text-[10px] text-gray-400">
+                    Removed.{" "}
+                    <button
+                      onClick={() => setVideoRemoved(false)}
+                      className="font-medium text-blue-600 hover:underline"
+                    >
+                      Undo
+                    </button>
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Scheduled time */}
