@@ -111,7 +111,7 @@ function isoToTimeInput(iso: string | null): string {
 interface Props {
   post: AgentPost | null;
   onClose: () => void;
-  onSave?: () => void;
+  onSave?: (activeMedia: "image" | "video") => void;
 }
 
 export default function EditDraftModal({ post, onClose, onSave }: Props) {
@@ -215,7 +215,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
         ...(videoRemoved ? { video_url: "" } : {}),
       });
       toast.success("Draft saved.");
-      onSave?.();
+      onSave?.(activeMedia);
       onClose();
     } catch (err) {
       toast.error(extractErrorMessage(err) || "Failed to save draft.");

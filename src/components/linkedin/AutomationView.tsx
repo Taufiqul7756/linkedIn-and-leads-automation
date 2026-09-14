@@ -2359,7 +2359,13 @@ export default function AutomationView() {
       <EditDraftModal
         post={editPost}
         onClose={() => setEditPost(null)}
-        onSave={() => {
+        onSave={(activeMedia) => {
+          // Optimistically update media_type so the card reflects the change immediately
+          if (editPost) {
+            setPosts((prev) =>
+              prev.map((p) => (p.id === editPost.id ? { ...p, media_type: activeMedia } : p))
+            );
+          }
           if (conversation?.artifacts.post_ids.length) {
             fetchPosts(conversation.artifacts.post_ids);
           }
