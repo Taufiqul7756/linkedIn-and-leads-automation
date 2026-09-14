@@ -1009,10 +1009,8 @@ export default function AutomationView() {
     async (postIds: string[]) => {
       if (!postIds.length) return;
       try {
-        const data = await svc().getAgentPosts({ pageSize: 50 });
-        const byId = new Map(data.results.map((p) => [p.id, p]));
-        const ordered = postIds.map((id) => byId.get(id)).filter(Boolean) as AgentPost[];
-        setPosts(ordered);
+        const data = await svc().getAgentPosts({ ids: postIds });
+        setPosts(data.results);
       } catch {
         // ignore
       }
