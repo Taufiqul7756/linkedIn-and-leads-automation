@@ -425,7 +425,9 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
           {posts.map((post) => {
             const isApproving = approvingId === post.id;
             const isRejecting = rejectingId === post.id;
+            const isVideoActive = post.media_type === "video";
             const hasImage = !!post.image_url;
+            const hasVideo = !!post.video_url;
 
             return (
               // Outer wrapper: overflow-visible so floating buttons protrude above top border
@@ -498,7 +500,15 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                   )}
 
                   {/* Image */}
-                  {post.image_status === "pending" ? (
+                  {isVideoActive ? (
+                    hasVideo ? (
+                      <video
+                        src={post.video_url}
+                        controls
+                        className="mb-2 h-32 w-full shrink-0 rounded-xl object-cover"
+                      />
+                    ) : null
+                  ) : post.image_status === "pending" ? (
                     <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-blue-200 bg-blue-50">
                       <div className="flex flex-col items-center gap-1">
                         <LuLoader className="h-4 w-4 animate-spin text-blue-400" />
@@ -512,17 +522,11 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                       alt=""
                       className="mb-2 h-32 w-full shrink-0 rounded-xl object-cover"
                     />
-                  ) : post.video_url ? (
-                    <video
-                      src={post.video_url}
-                      controls
-                      className="mb-2 h-32 w-full shrink-0 rounded-xl object-cover"
-                    />
                   ) : null}
 
                   {/* Body */}
                   <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600">
-                    {post.image_status === "pending" || hasImage || post.video_url ? (
+                    {post.image_status === "pending" || hasImage || hasVideo ? (
                       <p className="line-clamp-3">{post.body}</p>
                     ) : (
                       renderBodyBlocks(post)

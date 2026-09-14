@@ -545,7 +545,9 @@ function DraftCard({
   isApproving: boolean;
   isRejecting: boolean;
 }) {
+  const isVideoActive = post.media_type === "video";
   const hasImage = !!post.image_url;
+  const hasVideo = !!post.video_url;
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
 
   const isDraft = post.status === "draft";
@@ -625,8 +627,14 @@ function DraftCard({
           </div>
         )}
 
-        {/* Image — spinner while generating, actual image when ready */}
-        {post.image_status === "pending" ? (
+        {/* Media — respects media_type field */}
+        {isVideoActive ? (
+          hasVideo ? (
+            <div className="mb-2 flex h-24 shrink-0 overflow-hidden rounded-xl">
+              <video src={post.video_url} className="h-full w-full object-cover" />
+            </div>
+          ) : null
+        ) : post.image_status === "pending" ? (
           <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-blue-200 bg-blue-50">
             <div className="flex flex-col items-center gap-1">
               <LuLoader className="h-4 w-4 animate-spin text-blue-400" />
@@ -640,23 +648,25 @@ function DraftCard({
           </div>
         ) : null}
 
-        {/* Body — rich text when no image (fills height); plain truncated when image present */}
+        {/* Body — rich text when no media (fills height); plain truncated when media present */}
         <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600">
-          {post.image_status === "pending" || hasImage ? (
+          {post.image_status === "pending" || hasImage || hasVideo ? (
             <p className="line-clamp-3">{getBodyPreview(post.body_blocks, post.body)}</p>
           ) : (
             renderBlocks(post.body_blocks, post.body)
           )}
         </div>
 
-        {/* Edit pencil — bottom right */}
-        <button
-          onClick={() => onEdit(post)}
-          className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-        >
-          <LuPencil className="h-3 w-3" />
-          Edit
-        </button>
+        {/* Edit pencil — bottom right, hidden for published posts */}
+        {post.status !== "published" && (
+          <button
+            onClick={() => onEdit(post)}
+            className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+          >
+            <LuPencil className="h-3 w-3" />
+            Edit
+          </button>
+        )}
       </div>
     </div>
   );
