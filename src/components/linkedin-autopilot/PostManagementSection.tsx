@@ -412,7 +412,9 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
                   onClick={() => setCalView(key)}
                   className={cn(
                     "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                    calView === key ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-700"
+                    calView === key
+                      ? "bg-white text-violet-600 shadow-sm"
+                      : "text-gray-400 hover:text-gray-600"
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />

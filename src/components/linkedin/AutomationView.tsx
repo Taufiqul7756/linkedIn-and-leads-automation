@@ -2019,11 +2019,15 @@ export default function AutomationView() {
                       {/* Plus — file / URL attach */}
                       <div ref={plusRef} className="relative">
                         <button
-                          onClick={() => setPlusOpen((v) => !v)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition-colors hover:bg-gray-100 hover:border-gray-400"
+                          disabled
+                          title="Coming soon"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-300 cursor-not-allowed"
                         >
                           <LuPlus className="h-4 w-4" />
                         </button>
+                        <span className="absolute -top-2 -right-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold text-gray-400 leading-none">
+                          Soon
+                        </span>
 
                         {plusOpen && (
                           <div className="absolute bottom-full right-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">

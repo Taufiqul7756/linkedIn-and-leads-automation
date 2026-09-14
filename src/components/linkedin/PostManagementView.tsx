@@ -64,7 +64,10 @@ function PostManagementContent() {
       {/* Stats grid — 2 rows × 4 cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {statCards.map((stat) => (
-          <div key={stat.label} className="rounded-xl border border-gray-200 bg-white px-5 py-4">
+          <div
+            key={stat.label}
+            className="rounded-xl border border-gray-200 bg-white px-5 py-4 cursor-pointer transition-all hover:shadow-md hover:border-gray-300 hover:-translate-y-0.5"
+          >
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
               {stat.label}
             </p>
