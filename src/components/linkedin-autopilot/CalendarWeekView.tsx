@@ -13,7 +13,7 @@ const STATUS_BLOCK: Record<PostType["status"], string> = {
 };
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const HOUR_PX = 56;
+const HOUR_PX = 80;
 
 function weekStartOf(date: Date): Date {
   const d = new Date(date);
@@ -46,6 +46,20 @@ function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
+// Snap a pixel Y within the grid to the nearest 15-minute slot
+function snapToQuarter(relY: number): { h: number; m: number } {
+  const totalMins = Math.max(0, Math.min((relY / HOUR_PX) * 60, 24 * 60 - 1));
+  const h = Math.floor(totalMins / 60);
+  const m = Math.min(45, Math.round((totalMins % 60) / 15) * 15);
+  return { h, m };
+}
+
+function fmtDropLabel(h: number, m: number): string {
+  const suffix = h < 12 ? "AM" : "PM";
+  const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${displayH}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
 interface Props {
   posts: PostType[];
   onPostClick: (id: string) => void;
@@ -59,6 +73,7 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropDayIdx, setDropDayIdx] = useState<number | null>(null);
   const [dropHour, setDropHour] = useState<number | null>(null);
+  const [dropMinute, setDropMinute] = useState<number | null>(null);
 
   // Scroll to 7am on mount
   useEffect(() => {
@@ -201,11 +216,12 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                // clientY - rect.top already accounts for scroll (rect is viewport-relative)
                 const rect = e.currentTarget.getBoundingClientRect();
                 const relY = Math.max(0, e.clientY - rect.top);
+                const { h, m } = snapToQuarter(relY);
                 setDropDayIdx(dayIdx);
-                setDropHour(Math.floor(relY / HOUR_PX));
+                setDropHour(h);
+                setDropMinute(m);
               }}
               onDragEnter={(e) => {
                 e.preventDefault();
@@ -214,24 +230,28 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
                 if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
                 setDropDayIdx(null);
                 setDropHour(null);
+                setDropMinute(null);
               }}
               onDrop={(e) => {
                 e.preventDefault();
                 const rect = e.currentTarget.getBoundingClientRect();
                 const relY = Math.max(0, e.clientY - rect.top);
-                const h = Math.floor(relY / HOUR_PX);
+                const { h, m } = snapToQuarter(relY);
                 setDropDayIdx(null);
                 setDropHour(null);
+                setDropMinute(null);
                 const postId = e.dataTransfer.getData("postId");
                 if (!postId || !onDateChange) return;
                 const post = posts.find((p) => p.id === postId);
                 if (!post) return;
                 const originalDate = getPostDate(post);
                 if (!originalDate) return;
-                // Skip if same day AND same hour
-                if (sameDay(dayDate, originalDate) && h === originalDate.getHours()) return;
+                // Skip if same day AND same 15-min slot
+                const origH = originalDate.getHours();
+                const origM = Math.min(45, Math.round(originalDate.getMinutes() / 15) * 15);
+                if (sameDay(dayDate, originalDate) && h === origH && m === origM) return;
                 const newDate = new Date(dayDate);
-                newDate.setHours(h, 0, 0, 0);
+                newDate.setHours(h, m, 0, 0);
                 onDateChange(postId, newDate.toISOString());
               }}
             >
@@ -244,7 +264,13 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
                     dropDayIdx === dayIdx && dropHour === h && "bg-violet-100"
                   )}
                   style={{ top: h * HOUR_PX, height: HOUR_PX }}
-                />
+                >
+                  {dropDayIdx === dayIdx && dropHour === h && dropMinute !== null && (
+                    <span className="absolute right-1 top-0.5 z-10 rounded bg-violet-500 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                      {fmtDropLabel(h, dropMinute)}
+                    </span>
+                  )}
+                </div>
               ))}
 
               {/* Posts */}
@@ -266,6 +292,7 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
                       setDraggingId(null);
                       setDropDayIdx(null);
                       setDropHour(null);
+                      setDropMinute(null);
                     }}
                     className={cn(
                       "group/block absolute inset-x-0.5 rounded border-l-2 px-1 py-0.5 text-left select-none",
