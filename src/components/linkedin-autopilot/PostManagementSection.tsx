@@ -330,6 +330,27 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
     });
   };
 
+  const dragRescheduleMutation = useMutationWithTokenRefresh(
+    ({ id, newIso, status }: { id: string; newIso: string; status: PostType["status"] }) =>
+      status === "scheduled"
+        ? postsService(workspaceId).schedulePost(id, newIso)
+        : postsService(workspaceId).patchPost(id, { suggested_publish_at: newIso }),
+    {
+      onSuccess: () => {
+        queryClient.refetchQueries({ queryKey: ["posts", "calendar", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+        toast.success("Post moved.");
+      },
+      onError: (error: unknown) => toast.error(extractErrorMessage(error)),
+    }
+  );
+
+  const handleDateChange = (postId: string, newIso: string) => {
+    const post = calPosts.find((p) => p.id === postId);
+    if (!post) return;
+    dragRescheduleMutation.mutate({ id: postId, newIso, status: post.status });
+  };
+
   const scheduleMutation = useMutationWithTokenRefresh(
     ({ id, scheduledAt }: { id: string; scheduledAt: string }) =>
       postsService(workspaceId).schedulePost(id, scheduledAt),
@@ -461,8 +482,20 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
         </div>
       </div>
 
-      {calView === "month" && <CalendarMonthView posts={calPosts} onPostClick={setViewPostId} />}
-      {calView === "week" && <CalendarWeekView posts={calPosts} onPostClick={setViewPostId} />}
+      {calView === "month" && (
+        <CalendarMonthView
+          posts={calPosts}
+          onPostClick={setViewPostId}
+          onDateChange={handleDateChange}
+        />
+      )}
+      {calView === "week" && (
+        <CalendarWeekView
+          posts={calPosts}
+          onPostClick={setViewPostId}
+          onDateChange={handleDateChange}
+        />
+      )}
 
       {/* Table — list view */}
       {calView === "list" && (

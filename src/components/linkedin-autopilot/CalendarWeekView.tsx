@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { LuChevronLeft, LuChevronRight } from "react-icons/lu";
+import { LuChevronLeft, LuChevronRight, LuGripVertical } from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import type { PostType } from "@/types/Post";
 
@@ -49,12 +49,16 @@ function fmtTime(iso: string): string {
 interface Props {
   posts: PostType[];
   onPostClick: (id: string) => void;
+  onDateChange?: (postId: string, newIso: string) => void;
 }
 
-export default function CalendarWeekView({ posts, onPostClick }: Props) {
+export default function CalendarWeekView({ posts, onPostClick, onDateChange }: Props) {
   const today = new Date();
   const [weekStart, setWeekStart] = useState(() => weekStartOf(today));
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropDayIdx, setDropDayIdx] = useState<number | null>(null);
+  const [dropHour, setDropHour] = useState<number | null>(null);
 
   // Scroll to 7am on mount
   useEffect(() => {
@@ -188,18 +192,57 @@ export default function CalendarWeekView({ posts, onPostClick }: Props) {
             ))}
           </div>
 
-          {/* Day columns */}
-          {weekDays.map((_, dayIdx) => (
+          {/* Day columns — each column is the drop zone */}
+          {weekDays.map((dayDate, dayIdx) => (
             <div
               key={dayIdx}
               className="relative flex-1 border-l border-gray-100"
               style={{ height: totalHeight }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                // clientY - rect.top already accounts for scroll (rect is viewport-relative)
+                const rect = e.currentTarget.getBoundingClientRect();
+                const relY = Math.max(0, e.clientY - rect.top);
+                setDropDayIdx(dayIdx);
+                setDropHour(Math.floor(relY / HOUR_PX));
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+              }}
+              onDragLeave={(e) => {
+                if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+                setDropDayIdx(null);
+                setDropHour(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const rect = e.currentTarget.getBoundingClientRect();
+                const relY = Math.max(0, e.clientY - rect.top);
+                const h = Math.floor(relY / HOUR_PX);
+                setDropDayIdx(null);
+                setDropHour(null);
+                const postId = e.dataTransfer.getData("postId");
+                if (!postId || !onDateChange) return;
+                const post = posts.find((p) => p.id === postId);
+                if (!post) return;
+                const originalDate = getPostDate(post);
+                if (!originalDate) return;
+                // Skip if same day AND same hour
+                if (sameDay(dayDate, originalDate) && h === originalDate.getHours()) return;
+                const newDate = new Date(dayDate);
+                newDate.setHours(h, 0, 0, 0);
+                onDateChange(postId, newDate.toISOString());
+              }}
             >
-              {/* Hour separator lines */}
+              {/* Hour rows — highlighted when hovered during drag */}
               {hours.map((h) => (
                 <div
                   key={h}
-                  className="absolute inset-x-0 border-b border-gray-100"
+                  className={cn(
+                    "absolute inset-x-0 border-b border-gray-100 transition-colors",
+                    dropDayIdx === dayIdx && dropHour === h && "bg-violet-100"
+                  )}
                   style={{ top: h * HOUR_PX, height: HOUR_PX }}
                 />
               ))}
@@ -210,19 +253,35 @@ export default function CalendarWeekView({ posts, onPostClick }: Props) {
                 const raw = post.scheduled_at ?? post.published_at ?? post.suggested_publish_at;
                 const top = d.getHours() * HOUR_PX + (d.getMinutes() / 60) * HOUR_PX;
                 return (
-                  <button
+                  <div
                     key={post.id}
+                    draggable
                     onClick={() => onPostClick(post.id)}
+                    onDragStart={(e) => {
+                      setDraggingId(post.id);
+                      e.dataTransfer.setData("postId", post.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDropDayIdx(null);
+                      setDropHour(null);
+                    }}
                     className={cn(
-                      "absolute inset-x-0.5 rounded border-l-2 px-1.5 py-0.5 text-left transition-opacity hover:opacity-75",
+                      "group/block absolute inset-x-0.5 rounded border-l-2 px-1 py-0.5 text-left select-none",
+                      "cursor-grab active:cursor-grabbing transition-opacity",
+                      draggingId === post.id ? "opacity-30" : "hover:opacity-80",
                       STATUS_BLOCK[post.status]
                     )}
                     style={{ top, minHeight: 22, zIndex: 1 }}
                   >
-                    <p className="truncate text-[10px] font-semibold leading-tight">
-                      {raw ? fmtTime(raw) : ""} · {post.body.slice(0, 22)}
-                    </p>
-                  </button>
+                    <div className="flex items-center gap-0.5">
+                      <LuGripVertical className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover/block:opacity-50 transition-opacity" />
+                      <p className="truncate text-[10px] font-semibold leading-tight">
+                        {raw ? fmtTime(raw) : ""} · {post.body.slice(0, 22)}
+                      </p>
+                    </div>
+                  </div>
                 );
               })}
             </div>
