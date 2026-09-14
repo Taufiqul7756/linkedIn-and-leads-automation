@@ -443,6 +443,26 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
                 </button>
               ))}
             </div>
+
+            {/* Status legend — inline with tabs, hidden in list view */}
+            {calView !== "list" && (
+              <div className="flex items-center gap-3">
+                <span className="h-3.5 w-px bg-gray-200" />
+                {(
+                  [
+                    { dot: "bg-green-500", label: "Published" },
+                    { dot: "bg-blue-500", label: "Scheduled" },
+                    { dot: "bg-red-500", label: "Failed" },
+                  ] as const
+                ).map(({ dot, label }) => (
+                  <span key={label} className="flex items-center gap-1.5">
+                    <span className={cn("h-2 w-2 rounded-full shrink-0", dot)} />
+                    <span className="text-xs text-gray-400">{label}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
             {calView === "list" && selectedCount >= 2 && (
               <>
                 <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">

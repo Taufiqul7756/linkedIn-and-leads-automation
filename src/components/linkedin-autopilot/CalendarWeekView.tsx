@@ -165,11 +165,11 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
         className="grid border-b border-gray-100"
         style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}
       >
-        <div className="border-r border-gray-100" />
+        <div className="border-r border-gray-200" />
         {weekDays.map((d, i) => {
           const isToday = sameDay(d, today);
           return (
-            <div key={i} className="border-l border-gray-100 py-2 text-center">
+            <div key={i} className="border-l border-gray-200 py-2 text-center">
               <p
                 className={cn(
                   "text-[11px] font-medium",
@@ -195,11 +195,11 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
       <div ref={scrollRef} className="max-h-[580px] overflow-y-auto">
         <div className="relative flex" style={{ height: totalHeight }}>
           {/* Hour labels gutter */}
-          <div className="w-14 shrink-0 border-r border-gray-100">
+          <div className="w-14 shrink-0 border-r border-gray-200">
             {hours.map((h) => (
               <div
                 key={h}
-                className="flex items-start justify-end border-b border-gray-100 pr-2 pt-0.5"
+                className="flex items-start justify-end border-b border-gray-200 pr-2 pt-0.5"
                 style={{ height: HOUR_PX }}
               >
                 <span className="text-[10px] font-medium text-gray-400">{fmtHour(h)}</span>
@@ -211,14 +211,25 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
           {weekDays.map((dayDate, dayIdx) => (
             <div
               key={dayIdx}
-              className="relative flex-1 border-l border-gray-100"
+              className="relative flex-1 border-l border-gray-200"
               style={{ height: totalHeight }}
               onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
                 const rect = e.currentTarget.getBoundingClientRect();
                 const relY = Math.max(0, e.clientY - rect.top);
-                const { h, m } = snapToQuarter(relY);
+                const { h } = snapToQuarter(relY);
+                const slotTime = new Date(
+                  dayDate.getFullYear(),
+                  dayDate.getMonth(),
+                  dayDate.getDate(),
+                  h
+                );
+                if (slotTime < today) {
+                  e.dataTransfer.dropEffect = "none";
+                  return;
+                }
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                const { m } = snapToQuarter(relY);
                 setDropDayIdx(dayIdx);
                 setDropHour(h);
                 setDropMinute(m);
@@ -240,13 +251,19 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
                 setDropDayIdx(null);
                 setDropHour(null);
                 setDropMinute(null);
+                const slotTime = new Date(
+                  dayDate.getFullYear(),
+                  dayDate.getMonth(),
+                  dayDate.getDate(),
+                  h
+                );
+                if (slotTime < today) return;
                 const postId = e.dataTransfer.getData("postId");
                 if (!postId || !onDateChange) return;
                 const post = posts.find((p) => p.id === postId);
                 if (!post) return;
                 const originalDate = getPostDate(post);
                 if (!originalDate) return;
-                // Skip if same day AND same 15-min slot
                 const origH = originalDate.getHours();
                 const origM = Math.min(45, Math.round(originalDate.getMinutes() / 15) * 15);
                 if (sameDay(dayDate, originalDate) && h === origH && m === origM) return;
@@ -256,54 +273,77 @@ export default function CalendarWeekView({ posts, onPostClick, onDateChange }: P
               }}
             >
               {/* Hour rows — highlighted when hovered during drag */}
-              {hours.map((h) => (
-                <div
-                  key={h}
-                  className={cn(
-                    "absolute inset-x-0 border-b border-gray-100 transition-colors",
-                    dropDayIdx === dayIdx && dropHour === h && "bg-violet-100"
-                  )}
-                  style={{ top: h * HOUR_PX, height: HOUR_PX }}
-                >
-                  {dropDayIdx === dayIdx && dropHour === h && dropMinute !== null && (
-                    <span className="absolute right-1 top-0.5 z-10 rounded bg-violet-500 px-1.5 py-0.5 text-[9px] font-semibold text-white">
-                      {fmtDropLabel(h, dropMinute)}
-                    </span>
-                  )}
-                </div>
-              ))}
+              {hours.map((h) => {
+                const slotTime = new Date(
+                  dayDate.getFullYear(),
+                  dayDate.getMonth(),
+                  dayDate.getDate(),
+                  h
+                );
+                const isPastSlot = slotTime < today;
+                return (
+                  <div
+                    key={h}
+                    className={cn(
+                      "absolute inset-x-0 border-b border-gray-200 transition-colors",
+                      isPastSlot && "bg-gray-100",
+                      dropDayIdx === dayIdx && dropHour === h && "bg-violet-100"
+                    )}
+                    style={{ top: h * HOUR_PX, height: HOUR_PX }}
+                  >
+                    {dropDayIdx === dayIdx && dropHour === h && dropMinute !== null && (
+                      <span className="absolute right-1 top-0.5 z-10 rounded bg-violet-500 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                        {fmtDropLabel(h, dropMinute)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Posts */}
               {postsByDay[dayIdx].map((post) => {
                 const d = getPostDate(post)!;
                 const raw = post.scheduled_at ?? post.published_at ?? post.suggested_publish_at;
                 const top = d.getHours() * HOUR_PX + (d.getMinutes() / 60) * HOUR_PX;
+                const isPostPast = post.status === "published" || d < today;
                 return (
                   <div
                     key={post.id}
-                    draggable
+                    draggable={!isPostPast}
                     onClick={() => onPostClick(post.id)}
-                    onDragStart={(e) => {
-                      setDraggingId(post.id);
-                      e.dataTransfer.setData("postId", post.id);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onDragEnd={() => {
-                      setDraggingId(null);
-                      setDropDayIdx(null);
-                      setDropHour(null);
-                      setDropMinute(null);
-                    }}
+                    onDragStart={
+                      isPostPast
+                        ? undefined
+                        : (e) => {
+                            setDraggingId(post.id);
+                            e.dataTransfer.setData("postId", post.id);
+                            e.dataTransfer.effectAllowed = "move";
+                          }
+                    }
+                    onDragEnd={
+                      isPostPast
+                        ? undefined
+                        : () => {
+                            setDraggingId(null);
+                            setDropDayIdx(null);
+                            setDropHour(null);
+                            setDropMinute(null);
+                          }
+                    }
                     className={cn(
-                      "group/block absolute inset-x-0.5 rounded border-l-2 px-1 py-0.5 text-left select-none",
-                      "cursor-grab active:cursor-grabbing transition-opacity",
-                      draggingId === post.id ? "opacity-30" : "hover:opacity-80",
+                      "group/block absolute inset-x-0.5 rounded border-l-2 px-1 py-0.5 text-left select-none transition-opacity",
+                      isPostPast
+                        ? "cursor-pointer opacity-60"
+                        : "cursor-grab active:cursor-grabbing",
+                      !isPostPast && (draggingId === post.id ? "opacity-30" : "hover:opacity-80"),
                       STATUS_BLOCK[post.status]
                     )}
                     style={{ top, minHeight: 22, zIndex: 1 }}
                   >
                     <div className="flex items-center gap-0.5">
-                      <LuGripVertical className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover/block:opacity-50 transition-opacity" />
+                      {!isPostPast && (
+                        <LuGripVertical className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover/block:opacity-50 transition-opacity" />
+                      )}
                       <p className="truncate text-[10px] font-semibold leading-tight">
                         {raw ? fmtTime(raw) : ""} · {post.body.slice(0, 22)}
                       </p>
