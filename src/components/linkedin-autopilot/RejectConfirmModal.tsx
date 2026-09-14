@@ -19,7 +19,6 @@ export default function RejectConfirmModal({
 }: RejectConfirmModalProps) {
   const handleReject = () => {
     onConfirm();
-    onClose();
   };
 
   return (

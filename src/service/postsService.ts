@@ -54,6 +54,7 @@ export const postsService = (workspaceId: string) => ({
           image_url?: string;
           video_url?: string;
           suggested_publish_at?: string | null;
+          status?: string;
         }
       | FormData
   ) => patch<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/`, data),

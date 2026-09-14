@@ -13,7 +13,10 @@ import {
   LuCalendar,
   LuCalendarDays,
   LuTable2,
+  LuRotateCcw,
+  LuTriangleAlert,
 } from "react-icons/lu";
+import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
 import { postsService } from "@/service/postsService";
@@ -256,6 +259,7 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
   const [planDetailTarget, setPlanDetailTarget] = useState<MarketingPlan | null>(null);
   const [plansHistoryOpen, setPlansHistoryOpen] = useState(false);
   const [calView, setCalView] = useState<"month" | "week" | "list">("list");
+  const [backToDraftTarget, setBackToDraftTarget] = useState<PostType | null>(null);
 
   const { data: postsData, isLoading } = useQueryWithTokenRefresh(
     ["posts", "all", workspaceId, mode, activeFilter, page, pageSize],
@@ -372,6 +376,20 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
     if (!scheduleTarget) return;
     scheduleMutation.mutate({ id: scheduleTarget.post.id, scheduledAt });
   };
+
+  const backToDraftMutation = useMutationWithTokenRefresh(
+    (id: string) => postsService(workspaceId).patchPost(id, { status: "draft" }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
+        queryClient.refetchQueries({ queryKey: ["posts", "calendar", workspaceId] });
+        toast.success("Post moved back to draft.");
+      },
+      onError: (error: unknown) => toast.error(extractErrorMessage(error)),
+    }
+  );
 
   const handleDeletePost = (id: string) => {
     const post = posts.find((p) => p.id === id) ?? null;
@@ -687,12 +705,26 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
                               </button>
                             )}
                             {post.status === "scheduled" && (
-                              <button
-                                onClick={() => setScheduleTarget({ post, mode: "reschedule" })}
-                                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                              >
-                                Reschedule
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => setScheduleTarget({ post, mode: "reschedule" })}
+                                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                                >
+                                  Reschedule
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setBackToDraftTarget(post);
+                                  }}
+                                  disabled={backToDraftMutation.isPending}
+                                  title="Move back to draft"
+                                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
+                                >
+                                  <LuRotateCcw className="h-3.5 w-3.5" />
+                                  Back to draft
+                                </button>
+                              </>
                             )}
                             {post.status === "failed" && (
                               <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100">
@@ -764,6 +796,50 @@ export default function PostManagementSection({ mode }: { mode?: "agent" | "manu
         onConfirm={handleScheduleConfirm}
         isLoading={scheduleMutation.isPending}
       />
+
+      {/* Back to draft confirmation */}
+      <Modal
+        isOpen={backToDraftTarget !== null}
+        onClose={() => setBackToDraftTarget(null)}
+        title="Move Back to Draft"
+        width="sm"
+      >
+        <div className="mb-4 flex justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+            <LuTriangleAlert className="h-6 w-6 text-amber-500" />
+          </div>
+        </div>
+        <p className="mb-3 text-center text-sm text-gray-600">
+          This will unschedule the post and move it back to draft. You can re-approve and reschedule
+          it later.
+        </p>
+        <div className="mb-5 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+          <p className="line-clamp-2 text-xs italic text-gray-500">
+            &ldquo;{backToDraftTarget?.body.split("\n")[0]}&rdquo;
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setBackToDraftTarget(null)}
+            disabled={backToDraftMutation.isPending}
+            className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              if (!backToDraftTarget) return;
+              backToDraftMutation.mutate(backToDraftTarget.id, {
+                onSuccess: () => setBackToDraftTarget(null),
+              });
+            }}
+            disabled={backToDraftMutation.isPending}
+            className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-60"
+          >
+            {backToDraftMutation.isPending ? "Moving…" : "Move to draft"}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

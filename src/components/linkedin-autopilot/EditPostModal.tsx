@@ -215,6 +215,26 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
 
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Scheduled time — at top */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Scheduled time</label>
+            <p className="mb-2 text-xs text-gray-400">Set the date and time to publish this post</p>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+              <input
+                type="time"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+            </div>
+          </div>
+
           {/* Title — only shown when the post has a headline */}
           {post.headline && (
             <div>
@@ -478,26 +498,6 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
                 </>
               )}
             </>
-          </div>
-
-          {/* Scheduled time */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Scheduled time</label>
-            <p className="mb-2 text-xs text-gray-400">(agent-suggested, editable)</p>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="date"
-                value={scheduledDate}
-                onChange={(e) => setScheduledDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-              />
-              <input
-                type="time"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-              />
-            </div>
           </div>
         </div>
 
