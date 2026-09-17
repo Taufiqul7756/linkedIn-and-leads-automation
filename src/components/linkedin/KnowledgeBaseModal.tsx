@@ -618,11 +618,9 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
         width="sm"
         disableBackdropClose
       >
-        <p className="text-sm text-gray-600">
-          Are you sure you want to remove{" "}
-          <span className="font-medium text-gray-900">{confirmTarget?.name}</span>? This cannot be
-          undone.
-        </p>
+        <p className="text-sm text-gray-600">Are you sure you want to remove</p>
+        <p className="mt-1.5 break-all text-sm font-medium text-red-600">{confirmTarget?.name}</p>
+        <p className="mt-2 text-sm text-gray-600">This cannot be undone.</p>
         <div className="mt-5 flex justify-end gap-2.5">
           <button
             onClick={handleCancelDelete}
