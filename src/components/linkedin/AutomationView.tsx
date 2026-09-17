@@ -1106,6 +1106,20 @@ export default function AutomationView() {
     return () => clearInterval(iv);
   }, [conversation?.status]);
 
+  // ── clear ?conv= param on unmount so the next workspace starts fresh ──
+  useEffect(() => {
+    return () => {
+      const p = new URLSearchParams(window.location.search);
+      p.delete("conv");
+      const s = p.toString();
+      window.history.replaceState(
+        null,
+        "",
+        s ? `${window.location.pathname}?${s}` : window.location.pathname
+      );
+    };
+  }, []);
+
   // ── restore conversation on mount ──
   // Priority: ?conv= URL param → last conversation from history → empty state
   useEffect(() => {
