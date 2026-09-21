@@ -435,7 +435,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
 
             return (
               // Outer wrapper: overflow-visible so floating buttons protrude above top border
-              <div key={post.id} className="group relative h-80">
+              <div key={post.id} className="group relative h-[340px]">
                 {/* Floating approve / reject buttons */}
                 <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
                   <button

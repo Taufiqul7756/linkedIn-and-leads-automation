@@ -34,6 +34,7 @@ import Modal from "@/components/ui/Modal";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
+import RejectConfirmModal from "@/components/linkedin-autopilot/RejectConfirmModal";
 import type {
   Attachment,
   Conversation,
@@ -70,6 +71,12 @@ const CYCLING_PLACEHOLDERS = [
 const POLL_INTERVAL_MS = 2000;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+function isoToLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 function formatSuggestedDate(iso: string | null): string {
   if (!iso) return "";
@@ -550,6 +557,7 @@ function HeadlinesForm({
 function DraftCard({
   post,
   onEdit,
+  onEditTime,
   onApprove,
   onReject,
   isApproving,
@@ -557,6 +565,7 @@ function DraftCard({
 }: {
   post: AgentPost;
   onEdit: (post: AgentPost) => void;
+  onEditTime: (post: AgentPost) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   isApproving: boolean;
@@ -641,6 +650,13 @@ function DraftCard({
           <div className="mb-2 flex shrink-0 items-center gap-1 text-xs text-gray-400">
             <LuClock className="h-3 w-3 shrink-0" />
             <span>{dateStr}</span>
+            <button
+              onClick={() => onEditTime(post)}
+              className="text-gray-400 transition-colors hover:text-blue-500"
+              title="Edit suggested time"
+            >
+              <LuPencil className="h-3 w-3" />
+            </button>
           </div>
         )}
 
@@ -711,6 +727,7 @@ function DraftCard({
 function DraftsSection({
   posts,
   onEdit,
+  onEditTime,
   onViewAll,
   onApprove,
   onReject,
@@ -719,6 +736,7 @@ function DraftsSection({
 }: {
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
+  onEditTime: (post: AgentPost) => void;
   onViewAll: (posts: AgentPost[]) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
@@ -762,6 +780,7 @@ function DraftsSection({
             key={post.id}
             post={post}
             onEdit={onEdit}
+            onEditTime={onEditTime}
             onApprove={onApprove}
             onReject={onReject}
             isApproving={approvingIds.has(post.id)}
@@ -935,6 +954,10 @@ export default function AutomationView() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [editPost, setEditPost] = useState<AgentPost | null>(null);
   const [editDraftPost, setEditDraftPost] = useState<AgentPost | null>(null);
+  const [rejectConfirmPost, setRejectConfirmPost] = useState<AgentPost | null>(null);
+  const [timeEditPost, setTimeEditPost] = useState<AgentPost | null>(null);
+  const [timeEditDraft, setTimeEditDraft] = useState("");
+  const [savingTimeEdit, setSavingTimeEdit] = useState(false);
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewAllPosts, setViewAllPosts] = useState<AgentPost[]>([]);
   const [restoringConv, setRestoringConv] = useState(true);
@@ -1030,6 +1053,30 @@ export default function AutomationView() {
     },
     [workspaceId, queryClient]
   );
+
+  // ── time edit modal ──
+  const openTimeEdit = (post: AgentPost) => {
+    setTimeEditPost(post);
+    setTimeEditDraft(post.suggested_publish_at ? isoToLocal(post.suggested_publish_at) : "");
+  };
+
+  const saveTimeEdit = async () => {
+    if (!timeEditPost || !timeEditDraft) return;
+    const newIso = new Date(timeEditDraft).toISOString();
+    setSavingTimeEdit(true);
+    try {
+      await postsService(workspaceId).patchPost(timeEditPost.id, { suggested_publish_at: newIso });
+      setPosts((prev) =>
+        prev.map((p) => (p.id === timeEditPost.id ? { ...p, suggested_publish_at: newIso } : p))
+      );
+      toast.success("Suggested time updated.");
+      setTimeEditPost(null);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setSavingTimeEdit(false);
+    }
+  };
 
   // ── polling ──
   const stopPolling = useCallback(() => {
@@ -1576,38 +1623,46 @@ export default function AutomationView() {
           </button>
 
           {/* Questions before drafting toggle */}
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs transition-colors",
-              !settings.ignore_grilling
-                ? "border-blue-300 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-white text-gray-400"
-            )}
-          >
-            <span>Questions before drafting</span>
-            <Toggle
-              small
-              checked={!settings.ignore_grilling}
-              onChange={(v) => handleSettingChange("ignore_grilling", !v)}
-            />
-          </div>
+          {!settingsLoaded ? (
+            <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
+          ) : (
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs",
+                !settings.ignore_grilling
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "bg-white text-gray-400"
+              )}
+            >
+              <span>Questions before drafting</span>
+              <Toggle
+                small
+                checked={!settings.ignore_grilling}
+                onChange={(v) => handleSettingChange("ignore_grilling", !v)}
+              />
+            </div>
+          )}
 
           {/* Headlines before drafting toggle */}
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs transition-colors",
-              !settings.ignore_headline
-                ? "border-blue-300 bg-blue-50 text-blue-700"
-                : "border-gray-200 bg-white text-gray-400"
-            )}
-          >
-            <span>Headlines before drafting</span>
-            <Toggle
-              small
-              checked={!settings.ignore_headline}
-              onChange={(v) => handleSettingChange("ignore_headline", !v)}
-            />
-          </div>
+          {!settingsLoaded ? (
+            <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
+          ) : (
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs",
+                !settings.ignore_headline
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "bg-white text-gray-400"
+              )}
+            >
+              <span>Headlines before drafting</span>
+              <Toggle
+                small
+                checked={!settings.ignore_headline}
+                onChange={(v) => handleSettingChange("ignore_headline", !v)}
+              />
+            </div>
+          )}
         </div>
 
         {/* Agent composer card */}
@@ -1695,8 +1750,12 @@ export default function AutomationView() {
                     <DraftCard
                       post={editDraftPost}
                       onEdit={setEditPost}
+                      onEditTime={openTimeEdit}
                       onApprove={handleApprovePost}
-                      onReject={handleRejectPost}
+                      onReject={(id) => {
+                        const p = editDraftPost.id === id ? editDraftPost : null;
+                        if (p) setRejectConfirmPost(p);
+                      }}
                       isApproving={approvingIds.has(editDraftPost.id)}
                       isRejecting={rejectingIds.has(editDraftPost.id)}
                     />
@@ -1787,12 +1846,16 @@ export default function AutomationView() {
                             <DraftsSection
                               posts={msgPosts}
                               onEdit={setEditPost}
+                              onEditTime={openTimeEdit}
                               onViewAll={(p) => {
                                 setViewAllPosts(p);
                                 setViewAllOpen(true);
                               }}
                               onApprove={handleApprovePost}
-                              onReject={handleRejectPost}
+                              onReject={(id) => {
+                                const p = msgPosts.find((x) => x.id === id);
+                                if (p) setRejectConfirmPost(p);
+                              }}
                               approvingIds={approvingIds}
                               rejectingIds={rejectingIds}
                             />
@@ -2356,6 +2419,61 @@ export default function AutomationView() {
 
       <KnowledgeBaseModal isOpen={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
 
+      {/* Delete confirmation modal */}
+      <RejectConfirmModal
+        isOpen={rejectConfirmPost !== null}
+        onClose={() => setRejectConfirmPost(null)}
+        postExcerpt={rejectConfirmPost?.body?.split("\n")[0] ?? ""}
+        isConfirming={rejectConfirmPost ? rejectingIds.has(rejectConfirmPost.id) : false}
+        onConfirm={() => {
+          if (rejectConfirmPost) {
+            handleRejectPost(rejectConfirmPost.id);
+            setRejectConfirmPost(null);
+          }
+        }}
+      />
+
+      {/* Time edit modal */}
+      <Modal
+        isOpen={timeEditPost !== null}
+        onClose={() => setTimeEditPost(null)}
+        title="Edit Suggested Publish Time"
+        width="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Date &amp; Time (local)
+            </label>
+            <input
+              type="datetime-local"
+              value={timeEditDraft}
+              onChange={(e) => setTimeEditDraft(e.target.value)}
+              className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          {timeEditDraft && (
+            <p className="text-xs text-gray-400">UTC: {new Date(timeEditDraft).toISOString()}</p>
+          )}
+        </div>
+        <div className="mt-6 flex items-center justify-end gap-2.5">
+          <button
+            onClick={() => setTimeEditPost(null)}
+            disabled={savingTimeEdit}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={saveTimeEdit}
+            disabled={!timeEditDraft || savingTimeEdit}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {savingTimeEdit ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </Modal>
+
       <EditDraftModal
         post={editPost}
         onClose={() => setEditPost(null)}
@@ -2380,6 +2498,17 @@ export default function AutomationView() {
         onEdit={(post) => {
           setViewAllOpen(false);
           setEditPost(post);
+        }}
+        onApprove={(id) => {
+          setViewAllOpen(false);
+          handleApprovePost(id);
+        }}
+        onReject={(id) => {
+          const p = viewAllPosts.find((x) => x.id === id);
+          if (p) {
+            setViewAllOpen(false);
+            setRejectConfirmPost(p);
+          }
         }}
       />
     </div>
