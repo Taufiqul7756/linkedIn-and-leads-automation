@@ -1,17 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import {
-  LuX,
-  LuPencil,
-  LuPlus,
-  LuSettings,
-  LuSend,
-  LuImage,
-  LuVideo,
-  LuUpload,
-  LuLoader,
-} from "react-icons/lu";
+import { LuX, LuPencil, LuImage, LuVideo, LuUpload, LuLoader } from "react-icons/lu";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
 import TiptapEditor from "@/components/ui/TiptapEditor";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -120,10 +110,8 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
-  const [title, setTitle] = useState("");
   const [bodyJson, setBodyJson] = useState<object>({ type: "doc", content: [] });
   const [editorKey, setEditorKey] = useState(0);
-  const [changeMsg, setChangeMsg] = useState("");
   const [activeMedia, setActiveMedia] = useState<"image" | "video">("image");
   const [imageRemoved, setImageRemoved] = useState(false);
   const [videoRemoved, setVideoRemoved] = useState(false);
@@ -139,8 +127,6 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!post) return;
-    setTitle(post.headline ?? "");
-    setChangeMsg("");
     setActiveMedia(post.media_type === "video" ? "video" : "image");
     setImageRemoved(false);
     setVideoRemoved(false);
@@ -260,16 +246,33 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
 
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Title — only shown when the post has a headline */}
+          {/* Scheduled time */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Scheduled time</label>
+            <p className="mb-2 text-xs text-gray-400">(agent-suggested, editable)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+              <input
+                type="time"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              />
+            </div>
+          </div>
+
+          {/* Topic — only shown when the post has a headline */}
           {post.headline && (
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-              />
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Topic</label>
+              <p className="rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-500">
+                {post.headline}
+              </p>
             </div>
           )}
 
@@ -283,52 +286,6 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
               minHeight="280px"
               placeholder="Write your LinkedIn post…"
             />
-          </div>
-
-          {/* Mini composer — ask for changes (disabled, coming soon) */}
-          <div className="relative">
-            <div className="rounded-xl border border-gray-200 px-4 py-3 opacity-50 pointer-events-none select-none">
-              <textarea
-                value={changeMsg}
-                onChange={(e) => setChangeMsg(e.target.value)}
-                placeholder={`Ask for changes, or "show all drafts"...`}
-                rows={2}
-                disabled
-                className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
-              />
-              <div className="mt-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
-                  Using your knowledge base
-                  <button disabled className="text-teal-400">
-                    <LuX className="h-3 w-3" />
-                  </button>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    disabled
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
-                  >
-                    <LuPlus className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    disabled
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
-                  >
-                    <LuSettings className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    disabled
-                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
-                  >
-                    Send
-                    <LuSend className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            <span className="absolute -top-2 -right-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
-              Soon
-            </span>
           </div>
 
           {/* Media — Image + Video side by side */}
@@ -528,26 +485,6 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
                   </p>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Scheduled time */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Scheduled time</label>
-            <p className="mb-2 text-xs text-gray-400">(agent-suggested, editable)</p>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="date"
-                value={scheduledDate}
-                onChange={(e) => setScheduledDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-              />
-              <input
-                type="time"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-              />
             </div>
           </div>
         </div>
