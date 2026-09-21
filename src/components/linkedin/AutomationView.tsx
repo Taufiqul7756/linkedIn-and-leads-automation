@@ -19,6 +19,8 @@ import {
   LuLink,
   LuUpload,
   LuTrash2,
+  LuAlignLeft,
+  LuImage,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -578,7 +580,7 @@ function DraftCard({
 
   return (
     // Outer wrapper: overflow-visible so floating buttons protrude above top border
-    <div className="relative h-72 w-80 shrink-0">
+    <div className="group relative h-72 w-96 shrink-0">
       {/* Floating area — approve/reject buttons for drafts, status pill for everything else */}
       <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
         {isDraft && (
@@ -672,15 +674,33 @@ function DraftCard({
           )}
         </div>
 
-        {/* Edit pencil — bottom right, hidden for published posts */}
+        {/* Hover action buttons — bottom center, hidden for published posts */}
         {post.status !== "published" && (
-          <button
-            onClick={() => onEdit(post)}
-            className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-          >
-            <LuPencil className="h-3 w-3" />
-            Edit
-          </button>
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              onClick={() => onEdit(post)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <LuAlignLeft className="h-3 w-3" />
+              Edit text
+            </button>
+            <button
+              onClick={() => onEdit(post)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <LuImage className="h-3 w-3" />
+              Edit image
+            </button>
+            {!post.suggested_publish_at && (
+              <button
+                onClick={() => onEdit(post)}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              >
+                <LuClock className="h-3 w-3" />
+                Edit time
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

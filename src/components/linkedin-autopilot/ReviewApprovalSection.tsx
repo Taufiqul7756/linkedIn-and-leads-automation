@@ -9,6 +9,9 @@ import {
   LuCalendarClock,
   LuChevronDown,
   LuMessageSquare,
+  LuAlignLeft,
+  LuImage,
+  LuClock,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
@@ -533,14 +536,32 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                     )}
                   </div>
 
-                  {/* Edit — pinned bottom-right, sits above overflow-hidden via absolute on outer */}
-                  <button
-                    onClick={() => setEditPost(post)}
-                    className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 opacity-0 shadow-sm transition-all group-hover:opacity-100 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    <LuPencil className="h-3 w-3" />
-                    Edit
-                  </button>
+                  {/* Hover action buttons — bottom center */}
+                  <div className="absolute bottom-3 right-3 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={() => setEditPost(post)}
+                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      <LuAlignLeft className="h-3 w-3" />
+                      Edit text
+                    </button>
+                    <button
+                      onClick={() => setEditPost(post)}
+                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      <LuImage className="h-3 w-3" />
+                      Edit image
+                    </button>
+                    {!post.suggested_publish_at && (
+                      <button
+                        onClick={() => setEditPost(post)}
+                        className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                      >
+                        <LuClock className="h-3 w-3" />
+                        Edit time
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
