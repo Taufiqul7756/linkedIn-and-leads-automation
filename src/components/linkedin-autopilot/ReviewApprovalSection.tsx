@@ -12,6 +12,7 @@ import {
   LuAlignLeft,
   LuImage,
   LuClock,
+  LuBot,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
@@ -536,7 +537,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                     )}
                   </div>
 
-                  {/* Hover action buttons — bottom center */}
+                  {/* Hover action buttons — bottom right */}
                   <div className="absolute bottom-3 right-3 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       onClick={() => setEditPost(post)}
@@ -561,6 +562,15 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                         Edit time
                       </button>
                     )}
+                    <button
+                      onClick={() => {
+                        window.location.href = `/linkedin/automation?editPostId=${post.id}`;
+                      }}
+                      className="flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2 py-1 text-xs font-medium text-violet-600 shadow-sm hover:bg-violet-50"
+                    >
+                      <LuBot className="h-3 w-3" />
+                      Edit with agent
+                    </button>
                   </div>
                 </div>
               </div>

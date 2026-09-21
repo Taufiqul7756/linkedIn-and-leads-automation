@@ -934,6 +934,7 @@ export default function AutomationView() {
   const [history, setHistory] = useState<PaginatedConversations | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [editPost, setEditPost] = useState<AgentPost | null>(null);
+  const [editDraftPost, setEditDraftPost] = useState<AgentPost | null>(null);
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewAllPosts, setViewAllPosts] = useState<AgentPost[]>([]);
   const [restoringConv, setRestoringConv] = useState(true);
@@ -1162,6 +1163,18 @@ export default function AutomationView() {
       try {
         const params = new URLSearchParams(window.location.search);
         const convId = params.get("conv");
+        const editPostId = params.get("editPostId");
+
+        if (editPostId) {
+          // blank new chat — keep editPostId in URL, skip loading last conversation
+          try {
+            const data = await svc().getAgentPosts({ ids: [editPostId] });
+            if (data.results[0]) setEditDraftPost(data.results[0]);
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
 
         const targetId =
           convId ??
@@ -1195,6 +1208,7 @@ export default function AutomationView() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("conv") === conversation.id) return;
     params.set("conv", conversation.id);
+    params.delete("editPostId"); // clear once conversation is created
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [conversation?.id]);
 
@@ -1401,6 +1415,7 @@ export default function AutomationView() {
     setPosts([]);
     setMessage("");
     setUrlInput("");
+    setEditDraftPost(null);
     window.history.replaceState(null, "", window.location.pathname);
     textareaRef.current?.focus();
   };
@@ -1681,9 +1696,24 @@ export default function AutomationView() {
                       />
                     </div>
                     <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                      Tell me what you want and I&apos;ll research your brand, ask a couple of quick
-                      questions, then draft posts right here for you to approve.
+                      {editDraftPost
+                        ? "Here's the draft you selected. Tell me how you'd like to improve it."
+                        : "Tell me what you want and I\u2019ll research your brand, ask a couple of quick questions, then draft posts right here for you to approve."}
                     </div>
+                  </div>
+                )}
+
+                {/* Draft card pre-loaded from editPostId URL param */}
+                {!restoringConv && !conversation && editDraftPost && (
+                  <div className="mt-2 ml-11">
+                    <DraftCard
+                      post={editDraftPost}
+                      onEdit={setEditPost}
+                      onApprove={handleApprovePost}
+                      onReject={handleRejectPost}
+                      isApproving={approvingIds.has(editDraftPost.id)}
+                      isRejecting={rejectingIds.has(editDraftPost.id)}
+                    />
                   </div>
                 )}
 
