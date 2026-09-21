@@ -77,6 +77,7 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 - Actions per card: Edit → `EditPostModal` · Regenerate Post · Regenerate Image · Delete → `RejectConfirmModal` · Approve → `POST .../approve/`
 - **Regenerate modal** (`RegeneratePostConfirmModal`): simplified to two controls only — Make Longer toggle (sends `mode: "extend"`, keeps body and appends) + Instructions textarea (optional); sends `POST .../regenerate/` with `{ mode?, instruction? }`
 - Approve invalidates `["posts","draft",workspaceId]` (partial match, `exact: false`) + `["posts","all"]`
+- **Conversation filter** (agent mode only): dropdown to filter drafts by specific conversation; fetches `GET /agent/conversations/` (query key `["agent-conversations-filter",workspaceId]`); "All conversations" shows all agent drafts; selecting a conversation filters to its `post_ids`
 
 ### 5. Post Management
 
@@ -95,6 +96,27 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 - **Plans History button** in section header (agent mode): opens `PlansHistoryModal` listing all batches of marketing plans
 - Per-row actions: Schedule / Reschedule / Retry / External link; delete icon (`LuTrash2`) only — no three-dot dropdown
 - Plans loaded once via `getAllPlans("all")`; stored in `Map<string, MarketingPlan>` (O(1) per-row lookup); shared cache key `["plans","all",workspaceId]` with PlansHistoryModal
+- **Back-to-draft**: approved/scheduled posts show a "Move back to draft" button; confirmation modal → `PATCH posts/{id}/` with `{ status: "draft" }`; invalidates `["posts","all"]`, `["posts","draft"]`, `["post-stats"]`, refetches `["posts","calendar"]`
+
+### 5a. Calendar View
+
+Toggle between **List** (table), **Month**, and **Week** views via tab buttons in the section header.
+
+- Calendar data fetched via `postsService.getPostsForCalendar(state?)` → up to 200 non-draft posts; query key `["posts","calendar",workspaceId,mode]`
+- Post date priority: `scheduled_at` → `published_at` → `suggested_publish_at`
+- Status colour coding: published=green · scheduled=blue · approved=emerald · draft=violet · failed=red
+
+**Month View** (`CalendarMonthView`):
+- Nav arrows to move between months; today highlighted
+- Posts rendered as chips per day cell; click → opens `ViewPostModal`
+- **Drag-and-drop reschedule**: drag a chip to another day cell → calls `onDateChange(postId, newIsoDate)` → `PATCH posts/{id}/` with `{ scheduled_at }` (preserves time component) → `refetchQueries(["posts","calendar"])`
+- Past day cells shown with lighter background; drop on past day still allowed
+
+**Week View** (`CalendarWeekView`):
+- 7-column grid (Sun–Sat) with hourly rows; current time line indicator
+- Posts placed at their exact time slot; click → `ViewPostModal`
+- **Drag-and-drop reschedule**: drag to any 15-minute slot (`snapToQuarter` snaps pixel Y to nearest 15 min) → calls `onDateChange` with new ISO datetime → same PATCH as month view
+- Drop label shows snapped target time during drag
 
 ### 6. Agent Mode (Agentic mode only)
 
@@ -181,7 +203,7 @@ Phase states: `c-generating | c-polling | c-done`
 | `ProfileWebsite` | id, url, kind, purpose, status (string), summary, facets, error, created_at |
 | `PlanningBrief` | id, target_audience (nullable), region (nullable, IANA tz), days, parent_plan (nullable uuid — null when planned from scratch) |
 | `MarketingPlan` | id, batch, brief: PlanningBrief\|null, linkedin_profile: string\|null, title, angle, target_audience, rationale, pillars, sample_hooks, cadence, post_count (number), has_follow_up (boolean), created_at |
-| `PostType` | id, state ("agent"\|"manual"), plan (nullable uuid), headline (nullable), body, hashtags, image_url, image_status, tone, length, use_emoji, writer_model, status, scheduled_at, suggested_publish_at (nullable), published_at, engagement (nullable), cta (nullable), created_at |
+| `PostType` | id, state ("agent"\|"manual"), plan (nullable uuid), headline (nullable), body, body_blocks (Tiptap ProseMirror doc or `{}`), hashtags, image_url, image_status, video_url, video_file, media_type ("image"\|"video"\|""), tone, length, use_emoji, use_knowledge, writer_model, status, scheduled_at, suggested_publish_at (nullable), published_at, engagement (nullable), cta (nullable), reference_link (nullable), created_at |
 
 **Note**: `LinkedInProfile` has `profile_url` (not `url`) and `facets` object (not `name`/`headline`). Username displayed by extracting from `profile_url` via regex `/linkedin\.com\/in\/([^/?#]+)/`.
 
@@ -249,10 +271,18 @@ Top-level:
 | GET | `/api/v1/ai-models/` | List available AI models |
 | GET | `/api/v1/linkedin/callback/` | OAuth callback |
 
+## Edit Post Modal
+
+`EditPostModal` supports **dual media** (image + video):
+
+- Two tabs: **Image** / **Video** (controlled by `activeMedia: "image" | "video"`, initialised from `post.media_type`)
+- Image tab: existing image display, upload new (`POST posts/{id}/upload_image/`), generate AI image, remove
+- Video tab: existing video playback (`<video>`), upload new file (mp4/quicktime/webm), remove (`video_url: ""` in PATCH)
+- On save: `PATCH posts/{id}/` — sends changed fields only; `videoRemoved` sets `video_url: ""`
+- Edit button hidden on `published` posts
+
 ## Out of Scope (remaining)
 
 - Real-time agent status polling (WebSocket)
-- Calendar view
 - Bulk delete confirmation modal
-- Image removal via PATCH
 - Hashtag PATCH (backend fixing)
