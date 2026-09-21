@@ -19,7 +19,6 @@ import {
   LuLink,
   LuUpload,
   LuTrash2,
-  LuFilter,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -262,7 +261,15 @@ function hasPendingInterrupt(conv: Conversation): boolean {
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({
+  checked,
+  onChange,
+  small = false,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  small?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -270,14 +277,22 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cn(
-        "inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+        "inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+        small ? "h-4 w-8" : "h-6 w-11",
         checked ? "bg-blue-600" : "bg-gray-200"
       )}
     >
       <span
         className={cn(
-          "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ease-in-out",
-          checked ? "translate-x-5" : "translate-x-0"
+          "inline-block rounded-full bg-white shadow transition-transform duration-200 ease-in-out",
+          small ? "h-3 w-3" : "h-5 w-5",
+          small
+            ? checked
+              ? "translate-x-4"
+              : "translate-x-0"
+            : checked
+              ? "translate-x-5"
+              : "translate-x-0"
         )}
       />
     </button>
@@ -882,7 +897,6 @@ export default function AutomationView() {
   // UI state
   const [message, setMessage] = useState("");
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -935,7 +949,6 @@ export default function AutomationView() {
   const postsRef = useRef<AgentPost[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
-  const filterRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1201,15 +1214,6 @@ export default function AutomationView() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [settingsOpen]);
-
-  useEffect(() => {
-    if (!filterOpen) return;
-    const h = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [filterOpen]);
 
   useEffect(() => {
     if (!plusOpen) return;
@@ -1550,91 +1554,39 @@ export default function AutomationView() {
             )}
           </button>
 
-          {/* Filter dropdown */}
-          <div ref={filterRef} className="relative">
-            <button
-              onClick={() => setFilterOpen((v) => !v)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
-                filterOpen
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-              )}
-            >
-              <LuFilter className="h-3.5 w-3.5" />
-              Filter
-              <LuChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform duration-150",
-                  filterOpen && "rotate-180"
-                )}
-              />
-            </button>
-
-            {filterOpen && (
-              <div className="absolute left-0 top-full z-20 mt-1.5 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                <p className="px-4 pt-3.5 pb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">
-                  Composer defaults
-                </p>
-                <div className="divide-y divide-gray-100 px-4 pb-3">
-                  {/* Ask questions */}
-                  <label className="flex cursor-pointer items-start gap-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={!settings.ignore_grilling}
-                      onChange={(e) => handleSettingChange("ignore_grilling", !e.target.checked)}
-                      className="mt-0.5 h-4 w-4 accent-blue-600"
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">Ask me questions first</p>
-                      <p className="text-xs text-gray-400">
-                        If off, skips straight to headlines using your defaults
-                      </p>
-                    </div>
-                  </label>
-                  {/* Show headlines */}
-                  <label className="flex cursor-pointer items-start gap-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={!settings.ignore_headline}
-                      onChange={(e) => handleSettingChange("ignore_headline", !e.target.checked)}
-                      className="mt-0.5 h-4 w-4 accent-blue-600"
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">
-                        Show headlines to pick from
-                      </p>
-                      <p className="text-xs text-gray-400">If off, drafts are generated directly</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
+          {/* Questions before drafting toggle */}
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs transition-colors",
+              !settings.ignore_grilling
+                ? "border-blue-300 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-white text-gray-400"
             )}
+          >
+            <span>Questions before drafting</span>
+            <Toggle
+              small
+              checked={!settings.ignore_grilling}
+              onChange={(v) => handleSettingChange("ignore_grilling", !v)}
+            />
           </div>
 
-          {/* Active filter chips */}
-          {!settings.ignore_grilling && (
-            <span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
-              Questions before drafting
-              <button
-                onClick={() => handleSettingChange("ignore_grilling", true)}
-                className="ml-0.5 text-blue-400 hover:text-blue-600"
-              >
-                <LuX className="h-3 w-3" />
-              </button>
-            </span>
-          )}
-          {!settings.ignore_headline && (
-            <span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
-              Headlines before drafting
-              <button
-                onClick={() => handleSettingChange("ignore_headline", true)}
-                className="ml-0.5 text-blue-400 hover:text-blue-600"
-              >
-                <LuX className="h-3 w-3" />
-              </button>
-            </span>
-          )}
+          {/* Headlines before drafting toggle */}
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs transition-colors",
+              !settings.ignore_headline
+                ? "border-blue-300 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-white text-gray-400"
+            )}
+          >
+            <span>Headlines before drafting</span>
+            <Toggle
+              small
+              checked={!settings.ignore_headline}
+              onChange={(v) => handleSettingChange("ignore_headline", !v)}
+            />
+          </div>
         </div>
 
         {/* Agent composer card */}
