@@ -74,7 +74,8 @@ Horizontal progress bar at the top of the page. Accepts `mode: "agentic" | "manu
 - Query key includes mode: `["posts","draft",workspaceId,mode]` — switching tabs auto-refetches
 - Polls every 5s after Generate fires (via `["posts-generating"]` flag); stops when all drafts have `image_status !== "pending"`
 - Two-column card grid: author avatar, Draft badge, post body, image area, hashtags
-- Actions per card: Edit → `EditPostModal` · Regenerate Post · Regenerate Image · Delete → `RejectConfirmModal` · Approve → `POST .../approve/`
+- Actions per card: **hover buttons** (bottom-right, `opacity-0 group-hover:opacity-100`) — Edit text · Edit image · Edit time (if no suggested time) · Edit with agent → navigates to `/linkedin/automation?editPostId=<id>` (hard nav via `window.location.href`) · Delete → `RejectConfirmModal` · Approve → `POST .../approve/`
+- Time row has pencil icon → opens `ScheduleModal` pre-filled with current `suggested_publish_at`
 - **Regenerate modal** (`RegeneratePostConfirmModal`): simplified to two controls only — Make Longer toggle (sends `mode: "extend"`, keeps body and appends) + Instructions textarea (optional); sends `POST .../regenerate/` with `{ mode?, instruction? }`
 - Approve invalidates `["posts","draft",workspaceId]` (partial match, `exact: false`) + `["posts","all"]`
 - **Conversation filter** (agent mode only): dropdown to filter drafts by specific conversation; fetches `GET /agent/conversations/` (query key `["agent-conversations-filter",workspaceId]`); "All conversations" shows all agent drafts; selecting a conversation filters to its `post_ids`
@@ -273,13 +274,27 @@ Top-level:
 
 ## Edit Post Modal
 
-`EditPostModal` supports **dual media** (image + video):
+`EditPostModal` (`src/components/linkedin-autopilot/EditPostModal.tsx`) — used from Review & Approval section:
 
-- Two tabs: **Image** / **Video** (controlled by `activeMedia: "image" | "video"`, initialised from `post.media_type`)
-- Image tab: existing image display, upload new (`POST posts/{id}/upload_image/`), generate AI image, remove
-- Video tab: existing video playback (`<video>`), upload new file (mp4/quicktime/webm), remove (`video_url: ""` in PATCH)
+- **Topic** (read-only `<p>`, renamed from "Title") — shows `post.headline`; not editable
+- **Scheduled time** section at the TOP of the form (moved up from bottom)
+- Mini composer chatbox **removed** (was "coming soon")
+- Supports **dual media** (image + video):
+  - Two tabs: **Image** / **Video** (controlled by `activeMedia: "image" | "video"`, initialised from `post.media_type`)
+  - Image tab: existing image display, upload new (`POST posts/{id}/upload_image/`), generate AI image, remove
+  - Video tab: existing video playback (`<video>`), upload new file (mp4/quicktime/webm), remove (`video_url: ""` in PATCH)
 - On save: `PATCH posts/{id}/` — sends changed fields only; `videoRemoved` sets `video_url: ""`
 - Edit button hidden on `published` posts
+
+## Edit Draft Modal (Agent Composer)
+
+`EditDraftModal` (`src/components/linkedin/EditDraftModal.tsx`) — used from agent DraftCard "Edit text" button:
+
+- **Topic** (read-only `<p>`, renamed from "Title") — shows `post.headline`; not editable
+- **Scheduled time** section at the TOP of the scrollable form
+- Mini composer chatbox **removed** (was "coming soon")
+- Body editing via Tiptap rich-text editor; `PATCH posts/{id}/` on save with `body_blocks` + `body`
+- Time-only edit available separately via pencil icon on the time row → `datetime-local` input in a dedicated `<Modal width="sm">` (not the full EditDraftModal)
 
 ## Out of Scope (remaining)
 

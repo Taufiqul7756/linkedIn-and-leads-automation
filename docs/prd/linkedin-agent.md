@@ -388,7 +388,7 @@ type BlockNode =
 
 ## V2 — Agent Mode Integration (see also: `docs/agent-mode-integration.md`)
 
-> Full spec in `agent-mode-integration-4-sep.md`. Summary of what changed from V1:
+> Full spec in `docs/agent-mode-integration.md`. Summary of what changed from V1:
 
 ### New: Attachments (per-conversation sources)
 
@@ -440,6 +440,36 @@ interface AgentSettings {
 - Load into Tiptap editor; `PATCH` back as `body_blocks` — `body` is re-derived server-side
 - Custom attrs: `bulletList.attrs.marker` (the glyph: `-`, `*`, `•`, `→`), `attrs.tight` (no blank line above)
 - Pre-Tiptap array format is **rejected** with `400` on `body_blocks`
+
+### DraftCard Hover Actions & Time Edit
+
+`DraftCard` in `AutomationView.tsx` — shows agent-generated drafts in the composer:
+
+- Size: `h-72 w-96`; outer wrapper has `group` class for CSS `group-hover`
+- **Hover buttons** (bottom-right, `opacity-0 group-hover:opacity-100`): **Edit text** · **Edit image** — both open `EditDraftModal`
+- **No "Edit with agent" button** on agent composer cards (only on Review & Approval cards)
+- Time row: `LuPencil` icon → opens a **dedicated time-edit modal** (`<Modal width="sm">`) with a `datetime-local` input; saves via `PATCH posts/{id}/` `{ suggested_publish_at }`, then invalidates posts cache
+- Delete (reject) flow: clicking the `LuX` floating button sets `rejectConfirmPost` state → `RejectConfirmModal` confirmation before calling `onReject`
+- `LuCheck` floating button (top-right, `-translate-y-1/2`): approves post; no confirmation required
+
+### Edit with Agent Flow (Review & Approval → Agent Page)
+
+When the user clicks **Edit with agent** on a Review & Approval card:
+
+1. `window.location.href = /linkedin/automation?editPostId=<id>` — hard navigation (full remount)
+2. Agent page restore effect detects `?editPostId=` param → skips last-conv restore; fetches the post; stores in `editDraftPost` state; keeps `editPostId` in URL
+3. Blank chat area renders the fetched `DraftCard` above the message input
+4. User types a prompt and sends → conversation is created → `?conv=<id>` replaces `?editPostId=` in URL
+5. `handleNewChat()` clears `editDraftPost` state
+
+### AllDraftsModal Card Design
+
+`AllDraftsModal` (`src/components/linkedin/AllDraftsModal.tsx`) — shows all drafts across conversations:
+
+- `MiniCard` now matches `DraftCard` design exactly: `h-72 w-full`, `group` class, same media/body/time rendering
+- Floating **approve** (`LuCheck`) and **reject** (`LuX`) buttons top-right, `-translate-y-1/2` — only shown for `status === "draft"`
+- Reject → `onReject` is intercepted at `AutomationView` level → sets `rejectConfirmPost` → `RejectConfirmModal` shown
+- Hover buttons bottom-right: **Edit text** · **Edit image** — both call `onEdit(post)`
 
 ### KnowledgeBaseModal Accordion Redesign
 

@@ -35,8 +35,11 @@ async function axiosPatch<T>(path: string, data?: unknown): Promise<T> {
 }
 
 export const linkedinAgentService = (workspaceId: string) => ({
-  createConversation: () =>
-    axiosPost<Conversation>(`/workspaces/${workspaceId}/agent/conversations/`),
+  createConversation: (postId?: string) =>
+    axiosPost<Conversation>(
+      `/workspaces/${workspaceId}/agent/conversations/`,
+      postId ? { post: postId } : undefined
+    ),
 
   getConversations: (page = 1, pageSize = 25) =>
     axiosGet<PaginatedConversations>(

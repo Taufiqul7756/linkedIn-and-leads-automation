@@ -263,6 +263,58 @@ function extractTiptapText(nodes: unknown[]): string {
     .join(" ");
 }
 
+// Post snapshot shape inside kind:"posts" and kind:"edit" message payloads.
+// Optional fields match AgentPost field names exactly — backend adds them progressively.
+type PostSnapshot = {
+  post_id: string;
+  headline: string;
+  body: string;
+  body_blocks: object | string;
+  hashtags: string[];
+  cta: string;
+  // media (same names as AgentPost)
+  image_url?: string;
+  image_file?: string | null;
+  image_status?: string;
+  video_url?: string;
+  video_file?: string | null;
+  media_type?: string;
+  // scheduling
+  suggested_publish_at?: string | null;
+};
+
+function snapshotToAgentPost(snap: PostSnapshot): AgentPost {
+  return {
+    id: snap.post_id,
+    state: "agent",
+    plan: null,
+    reference_link: null,
+    tone: "",
+    length: "",
+    use_emoji: false,
+    use_knowledge: false,
+    length_hint: "",
+    writer_model: "",
+    headline: snap.headline,
+    body: snap.body,
+    body_blocks: snap.body_blocks,
+    hashtags: Array.isArray(snap.hashtags) ? snap.hashtags.join(" ") : (snap.hashtags ?? ""),
+    cta: snap.cta ?? null,
+    image_url: snap.image_url ?? "",
+    image_file: snap.image_file ?? null,
+    image_status: snap.image_status ?? "",
+    video_url: snap.video_url ?? "",
+    video_file: snap.video_file ?? null,
+    media_type: snap.media_type ?? "",
+    status: "draft",
+    scheduled_at: null,
+    suggested_publish_at: snap.suggested_publish_at ?? null,
+    published_at: null,
+    linkedin_urn: "",
+    created_at: "",
+  };
+}
+
 function hasPendingInterrupt(conv: Conversation): boolean {
   const pi = conv.pending_interrupt as { id?: string };
   return !!pi?.id;
@@ -953,7 +1005,6 @@ export default function AutomationView() {
   const [history, setHistory] = useState<PaginatedConversations | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [editPost, setEditPost] = useState<AgentPost | null>(null);
-  const [editDraftPost, setEditDraftPost] = useState<AgentPost | null>(null);
   const [rejectConfirmPost, setRejectConfirmPost] = useState<AgentPost | null>(null);
   const [timeEditPost, setTimeEditPost] = useState<AgentPost | null>(null);
   const [timeEditDraft, setTimeEditDraft] = useState("");
@@ -1199,10 +1250,18 @@ export default function AutomationView() {
         const editPostId = params.get("editPostId");
 
         if (editPostId) {
-          // blank new chat — keep editPostId in URL, skip loading last conversation
+          // Create a conversation pre-linked to this post
           try {
-            const data = await svc().getAgentPosts({ ids: [editPostId] });
-            if (data.results[0]) setEditDraftPost(data.results[0]);
+            const created = await svc().createConversation(editPostId);
+            // If the POST response already has messages use it directly; otherwise GET for full data
+            const conv =
+              created.messages.length > 0 ? created : await svc().getConversation(created.id);
+            setConversation(conv);
+            refreshHistory();
+            if (conv.status === "running") startPolling(conv.id);
+            if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
+              fetchPosts(conv.artifacts.post_ids);
+            }
           } catch {
             /* ignore */
           }
@@ -1448,7 +1507,6 @@ export default function AutomationView() {
     setPosts([]);
     setMessage("");
     setUrlInput("");
-    setEditDraftPost(null);
     window.history.replaceState(null, "", window.location.pathname);
     textareaRef.current?.focus();
   };
@@ -1737,28 +1795,9 @@ export default function AutomationView() {
                       />
                     </div>
                     <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
-                      {editDraftPost
-                        ? "Here's the draft you selected. Tell me how you'd like to improve it."
-                        : "Tell me what you want and I\u2019ll research your brand, ask a couple of quick questions, then draft posts right here for you to approve."}
+                      Tell me what you want and I&apos;ll research your brand, ask a couple of quick
+                      questions, then draft posts right here for you to approve.
                     </div>
-                  </div>
-                )}
-
-                {/* Draft card pre-loaded from editPostId URL param */}
-                {!restoringConv && !conversation && editDraftPost && (
-                  <div className="mt-2 ml-11">
-                    <DraftCard
-                      post={editDraftPost}
-                      onEdit={setEditPost}
-                      onEditTime={openTimeEdit}
-                      onApprove={handleApprovePost}
-                      onReject={(id) => {
-                        const p = editDraftPost.id === id ? editDraftPost : null;
-                        if (p) setRejectConfirmPost(p);
-                      }}
-                      isApproving={approvingIds.has(editDraftPost.id)}
-                      isRejecting={rejectingIds.has(editDraftPost.id)}
-                    />
                   </div>
                 )}
 
@@ -1803,12 +1842,13 @@ export default function AutomationView() {
                   // Agent messages — edit turn
                   if (msg.kind === "edit") {
                     const field = msg.payload.field as "text" | "image" | undefined;
+                    const afterSnapshots = (msg.payload.after as PostSnapshot[] | undefined) ?? [];
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
                           <LuPencil className="h-4 w-4 text-white" />
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700">
                             <LuPencil className="h-3 w-3" />
                             {field === "image" ? "Image updated" : "Post edited"}
@@ -1816,6 +1856,25 @@ export default function AutomationView() {
                           {msg.text && (
                             <div className="break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
                               {msg.text}
+                            </div>
+                          )}
+                          {afterSnapshots.length > 0 && (
+                            <div className="flex gap-3 pt-4">
+                              {afterSnapshots.map((snap) => {
+                                const displayPost = snapshotToAgentPost(snap);
+                                return (
+                                  <DraftCard
+                                    key={snap.post_id}
+                                    post={displayPost}
+                                    onEdit={setEditPost}
+                                    onEditTime={openTimeEdit}
+                                    onApprove={handleApprovePost}
+                                    onReject={() => setRejectConfirmPost(displayPost)}
+                                    isApproving={approvingIds.has(snap.post_id)}
+                                    isRejecting={rejectingIds.has(snap.post_id)}
+                                  />
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1826,7 +1885,14 @@ export default function AutomationView() {
                   // Agent messages — posts message: render inline with its own drafts
                   if (msg.kind === "posts") {
                     const msgPostIds = (msg.payload.post_ids as string[] | undefined) ?? [];
-                    const msgPosts = posts.filter((p) => msgPostIds.includes(p.id));
+                    const livePostMatches = posts.filter((p) => msgPostIds.includes(p.id));
+                    // Fall back to inline snapshot data so the card shows immediately before
+                    // fetchPosts resolves (e.g. on the first render of an "edit with agent" conv)
+                    const snapshotFallback = (
+                      (msg.payload.snapshot as PostSnapshot[] | undefined) ?? []
+                    ).map(snapshotToAgentPost);
+                    const msgPosts =
+                      livePostMatches.length > 0 ? livePostMatches : snapshotFallback;
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
