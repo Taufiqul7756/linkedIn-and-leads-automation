@@ -615,6 +615,8 @@ function DraftCard({
   onReject,
   isApproving,
   isRejecting,
+  isSelected,
+  onSelect,
 }: {
   post: AgentPost;
   onEdit: (post: AgentPost) => void;
@@ -623,6 +625,8 @@ function DraftCard({
   onReject: (id: string) => void;
   isApproving: boolean;
   isRejecting: boolean;
+  isSelected?: boolean;
+  onSelect?: (id: string | null) => void;
 }) {
   const isVideoActive = post.media_type === "video";
   const hasImage = !!post.image_url;
@@ -643,6 +647,21 @@ function DraftCard({
   return (
     // Outer wrapper: overflow-visible so floating buttons protrude above top border
     <div className="group relative h-72 w-96 shrink-0">
+      {/* Checkbox — top-left, hover or selected, draft only */}
+      {onSelect && isDraft && (
+        <button
+          onClick={() => onSelect(isSelected ? null : post.id)}
+          className={cn(
+            "absolute left-3 top-0 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded border bg-white shadow-sm transition-opacity",
+            isSelected
+              ? "border-blue-500 bg-blue-500 opacity-100"
+              : "border-gray-300 opacity-0 group-hover:opacity-100"
+          )}
+          title={isSelected ? "Deselect draft" : "Select draft to prompt"}
+        >
+          {isSelected && <LuCheck className="h-3 w-3 text-white" />}
+        </button>
+      )}
       {/* Floating area — approve/reject buttons for drafts, status pill for everything else */}
       <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
         {isDraft && (
@@ -679,7 +698,11 @@ function DraftCard({
       <div
         className={cn(
           "flex h-full flex-col overflow-hidden rounded-2xl border bg-white p-4",
-          isDraft ? "border-gray-200" : "border-green-200"
+          isSelected
+            ? "border-blue-400 ring-1 ring-blue-300"
+            : isDraft
+              ? "border-gray-200"
+              : "border-green-200"
         )}
       >
         {/* Title row */}
@@ -786,6 +809,8 @@ function DraftsSection({
   onReject,
   approvingIds,
   rejectingIds,
+  selectedPostId,
+  onSelectPost,
 }: {
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
@@ -795,6 +820,8 @@ function DraftsSection({
   onReject: (id: string) => void;
   approvingIds: Set<string>;
   rejectingIds: Set<string>;
+  selectedPostId?: string | null;
+  onSelectPost?: (id: string | null) => void;
 }) {
   const draftPosts = posts.filter((p) => p.status === "draft");
 
@@ -838,6 +865,8 @@ function DraftsSection({
             onReject={onReject}
             isApproving={approvingIds.has(post.id)}
             isRejecting={rejectingIds.has(post.id)}
+            isSelected={selectedPostId === post.id}
+            onSelect={onSelectPost}
           />
         ))}
       </div>
@@ -1015,6 +1044,7 @@ export default function AutomationView() {
   const [restoringConv, setRestoringConv] = useState(true);
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [deleteConvConfirm, setDeleteConvConfirm] = useState<{
     id: string;
     checking: boolean;
@@ -1380,7 +1410,8 @@ export default function AutomationView() {
         refreshHistory();
       }
 
-      await svc().sendMessage(convId!, text);
+      await svc().sendMessage(convId!, text, selectedDraftId ?? undefined);
+      setSelectedDraftId(null);
       // optimistically show user message
       setConversation((prev) =>
         prev
@@ -1520,6 +1551,7 @@ export default function AutomationView() {
     setPosts([]);
     setMessage("");
     setUrlInput("");
+    setSelectedDraftId(null);
     window.history.replaceState(null, "", window.location.pathname);
     textareaRef.current?.focus();
   };
@@ -1937,6 +1969,8 @@ export default function AutomationView() {
                               }}
                               approvingIds={approvingIds}
                               rejectingIds={rejectingIds}
+                              selectedPostId={selectedDraftId}
+                              onSelectPost={setSelectedDraftId}
                             />
                           )}
                         </div>
@@ -2062,6 +2096,27 @@ export default function AutomationView() {
 
               {/* Input area */}
               <div className="shrink-0 px-5 py-4">
+                {/* Selected draft indicator */}
+                {selectedDraftId &&
+                  (() => {
+                    const selectedPost = posts.find((p) => p.id === selectedDraftId);
+                    const label = selectedPost?.headline || "Selected draft";
+                    return (
+                      <div className="mb-2 flex items-center gap-1.5">
+                        <span className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-700">
+                          <LuAlignLeft className="h-3 w-3 shrink-0" />
+                          <span className="max-w-[240px] truncate">Prompting for: {label}</span>
+                          <button
+                            onClick={() => setSelectedDraftId(null)}
+                            className="ml-0.5 text-blue-400 hover:text-blue-600"
+                            title="Clear selection"
+                          >
+                            <LuX className="h-3 w-3" />
+                          </button>
+                        </span>
+                      </div>
+                    );
+                  })()}
                 <div className="rounded-2xl border border-gray-200 bg-white shadow-md">
                   {/* Textarea + cycling placeholder */}
                   <div className="relative px-4 pt-3 pb-1">

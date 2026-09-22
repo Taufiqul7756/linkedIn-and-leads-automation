@@ -50,10 +50,10 @@ export const linkedinAgentService = (workspaceId: string) => ({
   getConversation: (id: string) =>
     axiosGet<Conversation>(`/workspaces/${workspaceId}/agent/conversations/${id}/`),
 
-  sendMessage: (id: string, text: string) =>
+  sendMessage: (id: string, text: string, postId?: string) =>
     axiosPost<{ run_id: string }>(
       `/workspaces/${workspaceId}/agent/conversations/${id}/messages/`,
-      { text }
+      { text, ...(postId ? { post: postId } : {}) }
     ),
 
   answerQuestion: (id: string, interruptId: string, answers: Record<string, string | string[]>) =>

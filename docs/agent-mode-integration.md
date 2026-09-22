@@ -181,8 +181,14 @@ A source that could not be read is **not** an HTTP error: the row comes back
 { "text": "write a few posts about my technical skills, longer, with emoji" }
 ```
 
+To target a specific draft (user selected a card via checkbox):
+```json
+{ "text": "make this post very long", "post": "640658b0-8bfa-4962-86b4-29c16d770015" }
+```
+
 `text` is required, non-blank, max **4000** characters. A pasted document is a
 `400` — that is what an attachment or a Knowledge Source is for.
+`post` is optional — UUID of the specific `AgentPost` to edit; omit to let the agent decide which draft(s) to modify.
 
 `202`:
 
