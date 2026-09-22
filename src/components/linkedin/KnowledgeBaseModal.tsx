@@ -87,37 +87,41 @@ interface SiteRowProps {
 function SiteRow({ site, recrawlingId, deletingSiteId, onRecrawl, onRequestDelete }: SiteRowProps) {
   const isRecrawling = recrawlingId === site.id;
   const isDeleting = deletingSiteId === site.id;
+  const hasError = (site.status === "failed" || site.status === "error") && !!site.error;
   return (
-    <div className="flex items-center gap-3 border-b border-gray-100 py-3 last:border-0">
-      <TypeBadge type="www" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-gray-900">{site.url}</p>
-        <p className="text-xs text-gray-400">crawled {timeAgo(site.created_at)}</p>
+    <div className="border-b border-gray-100 py-3 last:border-0">
+      <div className="flex items-center gap-3">
+        <TypeBadge type="www" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-gray-900">{site.url}</p>
+          <p className="text-xs text-gray-400">crawled {timeAgo(site.created_at)}</p>
+        </div>
+        <StatusBadge status={site.status} />
+        <button
+          onClick={() => onRecrawl(site.id)}
+          disabled={isRecrawling}
+          className="shrink-0 text-gray-300 transition-colors hover:text-blue-500 disabled:opacity-50"
+          title="Recrawl"
+        >
+          {isRecrawling ? (
+            <LuLoader className="h-4 w-4 animate-spin" />
+          ) : (
+            <LuRefreshCw className="h-4 w-4" />
+          )}
+        </button>
+        <button
+          onClick={() => onRequestDelete(site.id, site.url, "site")}
+          disabled={isDeleting}
+          className="shrink-0 text-gray-300 transition-colors hover:text-red-400 disabled:opacity-50"
+        >
+          {isDeleting ? (
+            <LuLoader className="h-4 w-4 animate-spin" />
+          ) : (
+            <LuTrash2 className="h-4 w-4" />
+          )}
+        </button>
       </div>
-      <StatusBadge status={site.status} />
-      <button
-        onClick={() => onRecrawl(site.id)}
-        disabled={isRecrawling}
-        className="shrink-0 text-gray-300 transition-colors hover:text-blue-500 disabled:opacity-50"
-        title="Recrawl"
-      >
-        {isRecrawling ? (
-          <LuLoader className="h-4 w-4 animate-spin" />
-        ) : (
-          <LuRefreshCw className="h-4 w-4" />
-        )}
-      </button>
-      <button
-        onClick={() => onRequestDelete(site.id, site.url, "site")}
-        disabled={isDeleting}
-        className="shrink-0 text-gray-300 transition-colors hover:text-red-400 disabled:opacity-50"
-      >
-        {isDeleting ? (
-          <LuLoader className="h-4 w-4 animate-spin" />
-        ) : (
-          <LuTrash2 className="h-4 w-4" />
-        )}
-      </button>
+      {hasError && <p className="mt-1.5 text-xs text-red-500">{site.error}</p>}
     </div>
   );
 }
@@ -371,14 +375,14 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
   const isLoading = docsLoading || sitesLoading || profilesLoading;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Knowledge base" width="2xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Knowledge base" width="4xl">
       {/* ── Knowledge accordion card ──────────────────────────────────── */}
       <div className="mb-4 rounded-xl border border-gray-200">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-          <p className="text-sm font-semibold text-gray-800">Knowledge</p>
+        <div className="flex items-center justify-between rounded-t-xl bg-sidebar-bg px-4 py-3">
+          <p className="text-sm font-semibold text-white">Knowledge</p>
           {profiles.length + knowledgeCount > 0 && (
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-600">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-gray-800">
               {profiles.length + knowledgeCount}
             </span>
           )}
@@ -422,12 +426,12 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
               <LuUpload className="h-4 w-4 text-gray-400" />
             )}
             <span>Upload a document</span>
-            <span className="text-xs text-gray-400">PDF, DOCX, TXT</span>
+            <span className="text-xs text-gray-400">PDF only</span>
           </button>
           <input
             ref={knowledgeFileInputRef}
             type="file"
-            accept=".pdf,.docx,.doc,.txt"
+            accept=".pdf"
             className="hidden"
             onChange={(e) => handleFileChange(e, "knowledge")}
           />
@@ -506,10 +510,10 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
       {/* ── Tone / Style accordion card ───────────────────────────────── */}
       <div className="mb-6 rounded-xl border border-gray-200">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-          <p className="text-sm font-semibold text-gray-800">Tone / Style</p>
+        <div className="flex items-center justify-between rounded-t-xl bg-sidebar-bg px-4 py-3">
+          <p className="text-sm font-semibold text-white">Tone / Style</p>
           {toneCount > 0 && (
-            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-600">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-gray-800">
               {toneCount}
             </span>
           )}
@@ -553,12 +557,12 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
               <LuUpload className="h-4 w-4 text-gray-400" />
             )}
             <span>Upload a document</span>
-            <span className="text-xs text-gray-400">PDF, DOCX, TXT</span>
+            <span className="text-xs text-gray-400">PDF only</span>
           </button>
           <input
             ref={toneFileInputRef}
             type="file"
-            accept=".pdf,.docx,.doc,.txt"
+            accept=".pdf"
             className="hidden"
             onChange={(e) => handleFileChange(e, "tone")}
           />

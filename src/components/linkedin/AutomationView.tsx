@@ -1399,6 +1399,28 @@ export default function AutomationView() {
     if (!text || !workspaceId) return;
     setSending(true);
     setMessage("");
+    // Capture snapshot before clearing selection
+    const selectedPost = selectedDraftId ? posts.find((p) => p.id === selectedDraftId) : null;
+    const optimisticPayload: Record<string, unknown> = selectedPost
+      ? {
+          post_id: selectedPost.id,
+          snapshot: {
+            post_id: selectedPost.id,
+            headline: selectedPost.headline,
+            body: selectedPost.body,
+            body_blocks: selectedPost.body_blocks,
+            hashtags: [],
+            cta: selectedPost.cta ?? "",
+            image_url: selectedPost.image_url,
+            image_file: selectedPost.image_file,
+            image_status: selectedPost.image_status,
+            video_url: selectedPost.video_url,
+            video_file: selectedPost.video_file,
+            media_type: selectedPost.media_type,
+            suggested_publish_at: selectedPost.suggested_publish_at,
+          } satisfies PostSnapshot,
+        }
+      : {};
     try {
       let convId = conversation?.id;
 
@@ -1425,7 +1447,7 @@ export default function AutomationView() {
                   role: "user",
                   kind: "text",
                   text,
-                  payload: {},
+                  payload: optimisticPayload,
                   created_at: new Date().toISOString(),
                 },
               ],
@@ -1725,27 +1747,6 @@ export default function AutomationView() {
             )}
           </button>
 
-          {/* Questions before drafting toggle */}
-          {!settingsLoaded ? (
-            <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
-          ) : (
-            <div
-              className={cn(
-                "flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs",
-                !settings.ignore_grilling
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "bg-white text-gray-400"
-              )}
-            >
-              <span>Questions before drafting</span>
-              <Toggle
-                small
-                checked={!settings.ignore_grilling}
-                onChange={(v) => handleSettingChange("ignore_grilling", !v)}
-              />
-            </div>
-          )}
-
           {/* Headlines before drafting toggle */}
           {!settingsLoaded ? (
             <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
@@ -1875,8 +1876,39 @@ export default function AutomationView() {
                         </div>
                       );
                     }
+                    const snap = msg.payload.snapshot as PostSnapshot | undefined;
+                    const hasSnapImage = !!snap?.image_url && snap.image_status !== "pending";
                     return (
-                      <div key={msg.id} className="mt-4 flex justify-end">
+                      <div key={msg.id} className="mt-4 flex flex-col items-end gap-1.5">
+                        {snap && (
+                          <div className="flex w-72 items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                            <div className="w-1 shrink-0 bg-blue-500" />
+                            <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5">
+                              {hasSnapImage && (
+                                <img
+                                  src={snap.image_url}
+                                  alt=""
+                                  className="h-10 w-10 shrink-0 rounded-md object-cover"
+                                />
+                              )}
+                              <div className="min-w-0">
+                                <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-500">
+                                  Editing post
+                                </p>
+                                {snap.headline && (
+                                  <p className="truncate text-xs font-semibold text-gray-800">
+                                    {snap.headline}
+                                  </p>
+                                )}
+                                {snap.body && (
+                                  <p className="mt-0.5 line-clamp-1 text-[11px] leading-relaxed text-gray-400">
+                                    {snap.body}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <div className="max-w-md break-words rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm leading-relaxed text-white">
                           {msg.text}
                         </div>
