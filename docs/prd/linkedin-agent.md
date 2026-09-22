@@ -124,6 +124,7 @@ All requests require `Authorization: Token <key>`. A workspace the user does not
     "questions": [ /* see Questions shape below */ ]
   },
   "artifacts": { "post_ids": ["a1…", "b2…"] },
+  "has_multiple_post": true,
   "created_at": "2026-09-01T09:33:44.583173Z",
   "updated_at": "2026-09-01T09:34:52.480287Z"
 }
@@ -482,7 +483,13 @@ When the user clicks **Edit with agent** on a Review & Approval card:
 
 Users can select a specific draft in the agent composer to direct the next prompt at that post only.
 
-- **Checkbox** appears top-left on hover — only on cards with `status === "draft"`
+**Controlled by `conversation.has_multiple_post: boolean`** (from `GET conversations/{id}/`):
+- `true` → checkboxes shown on all non-published cards across every message in this conversation
+- `false` → no checkboxes (single-post edit-with-agent conversation — targeting is implicit)
+
+**Checkbox behaviour:**
+- Appears top-left on hover on any card where `status !== "published"`
+- Applies to both `kind="posts"` DraftsSection cards AND `kind="edit"` inline cards (single-card responses after a targeted prompt)
 - Single selection only — selecting a new card deselects the previous
 - When selected, a "Prompting for: [headline]" pill appears above the textarea with an ✕ to deselect
 - On send: `post` field included in message payload → agent edits only that post
