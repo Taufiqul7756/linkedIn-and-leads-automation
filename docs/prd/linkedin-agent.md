@@ -44,6 +44,7 @@ All requests require `Authorization: Token <key>`. A workspace the user does not
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/workspaces/{id}/content/posts/` | Use `?state=agent` to get agent drafts |
+| `GET` | `/workspaces/{id}/content/posts/{postId}/` | Single post — used to check `conversation_id` before edit-with-agent |
 
 ---
 
@@ -123,6 +124,7 @@ All requests require `Authorization: Token <key>`. A workspace the user does not
     "questions": [ /* see Questions shape below */ ]
   },
   "artifacts": { "post_ids": ["a1…", "b2…"] },
+  "has_multiple_post": true,
   "created_at": "2026-09-01T09:33:44.583173Z",
   "updated_at": "2026-09-01T09:34:52.480287Z"
 }
@@ -133,9 +135,14 @@ All requests require `Authorization: Token <key>`. A workspace the user does not
 ### `POST conversations/{id}/messages/` — Send Message
 **Body:**
 ```json
-{ "text": "write a few posts about my technical skills, make them longer and use emoji" }
+{ "text": "make this post very long" }
+```
+Optional — include `post` to target a specific draft:
+```json
+{ "text": "make this post very long", "post": "640658b0-8bfa-4962-86b4-29c16d770015" }
 ```
 - `text` required, non-blank, max **4000** characters
+- `post` optional — UUID of the specific draft to edit; omit to let the agent decide
 
 **Response `202`:**
 ```json
@@ -244,6 +251,7 @@ All requests require `Authorization: Token <key>`. A workspace the user does not
       "suggested_publish_at": "2026-09-03T09:00:00Z",
       "published_at": null,
       "linkedin_urn": "",
+      "conversation_id": "f4d60d20-7daa-47d1-b715-31d1b1a1856c",
       "engagement": {
         "impressions": 0,
         "likes": 0,
@@ -470,6 +478,44 @@ When the user clicks **Edit with agent** on a Review & Approval card:
 - Floating **approve** (`LuCheck`) and **reject** (`LuX`) buttons top-right, `-translate-y-1/2` — only shown for `status === "draft"`
 - Reject → `onReject` is intercepted at `AutomationView` level → sets `rejectConfirmPost` → `RejectConfirmModal` shown
 - Hover buttons bottom-right: **Edit text** · **Edit image** — both call `onEdit(post)`
+
+### Draft Card Selection for Targeted Prompting
+
+Users can select a specific draft in the agent composer to direct the next prompt at that post only.
+
+**Controlled by `conversation.has_multiple_post: boolean`** (from `GET conversations/{id}/`):
+- `true` → checkboxes shown on all non-published cards across every message in this conversation
+- `false` → no checkboxes (single-post edit-with-agent conversation — targeting is implicit)
+
+**Checkbox behaviour:**
+- Appears top-left on hover on any card where `status !== "published"`
+- Applies to both `kind="posts"` DraftsSection cards AND `kind="edit"` inline cards (single-card responses after a targeted prompt)
+- Single selection only — selecting a new card deselects the previous
+- When selected, a "Prompting for: [headline]" pill appears above the textarea with an ✕ to deselect
+- On send: `post` field included in message payload → agent edits only that post
+- Selection cleared automatically after send and on `handleNewChat`
+
+**API:** `POST conversations/{id}/messages/ { "text": "...", "post": "<postId>" }`
+
+---
+
+### Edit-with-Agent: Conversation Resume via `conversation_id`
+
+`AgentPost` now carries a `conversation_id: string | null` field set by the backend once a post is linked to a conversation.
+
+**Flow when user clicks Edit with agent:**
+
+1. Hard navigate: `window.location.href = /linkedin/automation?editPostId=<id>`
+2. Restore effect fetches the post via `GET /content/posts/{id}/`
+3. **If `conversation_id` is set** → load that existing conversation (`GET conversations/{id}/`) — no new conversation created
+4. **If `conversation_id` is null** → create a new conversation linked to the post (`POST conversations/ + linked_post body`)
+5. In both cases: set conversation, refresh history, start polling if running
+
+This prevents a new conversation from being created every time the user clicks Edit with agent on the same post.
+
+**Fix: Strict Mode double-invocation guard** — `restoredForWorkspaceRef = useRef<string|null>(null)` prevents the restore effect from firing twice in React Strict Mode (dev), which previously created two conversations simultaneously.
+
+---
 
 ### KnowledgeBaseModal Accordion Redesign
 
