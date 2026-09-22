@@ -375,7 +375,7 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
   const isLoading = docsLoading || sitesLoading || profilesLoading;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Knowledge base" width="2xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Knowledge base" width="4xl">
       {/* ── Knowledge accordion card ──────────────────────────────────── */}
       <div className="mb-4 rounded-xl border border-gray-200">
         {/* Header */}
