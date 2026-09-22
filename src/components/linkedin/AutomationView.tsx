@@ -647,8 +647,8 @@ function DraftCard({
   return (
     // Outer wrapper: overflow-visible so floating buttons protrude above top border
     <div className="group relative h-72 w-96 shrink-0">
-      {/* Checkbox — top-left, hover or selected, draft only */}
-      {onSelect && isDraft && (
+      {/* Checkbox — top-left, hover or selected; shown for any non-published card */}
+      {onSelect && post.status !== "published" && (
         <button
           onClick={() => onSelect(isSelected ? null : post.id)}
           className={cn(
@@ -1917,6 +1917,12 @@ export default function AutomationView() {
                                     onReject={() => setRejectConfirmPost(displayPost)}
                                     isApproving={approvingIds.has(snap.post_id)}
                                     isRejecting={rejectingIds.has(snap.post_id)}
+                                    isSelected={selectedDraftId === snap.post_id}
+                                    onSelect={
+                                      conversation?.has_multiple_post
+                                        ? setSelectedDraftId
+                                        : undefined
+                                    }
                                   />
                                 );
                               })}
@@ -1969,8 +1975,12 @@ export default function AutomationView() {
                               }}
                               approvingIds={approvingIds}
                               rejectingIds={rejectingIds}
-                              selectedPostId={selectedDraftId}
-                              onSelectPost={setSelectedDraftId}
+                              selectedPostId={
+                                conversation?.has_multiple_post ? selectedDraftId : undefined
+                              }
+                              onSelectPost={
+                                conversation?.has_multiple_post ? setSelectedDraftId : undefined
+                              }
                             />
                           )}
                         </div>

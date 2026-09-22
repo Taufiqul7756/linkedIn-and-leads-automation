@@ -55,6 +55,7 @@ export interface Conversation {
   pending_interrupt: PendingInterrupt | Record<string, never>;
   artifacts: { post_ids: string[] };
   attachments: Attachment[];
+  has_multiple_post: boolean;
   created_at: string;
   updated_at: string;
 }
