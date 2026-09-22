@@ -5,6 +5,7 @@ import type {
   Conversation,
   PaginatedConversations,
   AgentSettings,
+  AgentPost,
   PaginatedAgentPosts,
 } from "@/types/LinkedInAgent";
 import { Config } from "@/config/config";

@@ -311,6 +311,7 @@ function snapshotToAgentPost(snap: PostSnapshot): AgentPost {
     suggested_publish_at: snap.suggested_publish_at ?? null,
     published_at: null,
     linkedin_urn: "",
+    conversation_id: null,
     created_at: "",
   };
 }
