@@ -1255,12 +1255,19 @@ export default function AutomationView() {
         const editPostId = params.get("editPostId");
 
         if (editPostId) {
-          // Create a conversation pre-linked to this post
           try {
-            const created = await svc().createConversation(editPostId);
-            // If the POST response already has messages use it directly; otherwise GET for full data
-            const conv =
-              created.messages.length > 0 ? created : await svc().getConversation(created.id);
+            // Check if the post already has a linked conversation
+            const post = await svc().getAgentPost(editPostId);
+            let conv: Conversation;
+            if (post.conversation_id) {
+              // Resume the existing conversation for this post
+              conv = await svc().getConversation(post.conversation_id);
+            } else {
+              // No linked conversation yet — create one
+              const created = await svc().createConversation(editPostId);
+              conv =
+                created.messages.length > 0 ? created : await svc().getConversation(created.id);
+            }
             setConversation(conv);
             refreshHistory();
             if (conv.status === "running") startPolling(conv.id);

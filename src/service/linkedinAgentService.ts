@@ -98,6 +98,9 @@ export const linkedinAgentService = (workspaceId: string) => ({
   patchSettings: (data: Partial<AgentSettings>) =>
     axiosPatch<AgentSettings>(`/workspaces/${workspaceId}/agent/settings/`, data),
 
+  getAgentPost: (id: string) =>
+    axiosGet<AgentPost>(`/workspaces/${workspaceId}/content/posts/${id}/`),
+
   getAgentPosts: (params?: {
     status?: string;
     excludeStatus?: string;
