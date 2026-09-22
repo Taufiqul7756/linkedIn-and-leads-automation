@@ -1747,27 +1747,6 @@ export default function AutomationView() {
             )}
           </button>
 
-          {/* Questions before drafting toggle */}
-          {!settingsLoaded ? (
-            <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
-          ) : (
-            <div
-              className={cn(
-                "flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs",
-                !settings.ignore_grilling
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "bg-white text-gray-400"
-              )}
-            >
-              <span>Questions before drafting</span>
-              <Toggle
-                small
-                checked={!settings.ignore_grilling}
-                onChange={(v) => handleSettingChange("ignore_grilling", !v)}
-              />
-            </div>
-          )}
-
           {/* Headlines before drafting toggle */}
           {!settingsLoaded ? (
             <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
