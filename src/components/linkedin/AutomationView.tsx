@@ -1048,6 +1048,8 @@ export default function AutomationView() {
   const plusRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Guards against React Strict Mode double-invoking the restore effect
+  const restoredForWorkspaceRef = useRef<string | null>(null);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -1242,6 +1244,9 @@ export default function AutomationView() {
   // Priority: ?conv= URL param → last conversation from history → empty state
   useEffect(() => {
     if (!workspaceId) return;
+    // Prevent React Strict Mode's double-invocation from creating two conversations
+    if (restoredForWorkspaceRef.current === workspaceId) return;
+    restoredForWorkspaceRef.current = workspaceId;
 
     async function restore() {
       try {
