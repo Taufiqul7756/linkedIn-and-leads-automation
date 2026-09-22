@@ -1,7 +1,17 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { LuX, LuCheck, LuClock, LuPencil, LuChevronLeft, LuChevronRight } from "react-icons/lu";
+import {
+  LuX,
+  LuCheck,
+  LuClock,
+  LuPencil,
+  LuChevronLeft,
+  LuChevronRight,
+  LuAlignLeft,
+  LuImage,
+  LuLoader,
+} from "react-icons/lu";
 import { cn } from "@/utils/cn";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
 
@@ -129,61 +139,144 @@ function renderTiptapNodes(nodes: unknown[]): React.ReactNode {
   );
 }
 
-// ─── mini card (grid-friendly, no absolute-positioned overflow) ────────────────
+// ─── card (matches DraftCard design in AutomationView) ────────────────────────
 
-function MiniCard({ post, onEdit }: { post: AgentPost; onEdit: (p: AgentPost) => void }) {
+function MiniCard({
+  post,
+  onEdit,
+  onApprove,
+  onReject,
+}: {
+  post: AgentPost;
+  onEdit: (p: AgentPost) => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
-  const bodyText = post.body ?? "";
+  const isVideoActive = post.media_type === "video";
+  const hasImage = !!post.image_url;
+  const hasVideo = !!post.video_url;
+
+  const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+    approved: { label: "Approved", cls: "bg-green-100 text-green-700" },
+    scheduled: { label: "Scheduled", cls: "bg-blue-100 text-blue-700" },
+    published: { label: "Published", cls: "bg-emerald-100 text-emerald-700" },
+    failed: { label: "Failed", cls: "bg-red-100 text-red-700" },
+    draft: { label: "Draft", cls: "bg-violet-100 text-violet-700" },
+  };
+  const badge = STATUS_BADGE[post.status] ?? STATUS_BADGE.draft;
+
+  const isDraft = post.status === "draft";
 
   return (
-    <div className="relative flex flex-col rounded-2xl border border-gray-200 bg-white overflow-hidden">
-      {/* Image */}
-      {post.image_url && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={post.image_url} alt="" className="h-36 w-full object-cover" />
-      )}
-
-      <div className="relative flex flex-col flex-1 p-4">
-        {/* Floating ✓ × — top-right, half outside */}
-        <div className="absolute right-3 top-0 flex -translate-y-1/2 items-center gap-1.5">
-          <button className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500">
+    <div className="group relative h-72 w-full">
+      {/* Floating approve / reject — top right, half outside */}
+      {isDraft && (
+        <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
+          <button
+            onClick={() => onApprove(post.id)}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500"
+            title="Approve"
+          >
             <LuCheck className="h-3.5 w-3.5" />
           </button>
-          <button className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400">
+          <button
+            onClick={() => onReject(post.id)}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400"
+            title="Delete"
+          >
             <LuX className="h-3.5 w-3.5" />
           </button>
         </div>
+      )}
 
-        {/* Title + badge */}
-        <div className="mb-1 flex items-start justify-between gap-2">
-          <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900">
-            {post.headline || bodyText.slice(0, 60)}
-          </p>
-          <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
-            Draft
+      {/* Card */}
+      <div
+        className={cn(
+          "flex h-full flex-col overflow-hidden rounded-2xl border bg-white p-4",
+          post.status === "draft" ? "border-gray-200" : "border-green-200"
+        )}
+      >
+        {/* Title row */}
+        <div className="mb-1 flex shrink-0 items-start justify-between gap-2">
+          {post.headline ? (
+            <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-900">
+              {post.headline}
+            </p>
+          ) : (
+            <span />
+          )}
+          <span
+            className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", badge.cls)}
+          >
+            {badge.label}
           </span>
         </div>
 
         {/* Time */}
         {dateStr && (
-          <div className="mb-2 flex items-center gap-1 text-xs text-gray-400">
+          <div className="mb-2 flex shrink-0 items-center gap-1 text-xs text-gray-400">
             <LuClock className="h-3 w-3 shrink-0" />
             <span>{dateStr}</span>
+            <button
+              onClick={() => onEdit(post)}
+              className="text-gray-400 transition-colors hover:text-blue-500"
+              title="Edit suggested time"
+            >
+              <LuPencil className="h-3 w-3" />
+            </button>
           </div>
         )}
 
+        {/* Media */}
+        {isVideoActive ? (
+          hasVideo ? (
+            <div className="mb-2 flex h-24 shrink-0 overflow-hidden rounded-xl">
+              <video src={post.video_url} className="h-full w-full object-cover" />
+            </div>
+          ) : null
+        ) : post.image_status === "pending" ? (
+          <div className="mb-2 flex h-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-blue-200 bg-blue-50">
+            <div className="flex flex-col items-center gap-1">
+              <LuLoader className="h-4 w-4 animate-spin text-blue-400" />
+              <span className="text-[10px] text-blue-400">Generating image…</span>
+            </div>
+          </div>
+        ) : hasImage ? (
+          <div className="mb-2 flex h-24 shrink-0 overflow-hidden rounded-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={post.image_url} alt="" className="h-full w-full object-cover" />
+          </div>
+        ) : null}
+
         {/* Body */}
-        <div className="flex-1 overflow-hidden text-xs leading-relaxed text-gray-600 line-clamp-4">
-          {renderBlocks(post.body_blocks, post.body)}
+        <div className="min-h-0 flex-1 overflow-hidden pb-8 text-xs leading-relaxed text-gray-600">
+          {post.image_status === "pending" || hasImage || hasVideo ? (
+            <p className="line-clamp-3">{post.body}</p>
+          ) : (
+            renderBlocks(post.body_blocks, post.body)
+          )}
         </div>
 
-        {/* Edit pencil */}
-        <button
-          onClick={() => onEdit(post)}
-          className="absolute bottom-3 right-3 text-gray-300 transition-colors hover:text-gray-600"
-        >
-          <LuPencil className="h-3.5 w-3.5" />
-        </button>
+        {/* Hover action buttons */}
+        {post.status !== "published" && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              onClick={() => onEdit(post)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <LuAlignLeft className="h-3 w-3" />
+              Edit text
+            </button>
+            <button
+              onClick={() => onEdit(post)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <LuImage className="h-3 w-3" />
+              Edit image
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -196,9 +289,18 @@ interface Props {
   onClose: () => void;
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
 }
 
-export default function AllDraftsModal({ isOpen, onClose, posts, onEdit }: Props) {
+export default function AllDraftsModal({
+  isOpen,
+  onClose,
+  posts,
+  onEdit,
+  onApprove,
+  onReject,
+}: Props) {
   const [page, setPage] = useState(1);
 
   // reset to page 1 when closed
@@ -246,9 +348,15 @@ export default function AllDraftsModal({ isOpen, onClose, posts, onEdit }: Props
           {pagedPosts.length === 0 ? (
             <p className="py-20 text-center text-sm text-gray-400">No drafts found.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-x-4 gap-y-8 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-6 pt-4 sm:grid-cols-2 lg:grid-cols-3">
               {pagedPosts.map((post) => (
-                <MiniCard key={post.id} post={post} onEdit={onEdit} />
+                <MiniCard
+                  key={post.id}
+                  post={post}
+                  onEdit={onEdit}
+                  onApprove={onApprove}
+                  onReject={onReject}
+                />
               ))}
             </div>
           )}

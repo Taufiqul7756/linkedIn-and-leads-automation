@@ -5,6 +5,7 @@ import type {
   Conversation,
   PaginatedConversations,
   AgentSettings,
+  AgentPost,
   PaginatedAgentPosts,
 } from "@/types/LinkedInAgent";
 import { Config } from "@/config/config";
@@ -35,8 +36,11 @@ async function axiosPatch<T>(path: string, data?: unknown): Promise<T> {
 }
 
 export const linkedinAgentService = (workspaceId: string) => ({
-  createConversation: () =>
-    axiosPost<Conversation>(`/workspaces/${workspaceId}/agent/conversations/`),
+  createConversation: (postId?: string) =>
+    axiosPost<Conversation>(
+      `/workspaces/${workspaceId}/agent/conversations/`,
+      postId ? { post: postId } : undefined
+    ),
 
   getConversations: (page = 1, pageSize = 25) =>
     axiosGet<PaginatedConversations>(
@@ -94,6 +98,9 @@ export const linkedinAgentService = (workspaceId: string) => ({
 
   patchSettings: (data: Partial<AgentSettings>) =>
     axiosPatch<AgentSettings>(`/workspaces/${workspaceId}/agent/settings/`, data),
+
+  getAgentPost: (id: string) =>
+    axiosGet<AgentPost>(`/workspaces/${workspaceId}/content/posts/${id}/`),
 
   getAgentPosts: (params?: {
     status?: string;

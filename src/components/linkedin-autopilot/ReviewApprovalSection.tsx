@@ -9,6 +9,10 @@ import {
   LuCalendarClock,
   LuChevronDown,
   LuMessageSquare,
+  LuAlignLeft,
+  LuImage,
+  LuClock,
+  LuBot,
 } from "react-icons/lu";
 import toast from "react-hot-toast";
 import { cn } from "@/utils/cn";
@@ -431,7 +435,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
 
             return (
               // Outer wrapper: overflow-visible so floating buttons protrude above top border
-              <div key={post.id} className="group relative h-80">
+              <div key={post.id} className="group relative h-[340px]">
                 {/* Floating approve / reject buttons */}
                 <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
                   <button
@@ -533,14 +537,41 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                     )}
                   </div>
 
-                  {/* Edit — pinned bottom-right, sits above overflow-hidden via absolute on outer */}
-                  <button
-                    onClick={() => setEditPost(post)}
-                    className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 opacity-0 shadow-sm transition-all group-hover:opacity-100 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    <LuPencil className="h-3 w-3" />
-                    Edit
-                  </button>
+                  {/* Hover action buttons — bottom right */}
+                  <div className="absolute bottom-3 right-3 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={() => setEditPost(post)}
+                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      <LuAlignLeft className="h-3 w-3" />
+                      Edit text
+                    </button>
+                    <button
+                      onClick={() => setEditPost(post)}
+                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      <LuImage className="h-3 w-3" />
+                      Edit image
+                    </button>
+                    {!post.suggested_publish_at && (
+                      <button
+                        onClick={() => setEditPost(post)}
+                        className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                      >
+                        <LuClock className="h-3 w-3" />
+                        Edit time
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        window.location.href = `/linkedin/automation?editPostId=${post.id}`;
+                      }}
+                      className="flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2 py-1 text-xs font-medium text-violet-600 shadow-sm hover:bg-violet-50"
+                    >
+                      <LuBot className="h-3 w-3" />
+                      Edit with agent
+                    </button>
+                  </div>
                 </div>
               </div>
             );

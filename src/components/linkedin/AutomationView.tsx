@@ -19,7 +19,8 @@ import {
   LuLink,
   LuUpload,
   LuTrash2,
-  LuFilter,
+  LuAlignLeft,
+  LuImage,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -33,6 +34,7 @@ import Modal from "@/components/ui/Modal";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
+import RejectConfirmModal from "@/components/linkedin-autopilot/RejectConfirmModal";
 import type {
   Attachment,
   Conversation,
@@ -69,6 +71,12 @@ const CYCLING_PLACEHOLDERS = [
 const POLL_INTERVAL_MS = 2000;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+function isoToLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 function formatSuggestedDate(iso: string | null): string {
   if (!iso) return "";
@@ -255,6 +263,59 @@ function extractTiptapText(nodes: unknown[]): string {
     .join(" ");
 }
 
+// Post snapshot shape inside kind:"posts" and kind:"edit" message payloads.
+// Optional fields match AgentPost field names exactly — backend adds them progressively.
+type PostSnapshot = {
+  post_id: string;
+  headline: string;
+  body: string;
+  body_blocks: object | string;
+  hashtags: string[];
+  cta: string;
+  // media (same names as AgentPost)
+  image_url?: string;
+  image_file?: string | null;
+  image_status?: string;
+  video_url?: string;
+  video_file?: string | null;
+  media_type?: string;
+  // scheduling
+  suggested_publish_at?: string | null;
+};
+
+function snapshotToAgentPost(snap: PostSnapshot): AgentPost {
+  return {
+    id: snap.post_id,
+    state: "agent",
+    plan: null,
+    reference_link: null,
+    tone: "",
+    length: "",
+    use_emoji: false,
+    use_knowledge: false,
+    length_hint: "",
+    writer_model: "",
+    headline: snap.headline,
+    body: snap.body,
+    body_blocks: snap.body_blocks,
+    hashtags: Array.isArray(snap.hashtags) ? snap.hashtags.join(" ") : (snap.hashtags ?? ""),
+    cta: snap.cta ?? null,
+    image_url: snap.image_url ?? "",
+    image_file: snap.image_file ?? null,
+    image_status: snap.image_status ?? "",
+    video_url: snap.video_url ?? "",
+    video_file: snap.video_file ?? null,
+    media_type: snap.media_type ?? "",
+    status: "draft",
+    scheduled_at: null,
+    suggested_publish_at: snap.suggested_publish_at ?? null,
+    published_at: null,
+    linkedin_urn: "",
+    conversation_id: null,
+    created_at: "",
+  };
+}
+
 function hasPendingInterrupt(conv: Conversation): boolean {
   const pi = conv.pending_interrupt as { id?: string };
   return !!pi?.id;
@@ -262,7 +323,15 @@ function hasPendingInterrupt(conv: Conversation): boolean {
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({
+  checked,
+  onChange,
+  small = false,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  small?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -270,14 +339,22 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cn(
-        "inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+        "inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+        small ? "h-4 w-8" : "h-6 w-11",
         checked ? "bg-blue-600" : "bg-gray-200"
       )}
     >
       <span
         className={cn(
-          "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ease-in-out",
-          checked ? "translate-x-5" : "translate-x-0"
+          "inline-block rounded-full bg-white shadow transition-transform duration-200 ease-in-out",
+          small ? "h-3 w-3" : "h-5 w-5",
+          small
+            ? checked
+              ? "translate-x-4"
+              : "translate-x-0"
+            : checked
+              ? "translate-x-5"
+              : "translate-x-0"
         )}
       />
     </button>
@@ -533,6 +610,7 @@ function HeadlinesForm({
 function DraftCard({
   post,
   onEdit,
+  onEditTime,
   onApprove,
   onReject,
   isApproving,
@@ -540,6 +618,7 @@ function DraftCard({
 }: {
   post: AgentPost;
   onEdit: (post: AgentPost) => void;
+  onEditTime: (post: AgentPost) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   isApproving: boolean;
@@ -563,7 +642,7 @@ function DraftCard({
 
   return (
     // Outer wrapper: overflow-visible so floating buttons protrude above top border
-    <div className="relative h-72 w-80 shrink-0">
+    <div className="group relative h-72 w-96 shrink-0">
       {/* Floating area — approve/reject buttons for drafts, status pill for everything else */}
       <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
         {isDraft && (
@@ -624,6 +703,13 @@ function DraftCard({
           <div className="mb-2 flex shrink-0 items-center gap-1 text-xs text-gray-400">
             <LuClock className="h-3 w-3 shrink-0" />
             <span>{dateStr}</span>
+            <button
+              onClick={() => onEditTime(post)}
+              className="text-gray-400 transition-colors hover:text-blue-500"
+              title="Edit suggested time"
+            >
+              <LuPencil className="h-3 w-3" />
+            </button>
           </div>
         )}
 
@@ -657,15 +743,33 @@ function DraftCard({
           )}
         </div>
 
-        {/* Edit pencil — bottom right, hidden for published posts */}
+        {/* Hover action buttons — bottom center, hidden for published posts */}
         {post.status !== "published" && (
-          <button
-            onClick={() => onEdit(post)}
-            className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-          >
-            <LuPencil className="h-3 w-3" />
-            Edit
-          </button>
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              onClick={() => onEdit(post)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <LuAlignLeft className="h-3 w-3" />
+              Edit text
+            </button>
+            <button
+              onClick={() => onEdit(post)}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <LuImage className="h-3 w-3" />
+              Edit image
+            </button>
+            {!post.suggested_publish_at && (
+              <button
+                onClick={() => onEdit(post)}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              >
+                <LuClock className="h-3 w-3" />
+                Edit time
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -676,6 +780,7 @@ function DraftCard({
 function DraftsSection({
   posts,
   onEdit,
+  onEditTime,
   onViewAll,
   onApprove,
   onReject,
@@ -684,6 +789,7 @@ function DraftsSection({
 }: {
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
+  onEditTime: (post: AgentPost) => void;
   onViewAll: (posts: AgentPost[]) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
@@ -727,6 +833,7 @@ function DraftsSection({
             key={post.id}
             post={post}
             onEdit={onEdit}
+            onEditTime={onEditTime}
             onApprove={onApprove}
             onReject={onReject}
             isApproving={approvingIds.has(post.id)}
@@ -882,7 +989,6 @@ export default function AutomationView() {
   // UI state
   const [message, setMessage] = useState("");
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -900,6 +1006,10 @@ export default function AutomationView() {
   const [history, setHistory] = useState<PaginatedConversations | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [editPost, setEditPost] = useState<AgentPost | null>(null);
+  const [rejectConfirmPost, setRejectConfirmPost] = useState<AgentPost | null>(null);
+  const [timeEditPost, setTimeEditPost] = useState<AgentPost | null>(null);
+  const [timeEditDraft, setTimeEditDraft] = useState("");
+  const [savingTimeEdit, setSavingTimeEdit] = useState(false);
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewAllPosts, setViewAllPosts] = useState<AgentPost[]>([]);
   const [restoringConv, setRestoringConv] = useState(true);
@@ -935,11 +1045,12 @@ export default function AutomationView() {
   const postsRef = useRef<AgentPost[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
-  const filterRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Guards against React Strict Mode double-invoking the restore effect
+  const restoredForWorkspaceRef = useRef<string | null>(null);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -996,6 +1107,30 @@ export default function AutomationView() {
     },
     [workspaceId, queryClient]
   );
+
+  // ── time edit modal ──
+  const openTimeEdit = (post: AgentPost) => {
+    setTimeEditPost(post);
+    setTimeEditDraft(post.suggested_publish_at ? isoToLocal(post.suggested_publish_at) : "");
+  };
+
+  const saveTimeEdit = async () => {
+    if (!timeEditPost || !timeEditDraft) return;
+    const newIso = new Date(timeEditDraft).toISOString();
+    setSavingTimeEdit(true);
+    try {
+      await postsService(workspaceId).patchPost(timeEditPost.id, { suggested_publish_at: newIso });
+      setPosts((prev) =>
+        prev.map((p) => (p.id === timeEditPost.id ? { ...p, suggested_publish_at: newIso } : p))
+      );
+      toast.success("Suggested time updated.");
+      setTimeEditPost(null);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setSavingTimeEdit(false);
+    }
+  };
 
   // ── polling ──
   const stopPolling = useCallback(() => {
@@ -1106,29 +1241,45 @@ export default function AutomationView() {
     return () => clearInterval(iv);
   }, [conversation?.status]);
 
-  // ── clear ?conv= param on unmount so the next workspace starts fresh ──
-  useEffect(() => {
-    return () => {
-      const p = new URLSearchParams(window.location.search);
-      p.delete("conv");
-      const s = p.toString();
-      window.history.replaceState(
-        null,
-        "",
-        s ? `${window.location.pathname}?${s}` : window.location.pathname
-      );
-    };
-  }, []);
-
   // ── restore conversation on mount ──
   // Priority: ?conv= URL param → last conversation from history → empty state
   useEffect(() => {
     if (!workspaceId) return;
+    // Prevent React Strict Mode's double-invocation from creating two conversations
+    if (restoredForWorkspaceRef.current === workspaceId) return;
+    restoredForWorkspaceRef.current = workspaceId;
 
     async function restore() {
       try {
         const params = new URLSearchParams(window.location.search);
         const convId = params.get("conv");
+        const editPostId = params.get("editPostId");
+
+        if (editPostId) {
+          try {
+            // Check if the post already has a linked conversation
+            const post = await svc().getAgentPost(editPostId);
+            let conv: Conversation;
+            if (post.conversation_id) {
+              // Resume the existing conversation for this post
+              conv = await svc().getConversation(post.conversation_id);
+            } else {
+              // No linked conversation yet — create one
+              const created = await svc().createConversation(editPostId);
+              conv =
+                created.messages.length > 0 ? created : await svc().getConversation(created.id);
+            }
+            setConversation(conv);
+            refreshHistory();
+            if (conv.status === "running") startPolling(conv.id);
+            if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
+              fetchPosts(conv.artifacts.post_ids);
+            }
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
 
         const targetId =
           convId ??
@@ -1162,6 +1313,7 @@ export default function AutomationView() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("conv") === conversation.id) return;
     params.set("conv", conversation.id);
+    params.delete("editPostId"); // clear once conversation is created
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }, [conversation?.id]);
 
@@ -1201,15 +1353,6 @@ export default function AutomationView() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [settingsOpen]);
-
-  useEffect(() => {
-    if (!filterOpen) return;
-    const h = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [filterOpen]);
 
   useEffect(() => {
     if (!plusOpen) return;
@@ -1550,90 +1693,46 @@ export default function AutomationView() {
             )}
           </button>
 
-          {/* Filter dropdown */}
-          <div ref={filterRef} className="relative">
-            <button
-              onClick={() => setFilterOpen((v) => !v)}
+          {/* Questions before drafting toggle */}
+          {!settingsLoaded ? (
+            <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
+          ) : (
+            <div
               className={cn(
-                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
-                filterOpen
+                "flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs",
+                !settings.ignore_grilling
                   ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  : "bg-white text-gray-400"
               )}
             >
-              <LuFilter className="h-3.5 w-3.5" />
-              Filter
-              <LuChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 transition-transform duration-150",
-                  filterOpen && "rotate-180"
-                )}
+              <span>Questions before drafting</span>
+              <Toggle
+                small
+                checked={!settings.ignore_grilling}
+                onChange={(v) => handleSettingChange("ignore_grilling", !v)}
               />
-            </button>
-
-            {filterOpen && (
-              <div className="absolute left-0 top-full z-20 mt-1.5 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                <p className="px-4 pt-3.5 pb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">
-                  Composer defaults
-                </p>
-                <div className="divide-y divide-gray-100 px-4 pb-3">
-                  {/* Ask questions */}
-                  <label className="flex cursor-pointer items-start gap-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={!settings.ignore_grilling}
-                      onChange={(e) => handleSettingChange("ignore_grilling", !e.target.checked)}
-                      className="mt-0.5 h-4 w-4 accent-blue-600"
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">Ask me questions first</p>
-                      <p className="text-xs text-gray-400">
-                        If off, skips straight to headlines using your defaults
-                      </p>
-                    </div>
-                  </label>
-                  {/* Show headlines */}
-                  <label className="flex cursor-pointer items-start gap-3 py-3">
-                    <input
-                      type="checkbox"
-                      checked={!settings.ignore_headline}
-                      onChange={(e) => handleSettingChange("ignore_headline", !e.target.checked)}
-                      className="mt-0.5 h-4 w-4 accent-blue-600"
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">
-                        Show headlines to pick from
-                      </p>
-                      <p className="text-xs text-gray-400">If off, drafts are generated directly</p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Active filter chips */}
-          {!settings.ignore_grilling && (
-            <span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
-              Questions before drafting
-              <button
-                onClick={() => handleSettingChange("ignore_grilling", true)}
-                className="ml-0.5 text-blue-400 hover:text-blue-600"
-              >
-                <LuX className="h-3 w-3" />
-              </button>
-            </span>
+            </div>
           )}
-          {!settings.ignore_headline && (
-            <span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
-              Headlines before drafting
-              <button
-                onClick={() => handleSettingChange("ignore_headline", true)}
-                className="ml-0.5 text-blue-400 hover:text-blue-600"
-              >
-                <LuX className="h-3 w-3" />
-              </button>
-            </span>
+
+          {/* Headlines before drafting toggle */}
+          {!settingsLoaded ? (
+            <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
+          ) : (
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs",
+                !settings.ignore_headline
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "bg-white text-gray-400"
+              )}
+            >
+              <span>Headlines before drafting</span>
+              <Toggle
+                small
+                checked={!settings.ignore_headline}
+                onChange={(v) => handleSettingChange("ignore_headline", !v)}
+              />
+            </div>
           )}
         </div>
 
@@ -1756,12 +1855,13 @@ export default function AutomationView() {
                   // Agent messages — edit turn
                   if (msg.kind === "edit") {
                     const field = msg.payload.field as "text" | "image" | undefined;
+                    const afterSnapshots = (msg.payload.after as PostSnapshot[] | undefined) ?? [];
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
                           <LuPencil className="h-4 w-4 text-white" />
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700">
                             <LuPencil className="h-3 w-3" />
                             {field === "image" ? "Image updated" : "Post edited"}
@@ -1769,6 +1869,25 @@ export default function AutomationView() {
                           {msg.text && (
                             <div className="break-words rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
                               {msg.text}
+                            </div>
+                          )}
+                          {afterSnapshots.length > 0 && (
+                            <div className="flex gap-3 pt-4">
+                              {afterSnapshots.map((snap) => {
+                                const displayPost = snapshotToAgentPost(snap);
+                                return (
+                                  <DraftCard
+                                    key={snap.post_id}
+                                    post={displayPost}
+                                    onEdit={setEditPost}
+                                    onEditTime={openTimeEdit}
+                                    onApprove={handleApprovePost}
+                                    onReject={() => setRejectConfirmPost(displayPost)}
+                                    isApproving={approvingIds.has(snap.post_id)}
+                                    isRejecting={rejectingIds.has(snap.post_id)}
+                                  />
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1779,7 +1898,14 @@ export default function AutomationView() {
                   // Agent messages — posts message: render inline with its own drafts
                   if (msg.kind === "posts") {
                     const msgPostIds = (msg.payload.post_ids as string[] | undefined) ?? [];
-                    const msgPosts = posts.filter((p) => msgPostIds.includes(p.id));
+                    const livePostMatches = posts.filter((p) => msgPostIds.includes(p.id));
+                    // Fall back to inline snapshot data so the card shows immediately before
+                    // fetchPosts resolves (e.g. on the first render of an "edit with agent" conv)
+                    const snapshotFallback = (
+                      (msg.payload.snapshot as PostSnapshot[] | undefined) ?? []
+                    ).map(snapshotToAgentPost);
+                    const msgPosts =
+                      livePostMatches.length > 0 ? livePostMatches : snapshotFallback;
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
@@ -1799,12 +1925,16 @@ export default function AutomationView() {
                             <DraftsSection
                               posts={msgPosts}
                               onEdit={setEditPost}
+                              onEditTime={openTimeEdit}
                               onViewAll={(p) => {
                                 setViewAllPosts(p);
                                 setViewAllOpen(true);
                               }}
                               onApprove={handleApprovePost}
-                              onReject={handleRejectPost}
+                              onReject={(id) => {
+                                const p = msgPosts.find((x) => x.id === id);
+                                if (p) setRejectConfirmPost(p);
+                              }}
                               approvingIds={approvingIds}
                               rejectingIds={rejectingIds}
                             />
@@ -2368,6 +2498,61 @@ export default function AutomationView() {
 
       <KnowledgeBaseModal isOpen={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
 
+      {/* Delete confirmation modal */}
+      <RejectConfirmModal
+        isOpen={rejectConfirmPost !== null}
+        onClose={() => setRejectConfirmPost(null)}
+        postExcerpt={rejectConfirmPost?.body?.split("\n")[0] ?? ""}
+        isConfirming={rejectConfirmPost ? rejectingIds.has(rejectConfirmPost.id) : false}
+        onConfirm={() => {
+          if (rejectConfirmPost) {
+            handleRejectPost(rejectConfirmPost.id);
+            setRejectConfirmPost(null);
+          }
+        }}
+      />
+
+      {/* Time edit modal */}
+      <Modal
+        isOpen={timeEditPost !== null}
+        onClose={() => setTimeEditPost(null)}
+        title="Edit Suggested Publish Time"
+        width="sm"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Date &amp; Time (local)
+            </label>
+            <input
+              type="datetime-local"
+              value={timeEditDraft}
+              onChange={(e) => setTimeEditDraft(e.target.value)}
+              className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          {timeEditDraft && (
+            <p className="text-xs text-gray-400">UTC: {new Date(timeEditDraft).toISOString()}</p>
+          )}
+        </div>
+        <div className="mt-6 flex items-center justify-end gap-2.5">
+          <button
+            onClick={() => setTimeEditPost(null)}
+            disabled={savingTimeEdit}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={saveTimeEdit}
+            disabled={!timeEditDraft || savingTimeEdit}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {savingTimeEdit ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </Modal>
+
       <EditDraftModal
         post={editPost}
         onClose={() => setEditPost(null)}
@@ -2392,6 +2577,17 @@ export default function AutomationView() {
         onEdit={(post) => {
           setViewAllOpen(false);
           setEditPost(post);
+        }}
+        onApprove={(id) => {
+          setViewAllOpen(false);
+          handleApprovePost(id);
+        }}
+        onReject={(id) => {
+          const p = viewAllPosts.find((x) => x.id === id);
+          if (p) {
+            setViewAllOpen(false);
+            setRejectConfirmPost(p);
+          }
         }}
       />
     </div>

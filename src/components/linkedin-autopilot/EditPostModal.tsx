@@ -1,17 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  LuX,
-  LuPencil,
-  LuPlus,
-  LuSettings,
-  LuSend,
-  LuImage,
-  LuVideo,
-  LuUpload,
-  LuLoader,
-} from "react-icons/lu";
+import { LuX, LuPencil, LuImage, LuVideo, LuUpload, LuLoader } from "react-icons/lu";
 import toast from "react-hot-toast";
 import TiptapEditor from "@/components/ui/TiptapEditor";
 import { postsService } from "@/service/postsService";
@@ -91,7 +81,6 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [saving, setSaving] = useState(false);
-  const [changeMsg, setChangeMsg] = useState("");
 
   // Re-initialise when post changes
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -106,7 +95,6 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
     setVideoRemoved(false);
     setNewImagePreview(null);
     setNewVideoPreview(null);
-    setChangeMsg("");
   }, [post?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -239,10 +227,10 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
             </div>
           </div>
 
-          {/* Title — only shown when the post has a headline */}
+          {/* Topic — only shown when the post has a headline */}
           {post.headline && (
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Title</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Topic</label>
               <p className="rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-500">
                 {post.headline}
               </p>
@@ -259,52 +247,6 @@ export default function EditPostModal({ isOpen, onClose, post, accountName: _acc
               minHeight="240px"
               placeholder="Write your LinkedIn post…"
             />
-          </div>
-
-          {/* Mini composer — ask for changes (disabled, coming soon) */}
-          <div className="relative">
-            <div className="rounded-xl border border-gray-200 px-4 py-3 opacity-50 pointer-events-none select-none">
-              <textarea
-                value={changeMsg}
-                onChange={(e) => setChangeMsg(e.target.value)}
-                placeholder={`Ask for changes, or "show all drafts"...`}
-                rows={2}
-                disabled
-                className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none disabled:cursor-not-allowed"
-              />
-              <div className="mt-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
-                  Using your knowledge base
-                  <button disabled className="text-teal-400">
-                    <LuX className="h-3 w-3" />
-                  </button>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    disabled
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
-                  >
-                    <LuPlus className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    disabled
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-400"
-                  >
-                    <LuSettings className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    disabled
-                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white opacity-50"
-                  >
-                    Send
-                    <LuSend className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            <span className="absolute -top-2 -right-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-600">
-              Soon
-            </span>
           </div>
 
           {/* Media — Image + Video side by side */}

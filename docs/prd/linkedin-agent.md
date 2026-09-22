@@ -386,6 +386,104 @@ type BlockNode =
 
 ---
 
+## V2 — Agent Mode Integration (see also: `docs/agent-mode-integration.md`)
+
+> Full spec in `docs/agent-mode-integration.md`. Summary of what changed from V1:
+
+### New: Attachments (per-conversation sources)
+
+- Up to **5** attachments per conversation (PDF or URL, one kind per request)
+- `POST conversations/{id}/attachments/` — multipart for PDF, JSON `{ url }` for URL
+- `GET conversations/{id}/attachments/` — unpaginated list
+- `DELETE conversations/{id}/attachments/{aid}/` — 204
+- `attachments[]` inlined in `GET conversations/{id}/` response
+- Status: `pending` → `ready` | `failed`; `error` message on failed rows
+- **Do not send message while any attachment is `pending`** (returns 409)
+- Attachments are conversation-scoped only — not added to workspace knowledge base
+
+### New: `kind: "headlines"` interrupt
+
+- `pending_interrupt.kind` is now `"questions"` OR `"headlines"` — branch on `kind`
+- Headlines interrupt: `{ id, kind: "headlines", headlines: string[] }` — editable list
+- Answer with `{ interrupt_id, answers: { headlines: ["…", "…"] } }`
+- Each string in the approved list = one post's first line; `len(answers.headlines)` = post count
+- Max 10 headlines offered per round; skipped if `ignore_headline: true`
+
+### Updated Settings Shape
+
+Old `make_longer` boolean is **gone**. New shape:
+
+```ts
+interface AgentSettings {
+  post_count: number;       // 1–20, default 5
+  use_hashtags: boolean;    // default true — tags in body AND hashtags array
+  use_emoji: boolean;       // default false
+  use_knowledge: boolean;   // default true
+  use_ai_image: boolean;    // default true — false = NO image, not even stock photo
+  ignore_headline: boolean; // default false — true = skip headline round
+  ignore_grilling: boolean; // default false — true = skip clarifying questions
+}
+```
+
+- `use_ai_image: false` → `image_url: ""`, `image_status: "none"` — do not show image placeholder
+- `use_hashtags: true` → hashtags in BOTH `hashtags` array AND last line of `body`/`body_blocks` — do NOT append array under body again
+
+### Updated `body_blocks` Format (Tiptap ProseMirror)
+
+`body_blocks` is now a **Tiptap ProseMirror document** (not the old custom array):
+
+```json
+{ "type": "doc", "content": [ { "type": "paragraph", "content": [...] } ] }
+```
+
+- Fall back to `body` if `body_blocks` is `{}` or empty
+- Load into Tiptap editor; `PATCH` back as `body_blocks` — `body` is re-derived server-side
+- Custom attrs: `bulletList.attrs.marker` (the glyph: `-`, `*`, `•`, `→`), `attrs.tight` (no blank line above)
+- Pre-Tiptap array format is **rejected** with `400` on `body_blocks`
+
+### DraftCard Hover Actions & Time Edit
+
+`DraftCard` in `AutomationView.tsx` — shows agent-generated drafts in the composer:
+
+- Size: `h-72 w-96`; outer wrapper has `group` class for CSS `group-hover`
+- **Hover buttons** (bottom-right, `opacity-0 group-hover:opacity-100`): **Edit text** · **Edit image** — both open `EditDraftModal`
+- **No "Edit with agent" button** on agent composer cards (only on Review & Approval cards)
+- Time row: `LuPencil` icon → opens a **dedicated time-edit modal** (`<Modal width="sm">`) with a `datetime-local` input; saves via `PATCH posts/{id}/` `{ suggested_publish_at }`, then invalidates posts cache
+- Delete (reject) flow: clicking the `LuX` floating button sets `rejectConfirmPost` state → `RejectConfirmModal` confirmation before calling `onReject`
+- `LuCheck` floating button (top-right, `-translate-y-1/2`): approves post; no confirmation required
+
+### Edit with Agent Flow (Review & Approval → Agent Page)
+
+When the user clicks **Edit with agent** on a Review & Approval card:
+
+1. `window.location.href = /linkedin/automation?editPostId=<id>` — hard navigation (full remount)
+2. Agent page restore effect detects `?editPostId=` param → skips last-conv restore; fetches the post; stores in `editDraftPost` state; keeps `editPostId` in URL
+3. Blank chat area renders the fetched `DraftCard` above the message input
+4. User types a prompt and sends → conversation is created → `?conv=<id>` replaces `?editPostId=` in URL
+5. `handleNewChat()` clears `editDraftPost` state
+
+### AllDraftsModal Card Design
+
+`AllDraftsModal` (`src/components/linkedin/AllDraftsModal.tsx`) — shows all drafts across conversations:
+
+- `MiniCard` now matches `DraftCard` design exactly: `h-72 w-full`, `group` class, same media/body/time rendering
+- Floating **approve** (`LuCheck`) and **reject** (`LuX`) buttons top-right, `-translate-y-1/2` — only shown for `status === "draft"`
+- Reject → `onReject` is intercepted at `AutomationView` level → sets `rejectConfirmPost` → `RejectConfirmModal` shown
+- Hover buttons bottom-right: **Edit text** · **Edit image** — both call `onEdit(post)`
+
+### KnowledgeBaseModal Accordion Redesign
+
+`src/components/linkedin/KnowledgeBaseModal.tsx` — used on the `/linkedin/` Agent page (not the autopilot page).
+
+- Uses `agentService` (workspace-scoped agent endpoints, not profileService)
+- Accordion sections: **Profile** (LinkedIn profiles), **Knowledge** (`purpose=knowledge` + `purpose=style`), **Tone** (`purpose=tone`)
+- `DisplayPurpose = "knowledge" | "tone"` — `isTone()` maps both `"tone"` and `"style"` to the Tone section
+- Type badges: www=slate, PDF=purple, DOCX=blue, TXT=gray; status badges: Ready=green, Error=red, Processing=amber
+- `timeAgo()` helper for `created_at` display
+- Polling: `refetchInterval` while any item non-terminal (same 3s pattern)
+
+---
+
 ## Worked Example
 
 ```
