@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   LuPencil,
   LuCheck,
@@ -132,6 +133,7 @@ function getInitials(name: string) {
 const PAGE_SIZE_OPTIONS = [4, 8, 12, 16, 20];
 
 export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manual" }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
@@ -547,7 +549,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                       Edit text
                     </button>
                     <button
-                      onClick={() => setEditPost(post)}
+                      onClick={() => router.push(`/linkedin/edit-image/${post.id}?from=review`)}
                       className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
                     >
                       <LuImage className="h-3 w-3" />
