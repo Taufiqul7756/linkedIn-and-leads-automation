@@ -458,10 +458,12 @@ function GrillForm({
   questions: rawQuestions,
   onSubmit,
   submitting,
+  canSkip,
 }: {
   questions: Question[];
-  onSubmit: (answers: Record<string, string | string[]>) => void;
+  onSubmit: (answers: Record<string, string | string[]>, skipRemaining?: boolean) => void;
   submitting: boolean;
+  canSkip?: boolean;
 }) {
   // guard against undefined/null entries from API
   const questions = (rawQuestions ?? []).filter((q): q is Question => !!q && typeof q === "object");
@@ -517,14 +519,25 @@ function GrillForm({
           ))}
         </div>
 
-        <button
-          onClick={() => onSubmit(answers)}
-          disabled={submitting}
-          className="mt-5 flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
-        >
-          {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
-          Generate drafts
-        </button>
+        <div className="mt-5 flex items-center gap-3">
+          <button
+            onClick={() => onSubmit(answers)}
+            disabled={submitting}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+          >
+            {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+            Generate drafts
+          </button>
+          {canSkip && (
+            <button
+              onClick={() => onSubmit(answers, true)}
+              disabled={submitting}
+              className="text-sm font-medium text-gray-500 underline-offset-2 transition-colors hover:text-blue-600 hover:underline disabled:opacity-50"
+            >
+              Skip questioning
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1465,13 +1478,16 @@ export default function AutomationView() {
   };
 
   // ── answer pending interrupt ──
-  const handleAnswer = async (answers: Record<string, string | string[]>) => {
+  const handleAnswer = async (
+    answers: Record<string, string | string[]>,
+    skipRemaining?: boolean
+  ) => {
     if (!conversation || !workspaceId) return;
     const pi = conversation.pending_interrupt as { id?: string };
     if (!pi?.id) return;
     setAnswering(true);
     try {
-      await svc().answerQuestion(conversation.id, pi.id, answers);
+      await svc().answerQuestion(conversation.id, pi.id, answers, skipRemaining);
       setConversation((prev) => (prev ? { ...prev, status: "running" } : prev));
       startPolling(conversation.id);
     } catch (err) {
@@ -1707,6 +1723,7 @@ export default function AutomationView() {
           kind: "questions" | "headlines" | string;
           questions?: Question[];
           headlines?: string[];
+          can_skip?: boolean;
         })
       : null;
 
@@ -2093,6 +2110,7 @@ export default function AutomationView() {
                           questions={piQuestions}
                           onSubmit={handleAnswer}
                           submitting={answering}
+                          canSkip={pendingInterrupt?.can_skip}
                         />
                       </div>
                     </div>
