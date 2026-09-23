@@ -23,6 +23,7 @@ export interface PendingInterrupt {
   kind: "questions" | "headlines" | string;
   questions?: Question[];
   headlines?: string[];
+  can_skip?: boolean;
 }
 
 export interface Message {

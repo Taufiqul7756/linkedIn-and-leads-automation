@@ -56,10 +56,15 @@ export const linkedinAgentService = (workspaceId: string) => ({
       { text, ...(postId ? { post: postId } : {}) }
     ),
 
-  answerQuestion: (id: string, interruptId: string, answers: Record<string, string | string[]>) =>
+  answerQuestion: (
+    id: string,
+    interruptId: string,
+    answers: Record<string, string | string[]>,
+    skipRemaining?: boolean
+  ) =>
     axiosPost<{ run_id: string }>(`/workspaces/${workspaceId}/agent/conversations/${id}/answer/`, {
       interrupt_id: interruptId,
-      answers,
+      answers: skipRemaining ? { skip_remaining: true } : answers,
     }),
 
   cancelConversation: (id: string) =>
