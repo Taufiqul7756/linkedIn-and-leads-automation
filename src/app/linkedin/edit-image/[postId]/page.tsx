@@ -14,14 +14,15 @@ import {
   LuClock,
   LuShare2,
   LuImage,
-  LuHistory,
   LuThumbsUp,
   LuMessageSquare,
   LuDownload,
   LuPlus,
   LuLoader,
   LuCheck,
+  LuTrash2,
 } from "react-icons/lu";
+import Image from "next/image";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinAgentService } from "@/service/linkedinAgentService";
@@ -120,17 +121,6 @@ const INITIAL_MESSAGES: ChatMsg[] = [
     text: "A funnel/filter diagram representing the two-sided deal framework:",
     image: true,
   },
-  {
-    id: 3,
-    role: "user",
-    text: "Make the image brighter",
-  },
-  {
-    id: 4,
-    role: "assistant",
-    text: "Brightening the promotional image now…",
-    isGenerating: true,
-  },
 ];
 
 // ─── Generated image visual ───────────────────────────────────────────────────
@@ -206,19 +196,76 @@ function GeneratedImage({ className }: { className?: string }) {
   );
 }
 
+// ─── Image thinking steps ─────────────────────────────────────────────────────
+
+const IMAGE_STEPS = ["Thought process", "Image plan ready", "Image ready"];
+
+function ImageThinkingSteps() {
+  const [visibleCount, setVisibleCount] = useState(1);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setVisibleCount(2), 1500);
+    const t2 = setTimeout(() => setVisibleCount(3), 3200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
+  return (
+    <div className="mt-1 flex flex-col gap-1.5 rounded-2xl rounded-tl-sm border border-gray-100 bg-white px-4 py-3 shadow-sm">
+      {IMAGE_STEPS.map((step, i) => (
+        <div
+          key={step}
+          className={cn(
+            "flex items-center gap-2 text-sm transition-opacity duration-500",
+            i < visibleCount ? "opacity-100" : "opacity-0"
+          )}
+        >
+          {i < visibleCount - 1 ? (
+            <LuCheck className="h-3.5 w-3.5 shrink-0 text-green-500" />
+          ) : (
+            <LuLoader className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-500" />
+          )}
+          <span className={cn("text-sm", i < visibleCount - 1 ? "text-gray-400" : "text-gray-700")}>
+            {step}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Image result card ────────────────────────────────────────────────────────
 
-function ImageResultCard() {
+function ImageResultCard({
+  onAdd,
+  isAdded,
+  onPreview,
+}: {
+  onAdd: () => void;
+  isAdded: boolean;
+  onPreview: () => void;
+}) {
   return (
     <div className="mt-2 w-[26rem] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="relative">
-        <GeneratedImage />
+        <div onClick={onPreview} className="cursor-zoom-in">
+          <GeneratedImage className="min-h-64" />
+        </div>
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-3 py-2.5">
-          <button className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md backdrop-blur-sm transition hover:bg-blue-700">
-            <LuPlus className="h-3.5 w-3.5" />
-            Add to post
+          <button
+            onClick={onAdd}
+            disabled={isAdded}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold shadow-md transition",
+              isAdded ? "cursor-default text-green-600" : "text-sidebar-dark hover:bg-white/90"
+            )}
+          >
+            {isAdded ? <LuCheck className="h-3.5 w-3.5" /> : <LuPlus className="h-3.5 w-3.5" />}
+            {isAdded ? "Added" : "Add to post"}
           </button>
-          <button className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-gray-700 shadow-md backdrop-blur-sm transition hover:bg-white">
+          <button className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800/75 text-white shadow-md backdrop-blur-sm transition hover:bg-gray-800/90">
             <LuDownload className="h-4 w-4" />
           </button>
         </div>
@@ -229,7 +276,17 @@ function ImageResultCard() {
 
 // ─── Chat message ─────────────────────────────────────────────────────────────
 
-function ChatMessage({ message }: { message: ChatMsg }) {
+function ChatMessage({
+  message,
+  onAddImage,
+  addedImageIds,
+  onPreviewImage,
+}: {
+  message: ChatMsg;
+  onAddImage: (id: number) => void;
+  addedImageIds: Set<number>;
+  onPreviewImage: () => void;
+}) {
   const isUser = message.role === "user";
   return (
     <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
@@ -237,35 +294,40 @@ function ChatMessage({ message }: { message: ChatMsg }) {
         {isUser ? "You" : "Image Agent"}
       </span>
       <div className={cn("flex gap-2.5", isUser && "flex-row-reverse")}>
-        <div
-          className={cn(
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-            isUser
-              ? "bg-violet-500 text-white"
-              : "bg-gradient-to-br from-blue-500 to-violet-600 text-white"
-          )}
-        >
-          {isUser ? "T" : <LuBot className="h-3.5 w-3.5" />}
-        </div>
-        <div className={cn("min-w-0", isUser ? "max-w-[75%]" : "flex-1")}>
-          <div
-            className={cn(
-              "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-              isUser
-                ? "rounded-tr-sm bg-violet-600 text-white"
-                : "rounded-tl-sm border border-gray-100 bg-white text-gray-700 shadow-sm"
-            )}
-          >
-            {message.text}
+        {isUser ? (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500 text-xs font-semibold text-white">
+            T
+          </div>
+        ) : (
+          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+            <Image src="/cg-fav.svg" alt="Agent" width={16} height={16} className="shrink-0" />
             {message.isGenerating && (
-              <span className="ml-1 inline-flex gap-0.5 text-gray-400">
-                <span className="animate-bounce [animation-delay:0ms]">·</span>
-                <span className="animate-bounce [animation-delay:150ms]">·</span>
-                <span className="animate-bounce [animation-delay:300ms]">·</span>
-              </span>
+              <span className="absolute inset-0 rounded-xl animate-ping bg-blue-300 opacity-30" />
             )}
           </div>
-          {message.image && <ImageResultCard />}
+        )}
+        <div className={cn("min-w-0", isUser ? "max-w-[75%]" : "flex-1")}>
+          {message.isGenerating ? (
+            <ImageThinkingSteps />
+          ) : (
+            <div
+              className={cn(
+                "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                isUser
+                  ? "rounded-tr-sm bg-violet-600 text-white"
+                  : "rounded-tl-sm border border-gray-100 bg-white text-gray-700 shadow-sm"
+              )}
+            >
+              {message.text}
+            </div>
+          )}
+          {message.image && (
+            <ImageResultCard
+              onAdd={() => onAddImage(message.id)}
+              isAdded={addedImageIds.has(message.id)}
+              onPreview={onPreviewImage}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -274,7 +336,13 @@ function ChatMessage({ message }: { message: ChatMsg }) {
 
 // ─── LinkedIn post preview ────────────────────────────────────────────────────
 
-function LinkedInPostPreview({ post }: { post: AgentPost | null }) {
+function LinkedInPostPreview({
+  post,
+  addedImageCount,
+}: {
+  post: AgentPost | null;
+  addedImageCount: number;
+}) {
   const body =
     post?.body ??
     "Most founders and investors think the hard part of a deal is finding the yes. The hard part is saying no to a wrong yes before it wastes your time or your money....";
@@ -307,7 +375,27 @@ function LinkedInPostPreview({ post }: { post: AgentPost | null }) {
           {body} <button className="font-semibold text-gray-900 hover:underline">see more</button>
         </p>
       </div>
-      <GeneratedImage className="rounded-none" />
+      {addedImageCount === 0 ? null : addedImageCount === 1 ? (
+        <GeneratedImage className="rounded-none" />
+      ) : (
+        <div className="grid grid-cols-2 gap-0.5">
+          {Array.from({ length: Math.min(addedImageCount, 4) }).map((_, i) => {
+            const displayCount = Math.min(addedImageCount, 4);
+            const isLast = i === displayCount - 1;
+            const isOdd = displayCount % 2 !== 0;
+            return (
+              <div key={i} className={cn("relative", isLast && isOdd && "col-span-2")}>
+                <GeneratedImage className="rounded-none" />
+                {isLast && addedImageCount > 4 && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <span className="text-lg font-bold text-white">+{addedImageCount - 4}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-1">
           <span className="text-sm">❤️</span>
@@ -433,6 +521,24 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
 
+  // Added images (keyed by message id)
+  const [addedImageIds, setAddedImageIds] = useState<Set<number>>(new Set());
+
+  // Image lightbox
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  function handleAddImage(id: number) {
+    setAddedImageIds((prev) => new Set(prev).add(id));
+  }
+
+  function handleRemoveImage(id: number) {
+    setAddedImageIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
   // Tabs
   const [activeTab, setActiveTab] = useState<"edit" | "preview">("preview");
 
@@ -467,10 +573,6 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     }
     void fetchPost();
   }, [workspaceId, postId]);
-
-  function handleBack() {
-    router.back();
-  }
 
   // Save body
   async function handleSave() {
@@ -564,64 +666,32 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-page-bg">
-      {/* ── Top nav ──────────────────────────────────────────────────────────── */}
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 shadow-sm">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100"
-        >
-          <LuArrowLeft className="h-4 w-4" />
-          Back
-        </button>
-        <div className="h-4 w-px bg-gray-200" />
-        <span className="text-sm font-medium text-gray-700">Edit Image</span>
-        {post?.headline && (
-          <span className="truncate text-sm text-gray-400">— {post.headline}</span>
-        )}
-        {isPublished && (
-          <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-            Published
-          </span>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => router.push(`/linkedin/automation?editPostId=${postId}`)}
-            className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100"
-          >
-            <LuBot className="h-3.5 w-3.5" />
-            Go to Agent
-          </button>
-          <button
-            onClick={() => router.push("/linkedin/post-management")}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
-          >
-            <LuFileText className="h-3.5 w-3.5" />
-            Post Management
-          </button>
-        </div>
-      </div>
-
       {/* ── Two-panel layout ──────────────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* ── LEFT PANEL — Image agent chatbox ─────────────────────────────── */}
-        <div className="flex min-h-0 w-1/2 flex-col overflow-hidden border-r border-gray-200 bg-chat-panel-bg">
-          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+        <div className="flex min-h-0 w-1/2 flex-col overflow-hidden border-r border-gray-200 bg-white">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4">
             <div className="flex items-center gap-2">
-              <LuImage className="h-4 w-4 text-violet-500" />
+              <div className="relative flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white">
+                <Image src="/cg-fav.svg" alt="Agent" width={16} height={16} className="shrink-0" />
+                {isSending && (
+                  <span className="absolute inset-0 rounded-lg animate-ping bg-blue-300 opacity-30" />
+                )}
+              </div>
               <span className="text-sm font-semibold text-gray-800">Image Agent</span>
             </div>
-            {!isPublished && (
-              <button className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700">
-                <LuImage className="h-3 w-3" />
-                Create the image that catches the offer
-              </button>
-            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div className="flex flex-col gap-4">
               {messages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
+                <ChatMessage
+                  key={msg.id}
+                  message={msg}
+                  onAddImage={handleAddImage}
+                  addedImageIds={addedImageIds}
+                  onPreviewImage={() => setPreviewOpen(true)}
+                />
               ))}
             </div>
           </div>
@@ -634,7 +704,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             </div>
           ) : (
             <div className="shrink-0 border-t border-gray-200 bg-white p-3">
-              <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-violet-300 focus-within:ring-2 focus-within:ring-violet-100">
+              <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 shadow-md">
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -676,9 +746,8 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
         </div>
 
         {/* ── RIGHT PANEL — Post editor ─────────────────────────────────────── */}
-        <div className="flex min-h-0 w-1/2 flex-col overflow-hidden bg-post-panel-bg">
-          <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-5 py-3">
-            <span className="text-sm font-semibold text-gray-900">Post</span>
+        <div className="flex min-h-0 w-1/2 flex-col overflow-hidden bg-[#E9ECF5]">
+          <div className="flex h-12 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-5">
             {!isPublished && (
               <div className="flex items-center gap-1">
                 {(["edit", "preview"] as const).map((tab) => (
@@ -702,16 +771,20 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                 ))}
               </div>
             )}
-            <div className="ml-auto flex items-center gap-3">
-              <button className="flex items-center gap-1.5 text-xs text-gray-400 transition hover:text-gray-600">
-                <LuHistory className="h-3.5 w-3.5" />
-                Version history
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => router.push(`/linkedin/automation?editPostId=${postId}`)}
+                className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100"
+              >
+                <LuBot className="h-3.5 w-3.5" />
+                Go to Agent
               </button>
               <button
-                onClick={handleBack}
-                className="rounded-md p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                onClick={() => router.push("/linkedin/post-management")}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
               >
-                <LuX className="h-4 w-4" />
+                <LuFileText className="h-3.5 w-3.5" />
+                Post Management
               </button>
             </div>
           </div>
@@ -723,16 +796,53 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                 <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : isPublished || activeTab === "preview" ? (
-              <LinkedInPostPreview post={post} />
+              <LinkedInPostPreview post={post} addedImageCount={addedImageIds.size} />
             ) : (
-              <div className="mx-auto w-full max-w-[500px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                <TiptapEditor
-                  key={editorKey}
-                  content={bodyJson}
-                  onChange={setBodyJson}
-                  minHeight="360px"
-                  placeholder="Write your LinkedIn post…"
-                />
+              <div className="mx-auto w-full max-w-[500px] space-y-3">
+                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <TiptapEditor
+                    key={editorKey}
+                    content={bodyJson}
+                    onChange={setBodyJson}
+                    minHeight="360px"
+                    placeholder="Write your LinkedIn post…"
+                  />
+                </div>
+
+                {/* MEDIA section */}
+                {addedImageIds.size > 0 && (
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        Media
+                      </span>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {messages
+                        .filter((m) => m.image && addedImageIds.has(m.id))
+                        .map((m, idx) => (
+                          <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
+                              <GeneratedImage className="h-full w-full" />
+                            </div>
+                            <span className="flex-1 text-sm font-medium text-gray-700">
+                              Image {idx + 1}
+                            </span>
+                            <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-600">
+                              <LuCheck className="h-3 w-3" />
+                              Attached
+                            </span>
+                            <button
+                              onClick={() => handleRemoveImage(m.id)}
+                              className="rounded-md p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-red-500"
+                            >
+                              <LuTrash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -863,6 +973,27 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
           )}
         </div>
       </div>
+
+      {/* ── Image lightbox ────────────────────────────────────────────────────── */}
+      {previewOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setPreviewOpen(false)}
+        >
+          <div
+            className="relative mx-4 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPreviewOpen(false)}
+              className="absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-md text-gray-600 transition hover:bg-gray-100"
+            >
+              <LuX className="h-4 w-4" />
+            </button>
+            <GeneratedImage className="rounded-none" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
