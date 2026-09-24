@@ -1,7 +1,7 @@
 export type ConversationStatus =
   "draft" | "running" | "awaiting_input" | "completed" | "failed" | "cancelled" | "archived";
 
-export type MessageKind = "text" | "posts" | "edit" | "error";
+export type MessageKind = "text" | "posts" | "edit" | "error" | "findings";
 export type MessageRole = "user" | "agent";
 export type QuestionKind = "choice" | "number" | "text";
 
@@ -24,6 +24,12 @@ export interface PendingInterrupt {
   questions?: Question[];
   headlines?: string[];
   can_skip?: boolean;
+}
+
+export interface Finding {
+  title: string;
+  summary: string;
+  url: string;
 }
 
 export interface Message {
