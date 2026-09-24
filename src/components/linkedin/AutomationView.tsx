@@ -44,6 +44,7 @@ import type {
   Question,
   AgentPost,
   AgentSettings,
+  Finding,
   BlockNode,
   SpanNode,
 } from "@/types/LinkedInAgent";
@@ -2034,6 +2035,45 @@ export default function AutomationView() {
                               }
                             />
                           )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Agent messages — web-search findings: render payload as a numbered list
+                  if (msg.kind === "findings") {
+                    const findings = (msg.payload.findings as Finding[] | undefined) ?? [];
+                    return (
+                      <div key={msg.id} className="mt-4 flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
+                          <Image
+                            src="/cg-fav.svg"
+                            alt="Agent"
+                            width={16}
+                            height={16}
+                            className="shrink-0"
+                          />
+                        </div>
+                        <div className="max-w-xl rounded-2xl rounded-tl-sm bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-700">
+                          <ol className="list-decimal space-y-3 pl-5">
+                            {findings.map((f, i) => (
+                              <li key={`${msg.id}-${i}`} className="break-words">
+                                <p className="font-semibold text-gray-900">{f.title}</p>
+                                {f.summary && <p className="mt-0.5">{f.summary}</p>}
+                                {f.url && (
+                                  <a
+                                    href={f.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-0.5 inline-flex items-center gap-1 break-all text-xs text-blue-600 hover:underline"
+                                  >
+                                    <LuLink className="h-3 w-3 shrink-0" />
+                                    {f.url}
+                                  </a>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
                         </div>
                       </div>
                     );
