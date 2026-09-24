@@ -23,6 +23,7 @@ import {
   LuImage,
 } from "react-icons/lu";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinAgentService } from "@/service/linkedinAgentService";
@@ -642,6 +643,7 @@ function DraftCard({
   isSelected?: boolean;
   onSelect?: (id: string | null) => void;
 }) {
+  const router = useRouter();
   const isVideoActive = post.media_type === "video";
   const hasImage = !!post.image_url;
   const hasVideo = !!post.video_url;
@@ -791,7 +793,7 @@ function DraftCard({
               Edit text
             </button>
             <button
-              onClick={() => onEdit(post)}
+              onClick={() => router.push(`/linkedin/edit-image/${post.id}?from=agent`)}
               className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
             >
               <LuImage className="h-3 w-3" />
