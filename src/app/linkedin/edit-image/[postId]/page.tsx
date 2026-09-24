@@ -524,6 +524,10 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   // Added images (keyed by message id)
   const [addedImageIds, setAddedImageIds] = useState<Set<number>>(new Set());
 
+  // Extra images uploaded via "Add more"
+  const [extraImages, setExtraImages] = useState<{ id: number; name: string; url: string }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Image lightbox
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -538,6 +542,27 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
       return next;
     });
   }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    const newImages = files.map((file) => ({
+      id: Date.now() + Math.random(),
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setExtraImages((prev) => [...prev, ...newImages]);
+    e.target.value = "";
+  }
+
+  function handleRemoveExtraImage(id: number) {
+    setExtraImages((prev) => {
+      const img = prev.find((i) => i.id === id);
+      if (img) URL.revokeObjectURL(img.url);
+      return prev.filter((i) => i.id !== id);
+    });
+  }
+
+  const totalMediaCount = addedImageIds.size + extraImages.length;
 
   // Tabs
   const [activeTab, setActiveTab] = useState<"edit" | "preview">("preview");
@@ -796,7 +821,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                 <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : isPublished || activeTab === "preview" ? (
-              <LinkedInPostPreview post={post} addedImageCount={addedImageIds.size} />
+              <LinkedInPostPreview post={post} addedImageCount={totalMediaCount} />
             ) : (
               <div className="mx-auto w-full max-w-[500px] space-y-3">
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -810,13 +835,33 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                 </div>
 
                 {/* MEDIA section */}
-                {addedImageIds.size > 0 && (
-                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                        Media
-                      </span>
+                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      Media
+                    </span>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+                    >
+                      <LuPlus className="h-3.5 w-3.5" />
+                      Add more
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                  </div>
+                  {totalMediaCount === 0 ? (
+                    <div className="px-4 py-6 text-center text-xs text-gray-400">
+                      No images attached yet. Add images from the chat or click &quot;Add
+                      more&quot;.
                     </div>
+                  ) : (
                     <div className="divide-y divide-gray-100">
                       {messages
                         .filter((m) => m.image && addedImageIds.has(m.id))
@@ -840,9 +885,32 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                             </button>
                           </div>
                         ))}
+                      {extraImages.map((img, idx) => (
+                        <div key={img.id} className="flex items-center gap-3 px-4 py-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img.url}
+                            alt={img.name}
+                            className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                          />
+                          <span className="flex-1 truncate text-sm font-medium text-gray-700">
+                            Image {addedImageIds.size + idx + 1}
+                          </span>
+                          <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-600">
+                            <LuCheck className="h-3 w-3" />
+                            Attached
+                          </span>
+                          <button
+                            onClick={() => handleRemoveExtraImage(img.id)}
+                            className="rounded-md p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-red-500"
+                          >
+                            <LuTrash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </div>
