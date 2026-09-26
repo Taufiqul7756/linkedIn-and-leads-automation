@@ -245,6 +245,39 @@ useEffect(() => {
 
 Keep the URL→context sync effect's deps narrow too: `[searchParams, workspaces]` (not `activeWorkspace`).
 
+## Image Chat Polling Pattern
+
+Used on `/linkedin/edit-image/[postId]` — `imageChatService` uses axios directly (same as `linkedinAgentService`).
+
+```ts
+// Open chat on mount
+const c = await imageChatService(workspaceId).openChat(postId);
+setChat(c);
+if (c.status === "running") startPolling(c.id);
+
+// Poll every 2s while running
+pollRef.current = setInterval(async () => {
+  const c = await imageChatService(workspaceId).getChat(chatId);
+  setChat(c);
+  if (c.status === "ready") stopPolling();
+}, 2000);
+
+// Send message
+const c = await imageChatService(workspaceId).sendMessage(chat.id, prompt);
+setChat(c);
+if (c.status === "running") startPolling(c.id);
+
+// Add image to post
+const c = await imageChatService(workspaceId).addToPost(chat.id, imageId);
+setChat(c); // post_image_url updated in returned chat
+```
+
+- Send button disabled while `chat.status === "running"`
+- Replace state wholesale from each response — never append client-side
+- `chat.post_image_url` drives both the preview and media section (persists on reload)
+- Delete image: `PATCH posts/{id}/ { image_url: "" }` then `setChat(prev => ({ ...prev, post_image_url: "" }))`
+- Auto-scroll: `useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat?.messages])`
+
 ## Do Not
 
 - Read `process.env` directly in components

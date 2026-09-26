@@ -530,6 +530,53 @@ This prevents a new conversation from being created every time the user clicks E
 
 ---
 
+## Image Chat — Edit Image Page (`/linkedin/edit-image/[postId]`)
+
+Full spec: `docs/image-chat-integration.md`
+
+### Key files
+- Page: `src/app/linkedin/edit-image/[postId]/page.tsx`
+- Service: `src/service/imageChatService.ts`
+- Types: `src/types/ImageChat.ts`
+
+### API base
+```
+/workspaces/{workspaceId}/image-chats/
+```
+
+### Endpoints
+
+| Method | Path | Returns | Notes |
+|---|---|---|---|
+| `POST` | `image-chats/` | `201` new / `200` existing | `{ post: id }` — one chat per post |
+| `GET` | `image-chats/{id}/` | `200` full chat | Poll while `status === "running"` |
+| `POST` | `image-chats/{id}/messages/` | `202` generating / `200` text-only | `{ prompt }` |
+| `POST` | `image-chats/{id}/add_to_post/` | `200` full chat | `{ image: imageId }` |
+
+### Polling rule
+Poll `GET image-chats/{id}/` every 2s while `chat.status === "running"`. Stop on `"ready"`. Send button disabled while running.
+
+### Image card states
+- `image.status === "pending"` → show `ImageThinkingSteps` spinner
+- `image.status === "ready"` → show `<img>` (16:9) + Add to post button
+- `image.status === "failed"` → show text only (backend rewrites the message text)
+
+### Add to post
+- Calls `add_to_post` → returns updated chat with new `post_image_url`
+- Preview and media section both read `chat.post_image_url` — update automatically
+- Delete image: `PATCH /content/posts/{id}/ { image_url: "" }` then clear local chat state
+
+### Reload persistence
+- Preview persists after reload: `chat.post_image_url` is always returned by API
+- Media section persists after reload: reads `chat.post_image_url` directly (not local `addedImageId`)
+- "Added" button state on individual image cards: **pending backend fix** — needs `is_img_added: boolean` on `GeneratedImage`
+
+### Pending backend items
+1. `is_img_added: boolean` on `GeneratedImage` — true if that image is currently on the post; needed to restore "Added" button state after reload
+2. `DELETE attachment/{id}/` — not yet available
+
+---
+
 ## Worked Example
 
 ```
