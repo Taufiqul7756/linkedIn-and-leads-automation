@@ -31,6 +31,9 @@
   --sidebar-dark: #1a1740;
   --chat-panel-bg: #f4f5fb;
   --post-panel-bg: #f0f2f5;
+  --reaction-like: #8ecae6;
+  --reaction-support: #ddd5ec;
+  --reaction-celebrate: #b0d98f;
 }
 
 @theme inline {
@@ -41,6 +44,9 @@
   --color-sidebar-dark: var(--sidebar-dark);
   --color-chat-panel-bg: var(--chat-panel-bg);
   --color-post-panel-bg: var(--post-panel-bg);
+  --color-reaction-like: var(--reaction-like);
+  --color-reaction-support: var(--reaction-support);
+  --color-reaction-celebrate: var(--reaction-celebrate);
   --font-sans: var(--font-inter);
   --font-mono: ui-monospace, monospace;
 }

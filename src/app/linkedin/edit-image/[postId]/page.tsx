@@ -12,10 +12,10 @@ import {
   LuSmile,
   LuPencil,
   LuClock,
-  LuShare2,
   LuImage,
   LuThumbsUp,
   LuMessageSquare,
+  LuRepeat2,
   LuDownload,
   LuPlus,
   LuLoader,
@@ -27,12 +27,16 @@ import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinAgentService } from "@/service/linkedinAgentService";
 import { postsService } from "@/service/postsService";
+import { imageChatService } from "@/service/imageChatService";
+import { linkedinService } from "@/service/linkedinService";
+import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import toast from "react-hot-toast";
 import TiptapEditor from "@/components/ui/TiptapEditor";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
+import type { ImageChat, ChatMessage, GeneratedImage } from "@/types/ImageChat";
 
-// ─── body_blocks → Tiptap helpers (same as EditDraftModal) ───────────────────
+// ─── body_blocks → Tiptap helpers ────────────────────────────────────────────
 
 function legacyBlocksToTiptap(blocks: BlockNode[]): object {
   const content = blocks
@@ -99,104 +103,7 @@ function getInitialContent(post: AgentPost): object {
   return post.body ? plainTextToTiptap(post.body) : { type: "doc", content: [] };
 }
 
-// ─── Mock chat data ───────────────────────────────────────────────────────────
-
-type ChatMsg = {
-  id: number;
-  role: "user" | "assistant";
-  text: string;
-  image?: boolean;
-  isGenerating?: boolean;
-};
-
-const INITIAL_MESSAGES: ChatMsg[] = [
-  {
-    id: 1,
-    role: "user",
-    text: "Create a professional image for this post about founders and investors",
-  },
-  {
-    id: 2,
-    role: "assistant",
-    text: "A funnel/filter diagram representing the two-sided deal framework:",
-    image: true,
-  },
-];
-
-// ─── Generated image visual ───────────────────────────────────────────────────
-
-function GeneratedImage({ className }: { className?: string }) {
-  return (
-    <div className={cn("relative flex flex-col overflow-hidden rounded-xl bg-blue-500", className)}>
-      <div className="flex flex-col items-center px-4 pt-4 pb-3">
-        <p className="text-center text-[11px] font-extrabold uppercase leading-tight tracking-wide text-white">
-          The Two-Sided Deal Filter:
-        </p>
-        <p className="text-center text-[10px] font-bold uppercase leading-tight text-white/90">
-          How Founders &amp; Investors — Say No Faster, Yes Smarter
-        </p>
-        <p className="mt-0.5 text-center text-[9px] text-white/70">
-          A judgment-first framework for founder-investor fit
-        </p>
-
-        <div className="relative mt-2 flex w-full flex-col items-center">
-          <div className="flex w-full items-start justify-around">
-            {["💡", "⚖️", "❓"].map((icon, i) => (
-              <div key={i} className="flex flex-col items-center">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-xs">
-                  {icon}
-                </div>
-                <div className="h-8 w-px bg-white/40" />
-              </div>
-            ))}
-          </div>
-
-          <div className="relative flex items-center justify-center">
-            <div className="flex flex-col items-center">
-              <div
-                className="h-0 w-0"
-                style={{
-                  borderLeft: "36px solid transparent",
-                  borderRight: "36px solid transparent",
-                  borderTop: "20px solid rgba(255,255,255,0.22)",
-                }}
-              />
-              <div
-                className="h-0 w-0"
-                style={{
-                  borderLeft: "22px solid transparent",
-                  borderRight: "22px solid transparent",
-                  borderTop: "26px solid rgba(255,255,255,0.32)",
-                }}
-              />
-              <div className="h-5 w-2.5 bg-white/40" />
-            </div>
-            <span className="absolute left-0 -translate-x-2 text-lg">🧑‍💼</span>
-            <span className="absolute right-0 translate-x-2 text-lg">👩‍💼</span>
-          </div>
-
-          <div className="flex w-full items-end justify-around">
-            {["📋", "✅", "❌"].map((icon, i) => (
-              <div key={i} className="flex flex-col items-center">
-                <div className="h-8 w-px bg-white/40" />
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-xs">
-                  {icon}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="bg-blue-950 px-3 py-1.5 text-center">
-        <p className="text-[10px] font-bold tracking-wide text-white">
-          Comment &quot;TWOSIDED&quot; and I will send it
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Image thinking steps ─────────────────────────────────────────────────────
+// ─── Image thinking steps (shown while image.status === "pending") ────────────
 
 const IMAGE_STEPS = ["Thought process", "Image plan ready", "Image ready"];
 
@@ -236,39 +143,66 @@ function ImageThinkingSteps() {
   );
 }
 
-// ─── Image result card ────────────────────────────────────────────────────────
+// ─── Image result card (real image from API) ──────────────────────────────────
 
 function ImageResultCard({
-  onAdd,
+  image,
   isAdded,
+  onAdd,
   onPreview,
 }: {
-  onAdd: () => void;
+  image: GeneratedImage;
   isAdded: boolean;
-  onPreview: () => void;
+  onAdd: () => void;
+  onPreview: (url: string) => void;
 }) {
+  if (image.status === "failed") return null;
+
   return (
     <div className="mt-2 w-[26rem] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="relative">
-        <div onClick={onPreview} className="cursor-zoom-in">
-          <GeneratedImage className="min-h-64" />
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-3 py-2.5">
-          <button
-            onClick={onAdd}
-            disabled={isAdded}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold shadow-md transition",
-              isAdded ? "cursor-default text-green-600" : "text-sidebar-dark hover:bg-white/90"
-            )}
-          >
-            {isAdded ? <LuCheck className="h-3.5 w-3.5" /> : <LuPlus className="h-3.5 w-3.5" />}
-            {isAdded ? "Added" : "Add to post"}
-          </button>
-          <button className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800/75 text-white shadow-md backdrop-blur-sm transition hover:bg-gray-800/90">
-            <LuDownload className="h-4 w-4" />
-          </button>
-        </div>
+      <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
+        {image.status === "pending" ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
+          </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={image.url}
+            alt={image.prompt || "Generated image"}
+            className="h-full w-full cursor-zoom-in object-cover"
+            onClick={() => onPreview(image.url)}
+          />
+        )}
+        {image.status === "ready" && (
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-3 py-2.5">
+            <button
+              onClick={onAdd}
+              disabled={isAdded}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold shadow-md transition",
+                isAdded ? "cursor-default text-green-600" : "text-sidebar-dark hover:bg-white/90"
+              )}
+            >
+              {isAdded ? <LuCheck className="h-3.5 w-3.5" /> : <LuPlus className="h-3.5 w-3.5" />}
+              {isAdded ? "Added" : "Add to post"}
+            </button>
+            <button
+              onClick={async () => {
+                const blob = await fetch(image.url).then((r) => r.blob());
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `image-${image.id}.jpg`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800/75 text-white shadow-md backdrop-blur-sm transition hover:bg-gray-800/90"
+            >
+              <LuDownload className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -276,23 +210,23 @@ function ImageResultCard({
 
 // ─── Chat message ─────────────────────────────────────────────────────────────
 
-function ChatMessage({
+function ChatMessageItem({
   message,
-  onAddImage,
-  addedImageIds,
+  addedImageId,
+  onAddToPost,
   onPreviewImage,
 }: {
-  message: ChatMsg;
-  onAddImage: (id: number) => void;
-  addedImageIds: Set<number>;
-  onPreviewImage: () => void;
+  message: ChatMessage;
+  addedImageId: string | null;
+  onAddToPost: (imageId: string) => void;
+  onPreviewImage: (url: string) => void;
 }) {
   const isUser = message.role === "user";
+  const isPending = message.image?.status === "pending";
+
   return (
     <div className={cn("flex flex-col gap-1", isUser ? "items-end" : "items-start")}>
-      <span className="px-1 text-[10px] font-medium text-gray-400">
-        {isUser ? "You" : "Image Agent"}
-      </span>
+      {isUser && <span className="px-1 text-[10px] font-medium text-gray-400">You</span>}
       <div className={cn("flex gap-2.5", isUser && "flex-row-reverse")}>
         {isUser ? (
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500 text-xs font-semibold text-white">
@@ -301,13 +235,13 @@ function ChatMessage({
         ) : (
           <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
             <Image src="/cg-fav.svg" alt="Agent" width={16} height={16} className="shrink-0" />
-            {message.isGenerating && (
+            {isPending && (
               <span className="absolute inset-0 rounded-xl animate-ping bg-blue-300 opacity-30" />
             )}
           </div>
         )}
         <div className={cn("min-w-0", isUser ? "max-w-[75%]" : "flex-1")}>
-          {message.isGenerating ? (
+          {isPending ? (
             <ImageThinkingSteps />
           ) : (
             <div
@@ -321,10 +255,11 @@ function ChatMessage({
               {message.text}
             </div>
           )}
-          {message.image && (
+          {message.image && message.image.status !== "pending" && (
             <ImageResultCard
-              onAdd={() => onAddImage(message.id)}
-              isAdded={addedImageIds.has(message.id)}
+              image={message.image}
+              isAdded={addedImageId === message.image.id}
+              onAdd={() => onAddToPost(message.image!.id)}
               onPreview={onPreviewImage}
             />
           )}
@@ -334,33 +269,90 @@ function ChatMessage({
   );
 }
 
+// ─── ProseMirror doc renderer ─────────────────────────────────────────────────
+
+type PMNode = {
+  type: string;
+  text?: string;
+  marks?: { type: string }[];
+  content?: PMNode[];
+};
+
+function renderInline(nodes: PMNode[]): React.ReactNode {
+  return nodes.map((node, i) => {
+    if (node.type !== "text") return null;
+    const isBold = node.marks?.some((m) => m.type === "bold");
+    const isItalic = node.marks?.some((m) => m.type === "italic");
+    let el: React.ReactNode = node.text ?? "";
+    if (isBold) el = <strong key={i}>{el}</strong>;
+    if (isItalic) el = <em key={i}>{el}</em>;
+    return <span key={i}>{el}</span>;
+  });
+}
+
+function renderDoc(doc: object): React.ReactNode[] {
+  const root = doc as { type?: string; content?: PMNode[] };
+  if (root.type !== "doc" || !root.content) return [];
+  return root.content.map((block, i) => {
+    if (block.type === "paragraph") {
+      return (
+        <p key={i} className="text-sm leading-relaxed text-gray-700 mt-2 first:mt-0">
+          {block.content ? renderInline(block.content) : <br />}
+        </p>
+      );
+    }
+    if (block.type === "bulletList") {
+      return (
+        <ul key={i} className="list-disc pl-5 mt-2 space-y-0.5">
+          {block.content?.map((item, j) => (
+            <li key={j} className="text-sm leading-relaxed text-gray-700">
+              {item.content?.[0]?.content ? renderInline(item.content[0].content) : null}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return null;
+  });
+}
+
 // ─── LinkedIn post preview ────────────────────────────────────────────────────
 
 function LinkedInPostPreview({
-  post,
-  addedImageCount,
+  bodyJson,
+  postImageUrl,
+  extraImageCount,
+  accountName,
 }: {
-  post: AgentPost | null;
-  addedImageCount: number;
+  bodyJson: object;
+  postImageUrl: string;
+  extraImageCount: number;
+  accountName: string;
 }) {
-  const body =
-    post?.body ??
-    "Most founders and investors think the hard part of a deal is finding the yes. The hard part is saying no to a wrong yes before it wastes your time or your money....";
+  const [showFull, setShowFull] = useState(false);
+
+  const totalImages = (postImageUrl ? 1 : 0) + extraImageCount;
+  const initial = accountName ? accountName.charAt(0).toUpperCase() : "?";
+
+  const rendered = renderDoc(bodyJson);
+  // "collapsed" = first 3 paragraphs only
+  const collapsed = rendered.slice(0, 3);
+  const hasMore = rendered.length > 3;
+
   return (
     <div className="mx-auto w-full max-w-[500px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm mb-2">
       <div className="flex items-start justify-between px-4 pt-4 pb-1">
         <div className="flex items-start gap-3">
           <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-orange-400 to-rose-500">
             <div className="flex h-full w-full items-center justify-center text-lg font-bold text-white">
-              G
+              {initial}
             </div>
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900">Garry Doel</p>
-            <p className="text-xs text-gray-500">Founder, Investor and IT Enthusiast</p>
+            <p className="text-sm font-semibold text-gray-900">{accountName || "—"}</p>
             <div className="mt-0.5 flex items-center gap-1">
               <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
-                New
+                Now
               </span>
               <span className="text-[10px] text-gray-400">●</span>
             </div>
@@ -371,35 +363,58 @@ function LinkedInPostPreview({
         </button>
       </div>
       <div className="px-4 py-2">
-        <p className="line-clamp-3 text-sm leading-relaxed text-gray-700">
-          {body} <button className="font-semibold text-gray-900 hover:underline">see more</button>
-        </p>
+        {showFull ? rendered : collapsed}
+        {hasMore && (
+          <button
+            onClick={() => setShowFull((v) => !v)}
+            className="mt-1 text-xs font-semibold text-gray-500 hover:underline"
+          >
+            {showFull ? "see less" : "…see more"}
+          </button>
+        )}
       </div>
-      {addedImageCount === 0 ? null : addedImageCount === 1 ? (
-        <GeneratedImage className="rounded-none" />
-      ) : (
-        <div className="grid grid-cols-2 gap-0.5">
-          {Array.from({ length: Math.min(addedImageCount, 4) }).map((_, i) => {
-            const displayCount = Math.min(addedImageCount, 4);
-            const isLast = i === displayCount - 1;
-            const isOdd = displayCount % 2 !== 0;
-            return (
-              <div key={i} className={cn("relative", isLast && isOdd && "col-span-2")}>
-                <GeneratedImage className="rounded-none" />
-                {isLast && addedImageCount > 4 && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <span className="text-lg font-bold text-white">+{addedImageCount - 4}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {totalImages > 0 &&
+        (postImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={postImageUrl} alt="Post image" className="w-full aspect-video object-cover" />
+        ) : null)}
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-1">
-          <span className="text-sm">❤️</span>
-          <span className="text-sm">👏</span>
+          <div className="flex items-center">
+            <div
+              className="flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
+              style={{ backgroundColor: "var(--reaction-like)" }}
+            >
+              <Image
+                src="/icons/Linkedin-Like-Icon-Thumbup.png"
+                alt="Like"
+                width={13}
+                height={13}
+              />
+            </div>
+            <div
+              className="-ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
+              style={{ backgroundColor: "var(--reaction-support)" }}
+            >
+              <Image
+                src="/icons/Linkedin-Support-Icon-HeartinHand.png"
+                alt="Support"
+                width={13}
+                height={13}
+              />
+            </div>
+            <div
+              className="-ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
+              style={{ backgroundColor: "var(--reaction-celebrate)" }}
+            >
+              <Image
+                src="/icons/Linkedin-Celebrate-Icon-ClappingHands.png"
+                alt="Celebrate"
+                width={13}
+                height={13}
+              />
+            </div>
+          </div>
           <span className="ml-1 text-xs text-gray-500">1,37</span>
         </div>
         <span className="text-xs text-gray-500">1 comment · 3 reposts</span>
@@ -409,7 +424,7 @@ function LinkedInPostPreview({
         {[
           { icon: LuThumbsUp, label: "Like" },
           { icon: LuMessageSquare, label: "Comment" },
-          { icon: LuImage, label: "Repost" },
+          { icon: LuRepeat2, label: "Repost" },
           { icon: LuSend, label: "Send" },
         ].map(({ icon: Icon, label }) => (
           <button
@@ -508,6 +523,13 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
 
+  // LinkedIn account
+  const { data: linkedInAccount } = useQueryWithTokenRefresh(
+    ["linkedin-account", workspaceId],
+    () => linkedinService(workspaceId).getAccount(),
+    { enabled: !!workspaceId }
+  );
+
   // Post data
   const [post, setPost] = useState<AgentPost | null>(null);
   const [postLoading, setPostLoading] = useState(true);
@@ -517,12 +539,12 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const [editorKey, setEditorKey] = useState(0);
 
   // Chat
-  const [messages, setMessages] = useState<ChatMsg[]>(INITIAL_MESSAGES);
-  const [input, setInput] = useState("");
+  const [chat, setChat] = useState<ImageChat | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
-
-  // Added images (keyed by message id)
-  const [addedImageIds, setAddedImageIds] = useState<Set<number>>(new Set());
+  const [addedImageId, setAddedImageId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Extra images uploaded via "Add more"
   const [extraImages, setExtraImages] = useState<{ id: number; name: string; url: string }[]>([]);
@@ -530,45 +552,14 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   // Image lightbox
   const [previewOpen, setPreviewOpen] = useState(false);
-
-  function handleAddImage(id: number) {
-    setAddedImageIds((prev) => new Set(prev).add(id));
-  }
-
-  function handleRemoveImage(id: number) {
-    setAddedImageIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
-
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    const newImages = files.map((file) => ({
-      id: Date.now() + Math.random(),
-      name: file.name,
-      url: URL.createObjectURL(file),
-    }));
-    setExtraImages((prev) => [...prev, ...newImages]);
-    e.target.value = "";
-  }
-
-  function handleRemoveExtraImage(id: number) {
-    setExtraImages((prev) => {
-      const img = prev.find((i) => i.id === id);
-      if (img) URL.revokeObjectURL(img.url);
-      return prev.filter((i) => i.id !== id);
-    });
-  }
-
-  const totalMediaCount = addedImageIds.size + extraImages.length;
+  const [previewUrl, setPreviewUrl] = useState("");
 
   // Tabs
   const [activeTab, setActiveTab] = useState<"edit" | "preview">("preview");
 
   // Actions
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [approving, setApproving] = useState(false);
   const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -579,8 +570,39 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isPublished = post?.status === "published";
+  const isChatRunning = chat?.status === "running";
 
-  // Fetch post
+  // ── Polling helpers ─────────────────────────────────────────────────────────
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  function startPolling(chatId: string) {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const c = await imageChatService(workspaceId).getChat(chatId);
+        setChat(c);
+        if (c.status === "ready") stopPolling();
+      } catch {
+        // keep polling on transient errors
+      }
+    }, 2000);
+  }
+
+  useEffect(() => () => stopPolling(), []);
+
+  // Auto-scroll to bottom whenever messages update
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chat?.messages]);
+
+  // ── Fetch post ──────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!workspaceId || !postId) return;
     async function fetchPost() {
@@ -599,12 +621,71 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     void fetchPost();
   }, [workspaceId, postId]);
 
-  // Save body
+  // ── Open image chat ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!workspaceId || !postId) return;
+    async function openChat() {
+      setChatLoading(true);
+      try {
+        const c = await imageChatService(workspaceId).openChat(postId);
+        setChat(c);
+        // resume polling if a generation is already running
+        if (c.status === "running") startPolling(c.id);
+      } catch (err) {
+        toast.error(extractErrorMessage(err));
+      } finally {
+        setChatLoading(false);
+      }
+    }
+    void openChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, postId]);
+
+  // ── Send message ────────────────────────────────────────────────────────────
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || isSending || isChatRunning || !chat) return;
+    setIsSending(true);
+    setInput("");
+    try {
+      const c = await imageChatService(workspaceId).sendMessage(chat.id, text);
+      setChat(c);
+      if (c.status === "running") startPolling(c.id);
+    } catch (err) {
+      const msg = extractErrorMessage(err);
+      toast.error(msg);
+      setInput(text); // restore input so user can retry
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  // ── Add image to post ───────────────────────────────────────────────────────
+
+  async function handleAddToPost(imageId: string) {
+    if (!chat) return;
+    try {
+      const c = await imageChatService(workspaceId).addToPost(chat.id, imageId);
+      setChat(c);
+      setAddedImageId(imageId);
+      toast.success("Image added to post.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    }
+  }
+
+  // ── Right-panel actions ─────────────────────────────────────────────────────
+
+  const [input, setInput] = useState("");
+
   async function handleSave() {
     if (!post || !workspaceId) return;
     setSaving(true);
     try {
       await postsService(workspaceId).patchPost(post.id, { body_blocks: bodyJson });
+      setIsDirty(false);
       toast.success("Draft saved.");
     } catch (err) {
       toast.error(extractErrorMessage(err));
@@ -613,7 +694,6 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     }
   }
 
-  // Approve = Publish now
   async function handleApprove() {
     if (!post || !workspaceId) return;
     setApproving(true);
@@ -628,7 +708,6 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     }
   }
 
-  // Schedule — updates suggested_publish_at (same as pencil icon in ReviewApprovalSection)
   async function handleSchedule(date: string, time: string) {
     if (!post || !workspaceId || !date) return;
     const newIso = new Date(`${date}T${time || "00:00"}`).toISOString();
@@ -645,7 +724,6 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     }
   }
 
-  // Back to draft
   async function handleBackToDraft() {
     if (!post || !workspaceId) return;
     setBackingToDraft(true);
@@ -660,34 +738,43 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     }
   }
 
-  // Chat send
-  function handleSend() {
-    const text = input.trim();
-    if (!text || isSending) return;
-
-    const userMsg: ChatMsg = { id: Date.now(), role: "user", text };
-    const pendingMsg: ChatMsg = {
-      id: Date.now() + 1,
-      role: "assistant",
-      text: "Working on it…",
-      isGenerating: true,
-    };
-
-    setMessages((prev) => [...prev, userMsg, pendingMsg]);
-    setInput("");
-    setIsSending(true);
-
-    setTimeout(() => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === pendingMsg.id
-            ? { ...m, text: `Updated based on: "${text}"`, isGenerating: false, image: true }
-            : m
-        )
-      );
-      setIsSending(false);
-    }, 2000);
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    const newImages = files.map((file) => ({
+      id: Date.now() + Math.random(),
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setExtraImages((prev) => [...prev, ...newImages]);
+    e.target.value = "";
   }
+
+  const [removingChatImage, setRemovingChatImage] = useState(false);
+
+  async function handleRemoveChatImage() {
+    if (!post || !workspaceId) return;
+    setRemovingChatImage(true);
+    try {
+      await postsService(workspaceId).patchPost(post.id, { image_url: "" });
+      setAddedImageId(null);
+      setChat((prev) => (prev ? { ...prev, post_image_url: "" } : prev));
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setRemovingChatImage(false);
+    }
+  }
+
+  function handleRemoveExtraImage(id: number) {
+    setExtraImages((prev) => {
+      const img = prev.find((i) => i.id === id);
+      if (img) URL.revokeObjectURL(img.url);
+      return prev.filter((i) => i.id !== id);
+    });
+  }
+
+  const postImageUrl = chat?.post_image_url ?? "";
+  const totalMediaCount = (postImageUrl ? 1 : 0) + extraImages.length;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-page-bg">
@@ -699,7 +786,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             <div className="flex items-center gap-2">
               <div className="relative flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white">
                 <Image src="/cg-fav.svg" alt="Agent" width={16} height={16} className="shrink-0" />
-                {isSending && (
+                {isChatRunning && (
                   <span className="absolute inset-0 rounded-lg animate-ping bg-blue-300 opacity-30" />
                 )}
               </div>
@@ -708,17 +795,27 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <div className="flex flex-col gap-4">
-              {messages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  message={msg}
-                  onAddImage={handleAddImage}
-                  addedImageIds={addedImageIds}
-                  onPreviewImage={() => setPreviewOpen(true)}
-                />
-              ))}
-            </div>
+            {chatLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {chat?.messages.map((msg) => (
+                  <ChatMessageItem
+                    key={msg.id}
+                    message={msg}
+                    addedImageId={addedImageId}
+                    onAddToPost={handleAddToPost}
+                    onPreviewImage={(url) => {
+                      setPreviewUrl(url);
+                      setPreviewOpen(true);
+                    }}
+                  />
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
           </div>
 
           {isPublished ? (
@@ -737,7 +834,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSend();
+                      void handleSend();
                     }
                   }}
                   placeholder="Describe the image you want…"
@@ -754,11 +851,11 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                     </button>
                   </div>
                   <button
-                    onClick={handleSend}
-                    disabled={!input.trim() || isSending}
+                    onClick={() => void handleSend()}
+                    disabled={!input.trim() || isSending || isChatRunning}
                     className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-40"
                   >
-                    {isSending ? (
+                    {isSending || isChatRunning ? (
                       <LuLoader className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <LuSend className="h-3.5 w-3.5" />
@@ -821,14 +918,22 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                 <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : isPublished || activeTab === "preview" ? (
-              <LinkedInPostPreview post={post} addedImageCount={totalMediaCount} />
+              <LinkedInPostPreview
+                bodyJson={bodyJson}
+                postImageUrl={postImageUrl}
+                extraImageCount={extraImages.length}
+                accountName={linkedInAccount?.name ?? ""}
+              />
             ) : (
               <div className="mx-auto w-full max-w-[500px] space-y-3">
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                   <TiptapEditor
                     key={editorKey}
                     content={bodyJson}
-                    onChange={setBodyJson}
+                    onChange={(val) => {
+                      setBodyJson(val);
+                      setIsDirty(true);
+                    }}
                     minHeight="360px"
                     placeholder="Write your LinkedIn post…"
                   />
@@ -863,28 +968,34 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-100">
-                      {messages
-                        .filter((m) => m.image && addedImageIds.has(m.id))
-                        .map((m, idx) => (
-                          <div key={m.id} className="flex items-center gap-3 px-4 py-3">
-                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg">
-                              <GeneratedImage className="h-full w-full" />
-                            </div>
-                            <span className="flex-1 text-sm font-medium text-gray-700">
-                              Image {idx + 1}
-                            </span>
-                            <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-600">
-                              <LuCheck className="h-3 w-3" />
-                              Attached
-                            </span>
-                            <button
-                              onClick={() => handleRemoveImage(m.id)}
-                              className="rounded-md p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-red-500"
-                            >
-                              <LuTrash2 className="h-4 w-4" />
-                            </button>
+                      {postImageUrl && (
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={postImageUrl}
+                              alt="Generated image"
+                              className="h-full w-full object-cover"
+                            />
                           </div>
-                        ))}
+                          <span className="flex-1 text-sm font-medium text-gray-700">AI Image</span>
+                          <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-600">
+                            <LuCheck className="h-3 w-3" />
+                            Attached
+                          </span>
+                          <button
+                            onClick={() => void handleRemoveChatImage()}
+                            disabled={removingChatImage}
+                            className="rounded-md p-1.5 text-gray-400 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                          >
+                            {removingChatImage ? (
+                              <LuLoader className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <LuTrash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      )}
                       {extraImages.map((img, idx) => (
                         <div key={img.id} className="flex items-center gap-3 px-4 py-3">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -894,7 +1005,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                             className="h-10 w-10 shrink-0 rounded-lg object-cover"
                           />
                           <span className="flex-1 truncate text-sm font-medium text-gray-700">
-                            Image {addedImageIds.size + idx + 1}
+                            Image {(postImageUrl ? 1 : 0) + idx + 1}
                           </span>
                           <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-600">
                             <LuCheck className="h-3 w-3" />
@@ -943,18 +1054,18 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             </div>
           ) : (
             /* ── Normal footer ── */
-            <div className="relative flex shrink-0 items-center justify-between border-t border-gray-200 bg-white px-5 py-3">
-              <button className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50">
-                <LuShare2 className="h-3.5 w-3.5" />
-                Share for Feedback
-              </button>
-
+            <div className="relative flex shrink-0 items-center justify-end border-t border-gray-200 bg-white px-5 py-3">
               <div className="flex items-center gap-2">
                 {activeTab === "edit" && (
                   <button
                     onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+                    disabled={saving || !isDirty}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-40",
+                      isDirty
+                        ? "border border-violet-500 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                        : "border border-gray-200 bg-white text-gray-400"
+                    )}
                   >
                     {saving ? (
                       <LuLoader className="h-3.5 w-3.5 animate-spin" />
@@ -1049,7 +1160,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
           onClick={() => setPreviewOpen(false)}
         >
           <div
-            className="relative mx-4 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative mx-4 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -1058,7 +1169,12 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             >
               <LuX className="h-4 w-4" />
             </button>
-            <GeneratedImage className="rounded-none" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="w-full aspect-video object-cover rounded-2xl"
+            />
           </div>
         </div>
       )}
