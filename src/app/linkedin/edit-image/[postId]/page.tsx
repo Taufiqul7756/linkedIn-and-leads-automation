@@ -403,25 +403,34 @@ function LinkedInPostPreview({
               className="flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
               style={{ backgroundColor: "var(--reaction-like)" }}
             >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
-                <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3m7-10v4a2 2 0 0 1-2 2H9l-2 5v1h12l1-9H14z" />
-              </svg>
+              <Image
+                src="/icons/Linkedin-Like-Icon-Thumbup.png"
+                alt="Like"
+                width={13}
+                height={13}
+              />
             </div>
             <div
               className="-ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
               style={{ backgroundColor: "var(--reaction-support)" }}
             >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
+              <Image
+                src="/icons/Linkedin-Support-Icon-HeartinHand.png"
+                alt="Support"
+                width={13}
+                height={13}
+              />
             </div>
             <div
               className="-ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
               style={{ backgroundColor: "var(--reaction-celebrate)" }}
             >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-              </svg>
+              <Image
+                src="/icons/Linkedin-Celebrate-Icon-ClappingHands.png"
+                alt="Celebrate"
+                width={13}
+                height={13}
+              />
             </div>
           </div>
           <span className="ml-1 text-xs text-gray-500">1,37</span>
@@ -895,12 +904,22 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                 />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <button className="rounded-md p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600">
-                      <LuPaperclip className="h-4 w-4" />
-                    </button>
-                    <button className="rounded-md p-1 text-gray-400 transition hover:bg-gray-200 hover:text-gray-600">
-                      <LuSmile className="h-4 w-4" />
-                    </button>
+                    <div className="group relative">
+                      <button disabled className="cursor-not-allowed rounded-md p-1 text-gray-300">
+                        <LuPaperclip className="h-4 w-4" />
+                      </button>
+                      <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        Soon
+                      </span>
+                    </div>
+                    <div className="group relative">
+                      <button disabled className="cursor-not-allowed rounded-md p-1 text-gray-300">
+                        <LuSmile className="h-4 w-4" />
+                      </button>
+                      <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        Soon
+                      </span>
+                    </div>
                   </div>
                   <button
                     onClick={() => void handleSend()}
