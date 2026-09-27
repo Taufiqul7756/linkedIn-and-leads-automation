@@ -8,7 +8,7 @@ export const mockAccount = {
     status: "Connected" as const,
   },
   knowledgeBase: {
-    url: "relayhq.com",
+    url: "creativegenie.io",
     subtitle: "8 facets · brand tone, ICP, value props",
     status: "Ready" as const,
   },
@@ -40,13 +40,13 @@ export const mockDraftPosts: DraftPost[] = [
     id: 1,
     author: {
       name: "Jordan Rivera",
-      title: "Founder & CEO at Relay",
+      title: "Founder & CEO at Creative genie",
       followers: "8,204",
       initials: "JR",
     },
     status: "Draft",
     content:
-      "Most sales teams don't have a lead problem. They have a follow-up problem.\n\nWe pulled the numbers across 2,400 outbound sequences: 71% of replies came after the second touch — but 4 in 5 reps never send it.\n\nAutomating the second and third touch isn't spam. It's the difference between a list and a pipeline. Here's how we think about cadence at Relay 👇",
+      "Most sales teams don't have a lead problem. They have a follow-up problem.\n\nWe pulled the numbers across 2,400 outbound sequences: 71% of replies came after the second touch — but 4 in 5 reps never send it.\n\nAutomating the second and third touch isn't spam. It's the difference between a list and a pipeline. Here's how we think about cadence at Creative genie 👇",
     boldWords: ["follow-up"],
     italicWords: ["after"],
     hashtags: ["#B2BSales", "#SalesAutomation", "#Outbound"],
@@ -58,7 +58,7 @@ export const mockDraftPosts: DraftPost[] = [
     id: 2,
     author: {
       name: "Jordan Rivera",
-      title: "Founder & CEO at Relay",
+      title: "Founder & CEO at Creative genie",
       followers: "8,204",
       initials: "JR",
     },
@@ -185,7 +185,7 @@ export const mockAgents: Agent[] = [
     name: "Knowledge Agent",
     subtitle: "Crawls site · builds KB",
     status: "Working",
-    description: "Indexed relayhq.com · 8 facets extracted",
+    description: "Indexed creativegenie.io · 8 facets extracted",
     detail: "tone · ICP · value props",
     iconType: "globe",
     color: "purple",

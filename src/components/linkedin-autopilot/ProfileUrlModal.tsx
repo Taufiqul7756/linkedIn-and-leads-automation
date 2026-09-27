@@ -140,7 +140,8 @@ export default function ProfileUrlModal({ isOpen, onClose }: ProfileUrlModalProp
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Your Profile URL" width="md">
       <p className="mb-4 text-sm text-gray-500">
-        Add your LinkedIn profile URL so Relay can personalise content to your voice and audience.
+        Add your LinkedIn profile URL so Creative genie can personalise content to your voice and
+        audience.
       </p>
 
       {/* Loading skeleton */}

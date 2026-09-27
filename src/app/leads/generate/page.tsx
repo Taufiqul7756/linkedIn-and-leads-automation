@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import LeadsGenerateView from "@/components/leads-generate/LeadsGenerateView";
 
 export const metadata = {
-  title: "Leads Generate — Relay",
+  title: "Leads Generate — Creative genie",
 };
 
 export default function LeadsGeneratePage() {

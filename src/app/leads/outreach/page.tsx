@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Leads Outreach — Relay",
+  title: "Leads Outreach — Creative genie",
 };
 
 export default function LeadsOutreachPage() {

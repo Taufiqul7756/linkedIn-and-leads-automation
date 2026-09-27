@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import LandingNavbar from "@/components/layout/LandingNavbar";
 import {
   LuArrowRight,
@@ -70,7 +71,7 @@ export default function LandingPage() {
                 <div className="h-3 w-3 rounded-full bg-yellow-400/70" />
                 <div className="h-3 w-3 rounded-full bg-green-400/70" />
                 <span className="ml-4 text-xs text-slate-400">
-                  app.relay.io — LinkedIn Autopilot
+                  app.creativegenie.io — LinkedIn Autopilot
                 </span>
               </div>
 
@@ -225,12 +226,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Why Relay ── */}
+      {/* ── Why Creative genie ── */}
       <section className="bg-[#E9ECF5] py-24">
         <div className="mx-auto max-w-7xl px-6">
           <div className="mb-16 text-center">
             <h2 className="text-3xl font-bold text-slate-900 md:text-4xl">
-              Why teams choose Relay
+              Why teams choose Creative genie
             </h2>
             <p className="mt-4 text-slate-500">Built for the way modern B2B teams work</p>
           </div>
@@ -274,8 +275,8 @@ export default function LandingPage() {
             Ready to grow your business with AI?
           </h2>
           <p className="mt-4 text-teal-100">
-            Join thousands of teams using Relay to find leads and grow their LinkedIn presence on
-            autopilot.
+            Join thousands of teams using Creative genie to find leads and grow their LinkedIn
+            presence on autopilot.
           </p>
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Link
@@ -299,11 +300,8 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex flex-col items-start justify-between gap-10 md:flex-row md:items-center">
             <div>
-              <div className="mb-2 flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-500">
-                  <span className="text-xs font-bold text-white">R</span>
-                </div>
-                <span className="font-bold text-slate-900">Relay</span>
+              <div className="mb-2">
+                <Image src="/cg-logo.svg" alt="Creative genie" width={130} height={28} />
               </div>
               <p className="text-xs text-slate-400">AI-powered LinkedIn automation platform</p>
             </div>
@@ -347,7 +345,7 @@ export default function LandingPage() {
           </div>
 
           <div className="mt-10 border-t border-slate-100 pt-8 text-center text-xs text-slate-400">
-            © 2025 Relay. All rights reserved.
+            © 2025 Creative genie. All rights reserved.
           </div>
         </div>
       </footer>

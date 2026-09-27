@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { LuChevronDown, LuMenu, LuX } from "react-icons/lu";
 import { FaLinkedinIn } from "react-icons/fa";
 import { LuUsers } from "react-icons/lu";
@@ -41,10 +42,7 @@ export default function LandingNavbar() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500">
-            <span className="text-sm font-bold text-white">R</span>
-          </div>
-          <span className="text-lg font-bold text-slate-900">Relay</span>
+          <Image src="/cg-logo.svg" alt="Creative genie" width={140} height={32} priority />
         </Link>
 
         {/* Desktop nav */}
