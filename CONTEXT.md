@@ -45,4 +45,5 @@ Token-based auth. `Authorization: Token <key>` header on every API request. Toke
 | `/linkedin/accounts` | LinkedIn Accounts |
 | `/linkedin/edit-image/[postId]` | Image Chat |
 | `/leads` | Leads page |
+| `/settings` | Account settings (read-only user details) |
 | `/inbox` | Inbox (not yet built) |

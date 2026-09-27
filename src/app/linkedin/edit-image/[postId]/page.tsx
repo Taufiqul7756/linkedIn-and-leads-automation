@@ -551,6 +551,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   // Post data
   const [post, setPost] = useState<AgentPost | null>(null);
   const [postLoading, setPostLoading] = useState(true);
+  const [postNotFound, setPostNotFound] = useState(false);
 
   // Editor
   const [bodyJson, setBodyJson] = useState<object>({ type: "doc", content: [] });
@@ -626,14 +627,20 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   useEffect(() => {
     if (!workspaceId || !postId) return;
     async function fetchPost() {
+      setPostNotFound(false);
       setPostLoading(true);
       try {
         const p = await linkedinAgentService(workspaceId).getAgentPost(postId);
         setPost(p);
         setBodyJson(getInitialContent(p));
         setEditorKey((k) => k + 1);
-      } catch (err) {
-        toast.error(extractErrorMessage(err));
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 404) {
+          setPostNotFound(true);
+        } else {
+          toast.error(extractErrorMessage(err));
+        }
       } finally {
         setPostLoading(false);
       }
@@ -814,6 +821,39 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   const postImageUrl = chat?.post_image_url ?? "";
   const totalMediaCount = (postImageUrl ? 1 : 0) + extraImages.length;
+
+  if (postNotFound) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-6 bg-page-bg px-6 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm">
+          <LuImage className="h-7 w-7 text-slate-300" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Post not found in this workspace</h2>
+          <p className="mt-1.5 max-w-sm text-sm text-slate-500">
+            This post belongs to a different workspace. Switch back to the correct workspace or
+            navigate to one of the pages below.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <a
+            href="/linkedin/automation"
+            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
+          >
+            <LuBot className="h-4 w-4" />
+            Go to Agent
+          </a>
+          <a
+            href="/linkedin/post-management"
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+          >
+            <LuFileText className="h-4 w-4" />
+            Post Management
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-page-bg">
