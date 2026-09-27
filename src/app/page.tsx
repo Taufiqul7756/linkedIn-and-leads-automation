@@ -20,11 +20,11 @@ export default function LandingPage() {
       {/* ── Hero ── */}
       <section className="relative flex min-h-screen items-center overflow-hidden pt-16">
         {/* Subtle gradient orb */}
-        <div className="pointer-events-none absolute -top-40 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-teal-300/20 via-blue-300/15 to-transparent blur-3xl" />
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-gradient-to-br from-brand/15 via-brand-light/10 to-transparent blur-3xl" />
 
         <div className="relative mx-auto w-full max-w-7xl px-6 py-24 text-center">
           {/* Badge */}
-          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-teal-400/40 bg-teal-50 px-4 py-1.5 text-sm font-medium text-teal-700">
+          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/5 px-4 py-1.5 text-sm font-medium text-brand">
             <LuZap className="h-3.5 w-3.5" />
             AI-Powered Lead Generation &amp; LinkedIn Automation
           </div>
@@ -33,7 +33,7 @@ export default function LandingPage() {
           <h1 className="text-5xl font-bold leading-tight tracking-tight text-slate-900 md:text-6xl lg:text-7xl">
             The AI Platform for
             <br />
-            <span className="bg-gradient-to-r from-teal-500 to-blue-500 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-brand to-brand-light bg-clip-text text-transparent">
               B2B Growth
             </span>{" "}
             &amp; Outreach
@@ -48,7 +48,7 @@ export default function LandingPage() {
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Link
               href="/register"
-              className="flex items-center gap-2 rounded-xl bg-teal-500 px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-teal-600"
+              className="flex items-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark"
             >
               Start Free Trial <LuArrowRight className="h-4 w-4" />
             </Link>
@@ -86,7 +86,7 @@ export default function LandingPage() {
                     <div key={stat.label} className="rounded-xl bg-white p-4 shadow-sm">
                       <p className="text-xs text-slate-500">{stat.label}</p>
                       <p className="mt-1 text-2xl font-bold text-slate-900">{stat.value}</p>
-                      <p className="mt-0.5 text-xs font-medium text-teal-600">{stat.delta}</p>
+                      <p className="mt-0.5 text-xs font-medium text-brand">{stat.delta}</p>
                     </div>
                   ))}
                 </div>
@@ -96,7 +96,7 @@ export default function LandingPage() {
                   {[22, 38, 30, 55, 44, 68, 62, 80, 74, 88, 82, 100].map((h, i) => (
                     <div
                       key={i}
-                      className="flex-1 rounded-sm bg-gradient-to-t from-teal-500 to-blue-400 opacity-80"
+                      className="flex-1 rounded-sm bg-gradient-to-t from-brand to-brand-light opacity-80"
                       style={{ height: `${h}%` }}
                     />
                   ))}
@@ -112,8 +112,8 @@ export default function LandingPage() {
                       key={card.title}
                       className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm"
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50">
-                        <FaLinkedinIn className="h-4 w-4 text-teal-500" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10">
+                        <FaLinkedinIn className="h-4 w-4 text-brand" />
                       </div>
                       <div>
                         <p className="text-xs font-medium text-slate-800">{card.title}</p>
@@ -134,7 +134,7 @@ export default function LandingPage() {
           <div className="mb-16 text-center">
             <h2 className="text-3xl font-bold text-slate-900 md:text-4xl">
               Everything you need to{" "}
-              <span className="bg-gradient-to-r from-teal-500 to-blue-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-brand to-brand-light bg-clip-text text-transparent">
                 grow on LinkedIn
               </span>
             </h2>
@@ -144,8 +144,8 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {/* LinkedIn Autopilot */}
             <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-md">
-              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-teal-50">
-                <LuBrain className="h-6 w-6 text-teal-500" />
+              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-brand/10">
+                <LuBrain className="h-6 w-6 text-brand" />
               </div>
               <h3 className="mb-3 text-xl font-bold text-slate-900">LinkedIn Autopilot</h3>
               <p className="mb-6 text-sm leading-relaxed text-slate-500">
@@ -160,14 +160,14 @@ export default function LandingPage() {
                   "Scheduled publishing",
                 ].map((feat) => (
                   <li key={feat} className="flex items-center gap-2 text-sm text-slate-700">
-                    <LuCheck className="h-4 w-4 shrink-0 text-teal-500" />
+                    <LuCheck className="h-4 w-4 shrink-0 text-brand" />
                     {feat}
                   </li>
                 ))}
               </ul>
               <Link
                 href="/register"
-                className="inline-flex items-center gap-2 text-sm font-medium text-teal-600 transition-colors hover:text-teal-700"
+                className="inline-flex items-center gap-2 text-sm font-medium text-brand transition-colors hover:text-brand-dark"
               >
                 Get started <LuArrowRight className="h-4 w-4" />
               </Link>
@@ -238,7 +238,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
             {[
               {
-                icon: <LuZap className="h-5 w-5 text-teal-500" />,
+                icon: <LuZap className="h-5 w-5 text-brand" />,
                 title: "Generate in seconds",
                 desc: "Turn your docs, websites, and knowledge base into polished LinkedIn posts instantly.",
               },
@@ -248,7 +248,7 @@ export default function LandingPage() {
                 desc: "Every post goes through your review workflow before it ever goes live.",
               },
               {
-                icon: <LuTrendingUp className="h-5 w-5 text-teal-500" />,
+                icon: <LuTrendingUp className="h-5 w-5 text-brand" />,
                 title: "Track what works",
                 desc: "See approval rates, reach, and engagement growth — all in one dashboard.",
               },
@@ -269,25 +269,25 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA ── */}
-      <section className="bg-gradient-to-br from-teal-600 to-blue-600 py-24">
+      <section className="bg-gradient-to-br from-brand to-brand-light py-24">
         <div className="mx-auto max-w-2xl px-6 text-center">
           <h2 className="text-3xl font-bold text-white md:text-4xl">
             Ready to grow your business with AI?
           </h2>
-          <p className="mt-4 text-teal-100">
+          <p className="mt-4 text-white/70">
             Join thousands of teams using Creative genie to find leads and grow their LinkedIn
             presence on autopilot.
           </p>
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Link
               href="/register"
-              className="flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-base font-semibold text-teal-700 shadow-sm transition-colors hover:bg-teal-50"
+              className="flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-base font-semibold text-brand shadow-sm transition-colors hover:bg-brand/5"
             >
               Start Free Trial <LuArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/login"
-              className="text-sm text-teal-100 transition-colors hover:text-white"
+              className="text-sm text-white/70 transition-colors hover:text-white"
             >
               Already have an account? Sign in →
             </Link>

@@ -20,7 +20,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [linkedinUrl, setLinkedinUrl] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     email?: string;
@@ -29,12 +28,8 @@ export default function RegisterPage() {
   }>({});
 
   const registerMutation = useMutation({
-    mutationFn: (data: {
-      email: string;
-      username: string;
-      password: string;
-      linkedin_profile_url?: string;
-    }) => authService().register(data),
+    mutationFn: (data: { email: string; username: string; password: string }) =>
+      authService().register(data),
     onSuccess: (data: LoginResponse) => {
       login(data);
       toast.success("Account created!");
@@ -58,10 +53,7 @@ export default function RegisterPage() {
       return;
     }
     setFieldErrors({});
-    registerMutation.mutate({
-      ...result.data,
-      ...(linkedinUrl.trim() ? { linkedin_profile_url: linkedinUrl.trim() } : {}),
-    });
+    registerMutation.mutate(result.data);
   };
 
   return (
@@ -111,7 +103,7 @@ export default function RegisterPage() {
                 placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-brand-light focus:ring-2 focus:ring-brand-light/20"
               />
               {fieldErrors.email && (
                 <p className="mt-1.5 text-xs text-red-500">{fieldErrors.email}</p>
@@ -130,7 +122,7 @@ export default function RegisterPage() {
                 placeholder="yourname"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-brand-light focus:ring-2 focus:ring-brand-light/20"
               />
               {fieldErrors.username && (
                 <p className="mt-1.5 text-xs text-red-500">{fieldErrors.username}</p>
@@ -150,7 +142,7 @@ export default function RegisterPage() {
                   placeholder="At least 8 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 pr-10 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                  className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 pr-10 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-brand-light focus:ring-2 focus:ring-brand-light/20"
                 />
                 <button
                   type="button"
@@ -165,34 +157,11 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* LinkedIn URL — optional */}
-            <div>
-              <label
-                htmlFor="linkedin-url"
-                className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"
-              >
-                <FaLinkedinIn className="h-3.5 w-3.5 text-blue-600" />
-                LinkedIn Profile URL
-                <span className="text-xs font-normal text-slate-400">(optional)</span>
-              </label>
-              <input
-                id="linkedin-url"
-                type="url"
-                placeholder="https://www.linkedin.com/in/yourname"
-                value={linkedinUrl}
-                onChange={(e) => setLinkedinUrl(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                Creative genie uses this to personalise content to your voice.
-              </p>
-            </div>
-
             {/* Submit */}
             <button
               type="submit"
               disabled={registerMutation.isPending}
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
             >
               {registerMutation.isPending ? (
                 <>
@@ -207,7 +176,7 @@ export default function RegisterPage() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}
-            <Link href="/login" className="font-medium text-teal-600 hover:underline">
+            <Link href="/login" className="font-medium text-brand hover:underline">
               Log in
             </Link>
           </p>
@@ -231,7 +200,7 @@ export default function RegisterPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-3 flex gap-0.5">
               {Array.from({ length: 5 }).map((_, i) => (
-                <svg key={i} className="h-4 w-4 fill-teal-500" viewBox="0 0 20 20">
+                <svg key={i} className="h-4 w-4 fill-brand" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
               ))}
@@ -242,7 +211,7 @@ export default function RegisterPage() {
               actually sound like me.&rdquo;
             </p>
             <div className="mt-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500 text-sm font-bold text-white">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
                 T
               </div>
               <div>
@@ -254,7 +223,7 @@ export default function RegisterPage() {
 
           {/* What you get */}
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="mb-4 text-sm font-semibold text-slate-700">What you get for free</p>
+            <p className="mb-4 text-sm font-semibold text-slate-700">What you get</p>
             <ul className="space-y-3">
               {[
                 "AI post generation from your knowledge base",
@@ -264,7 +233,7 @@ export default function RegisterPage() {
                 "Analytics & engagement tracking",
               ].map((feat) => (
                 <li key={feat} className="flex items-center gap-2.5 text-sm text-slate-600">
-                  <LuCheck className="h-4 w-4 shrink-0 text-teal-500" />
+                  <LuCheck className="h-4 w-4 shrink-0 text-brand" />
                   {feat}
                 </li>
               ))}
@@ -294,7 +263,7 @@ export default function RegisterPage() {
                     <div key={s.label} className="rounded-xl bg-white p-3 shadow-sm">
                       <p className="text-xs text-slate-500">{s.label}</p>
                       <p className="mt-1 text-lg font-bold text-slate-900">{s.value}</p>
-                      <p className="mt-0.5 text-xs font-medium text-teal-600">{s.delta}</p>
+                      <p className="mt-0.5 text-xs font-medium text-brand">{s.delta}</p>
                     </div>
                   ))}
                 </div>
@@ -303,7 +272,7 @@ export default function RegisterPage() {
                   {[18, 32, 26, 52, 40, 66, 58, 78, 70, 86, 80, 100].map((h, i) => (
                     <div
                       key={i}
-                      className="flex-1 rounded-sm bg-gradient-to-t from-teal-500 to-blue-400 opacity-80"
+                      className="flex-1 rounded-sm bg-gradient-to-t from-brand to-brand-light opacity-80"
                       style={{ height: `${h}%` }}
                     />
                   ))}
@@ -313,7 +282,7 @@ export default function RegisterPage() {
                   {
                     text: "5 AI-powered tips for LinkedIn growth...",
                     status: "Approved",
-                    color: "text-teal-600",
+                    color: "text-brand",
                   },
                   {
                     text: "How we generated 3x ROI from content...",
@@ -326,7 +295,7 @@ export default function RegisterPage() {
                     className="mb-2 flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <FaLinkedinIn className="h-3 w-3 shrink-0 text-teal-500" />
+                      <FaLinkedinIn className="h-3 w-3 shrink-0 text-brand" />
                       <span className="truncate text-xs text-slate-600">{post.text}</span>
                     </div>
                     <span className={`ml-3 shrink-0 text-xs font-medium ${post.color}`}>
