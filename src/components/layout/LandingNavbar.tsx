@@ -11,7 +11,7 @@ const products = [
     name: "LinkedIn Autopilot",
     href: "/linkedin/automation",
     desc: "AI-powered content generation & scheduling",
-    icon: <FaLinkedinIn className="h-4 w-4 text-teal-500" />,
+    icon: <FaLinkedinIn className="h-4 w-4 text-brand" />,
   },
   {
     name: "Leads",
@@ -98,7 +98,7 @@ export default function LandingNavbar() {
           </Link>
           <Link
             href="/register"
-            className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-600"
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
           >
             Free Trial
           </Link>
@@ -141,7 +141,7 @@ export default function LandingNavbar() {
             </Link>
             <Link
               href="/register"
-              className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-white"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white"
             >
               Free Trial
             </Link>

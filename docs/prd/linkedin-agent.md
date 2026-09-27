@@ -585,6 +585,24 @@ User's typed message is appended to `chat.messages` immediately (before API resp
 - Visible only when user has scrolled up >120px from bottom
 - Clicking scrolls `messagesEndRef` into view (smooth)
 
+### Chat input toolbar
+- Emoji button (`LuSmile`) and file/attachment button (`LuPaperclip`) are **disabled** — `cursor-not-allowed`, greyed out, show a "Soon" tooltip on hover
+- Send button: `bg-violet-600`, disabled while `!input.trim() || isSending || isChatRunning`
+
+### Workspace-switch 404 error state
+- When user switches workspace while on this page, `fetchPost` re-runs with the old `postId` against the new `workspaceId`
+- If the API returns 404, `postNotFound` state is set to `true`
+- A full-page error UI is shown (not a toast): icon + "Post not found in this workspace" heading + explanation + two action buttons:
+  - **"Go to Agent"** → `/linkedin/automation` (brand purple, primary)
+  - **"Post Management"** → `/linkedin/post-management` (outlined, secondary)
+- Any other error status falls through to `toast.error` as before
+- `postNotFound` resets to `false` on each `workspaceId`/`postId` change
+
+### Reaction icons (preview panel)
+- Three overlapping circles (18×18px) showing Like / Support / Celebrate
+- PNG assets: `public/icons/Linkedin-Like-Icon-Thumbup.png`, `Linkedin-Support-Icon-HeartinHand.png`, `Linkedin-Celebrate-Icon-ClappingHands.png`
+- Background colors from CSS vars: `--reaction-like` / `--reaction-support` / `--reaction-celebrate`
+
 ### Pending backend items
 1. `DELETE attachment/{id}/` — not yet available
 

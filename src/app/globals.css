@@ -49,6 +49,10 @@
   --reaction-like: #8ecae6;
   --reaction-support: #ddd5ec;
   --reaction-celebrate: #b0d98f;
+  /* Brand colors — from logo */
+  --brand: #590cc2;
+  --brand-dark: #47099b;
+  --brand-light: #6447fc;
 }
 
 @theme inline {
@@ -62,6 +66,9 @@
   --color-reaction-like: var(--reaction-like);
   --color-reaction-support: var(--reaction-support);
   --color-reaction-celebrate: var(--reaction-celebrate);
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-light: var(--brand-light);
   --font-sans: var(--font-inter);
   --font-mono: ui-monospace, monospace;
 }

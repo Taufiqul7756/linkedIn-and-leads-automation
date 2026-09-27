@@ -91,7 +91,7 @@ export default function LoginPage() {
                 placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-brand-light focus:ring-2 focus:ring-brand-light/20"
               />
               {fieldErrors.email && (
                 <p className="mt-1.5 text-xs text-red-500">{fieldErrors.email}</p>
@@ -111,7 +111,7 @@ export default function LoginPage() {
                   placeholder="At least 8 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 pr-10 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                  className="w-full rounded-lg border border-slate-200 bg-[#E9ECF5] px-3.5 py-2.5 pr-10 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-brand-light focus:ring-2 focus:ring-brand-light/20"
                 />
                 <button
                   type="button"
@@ -130,7 +130,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loginMutation.isPending}
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loginMutation.isPending ? (
                 <>
@@ -145,7 +145,7 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="font-medium text-teal-600 hover:underline">
+            <Link href="/register" className="font-medium text-brand hover:underline">
               Get started free
             </Link>
           </p>
@@ -169,7 +169,7 @@ export default function LoginPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-3 flex gap-0.5">
               {Array.from({ length: 5 }).map((_, i) => (
-                <svg key={i} className="h-4 w-4 fill-teal-500" viewBox="0 0 20 20">
+                <svg key={i} className="h-4 w-4 fill-brand" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                 </svg>
               ))}
@@ -180,7 +180,7 @@ export default function LoginPage() {
               actually sound like me.&rdquo;
             </p>
             <div className="mt-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500 text-sm font-bold text-white">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
                 T
               </div>
               <div>
@@ -215,7 +215,7 @@ export default function LoginPage() {
                     <div key={s.label} className="rounded-xl bg-white p-3 shadow-sm">
                       <p className="text-xs text-slate-500">{s.label}</p>
                       <p className="mt-1 text-xl font-bold text-slate-900">{s.value}</p>
-                      <p className="mt-0.5 text-xs font-medium text-teal-600">{s.delta}</p>
+                      <p className="mt-0.5 text-xs font-medium text-brand">{s.delta}</p>
                     </div>
                   ))}
                 </div>
@@ -225,7 +225,7 @@ export default function LoginPage() {
                   {[18, 32, 26, 52, 40, 66, 58, 78, 70, 86, 80, 100].map((h, i) => (
                     <div
                       key={i}
-                      className="flex-1 rounded-sm bg-gradient-to-t from-teal-500 to-blue-400 opacity-80"
+                      className="flex-1 rounded-sm bg-gradient-to-t from-brand to-brand-light opacity-80"
                       style={{ height: `${h}%` }}
                     />
                   ))}
@@ -236,7 +236,7 @@ export default function LoginPage() {
                   {
                     text: "5 AI-powered tips for LinkedIn growth...",
                     status: "Approved",
-                    color: "text-teal-600",
+                    color: "text-brand",
                   },
                   {
                     text: "How we generated 3x ROI from content...",
@@ -254,7 +254,7 @@ export default function LoginPage() {
                     className="mb-2 flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <FaLinkedinIn className="h-3 w-3 shrink-0 text-teal-500" />
+                      <FaLinkedinIn className="h-3 w-3 shrink-0 text-brand" />
                       <span className="truncate text-xs text-slate-600">{post.text}</span>
                     </div>
                     <span className={`ml-3 shrink-0 text-xs font-medium ${post.color}`}>
@@ -275,7 +275,7 @@ export default function LoginPage() {
                       key={feat}
                       className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 shadow-sm"
                     >
-                      <LuCheck className="h-3.5 w-3.5 shrink-0 text-teal-500" />
+                      <LuCheck className="h-3.5 w-3.5 shrink-0 text-brand" />
                       <span className="text-xs text-slate-600">{feat}</span>
                     </div>
                   ))}

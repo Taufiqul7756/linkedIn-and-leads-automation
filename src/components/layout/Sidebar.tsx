@@ -40,6 +40,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [linkedInOpen, setLinkedInOpen] = useState(pathname.startsWith(LINKEDIN_ROOT));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [mounted, setMounted] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -58,16 +59,22 @@ export default function Sidebar() {
       if (next) {
         setLinkedInOpen(false);
         setUserMenuOpen(false);
+        setShowSignOutConfirm(false);
       }
       return next;
     });
+  };
+
+  const closeUserMenu = () => {
+    setUserMenuOpen(false);
+    setShowSignOutConfirm(false);
   };
 
   useEffect(() => {
     if (!userMenuOpen) return;
     const handler = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false);
+        closeUserMenu();
       }
     };
     document.addEventListener("mousedown", handler);
@@ -227,28 +234,52 @@ export default function Sidebar() {
         {/* Popup menu */}
         {userMenuOpen && (
           <div className="absolute bottom-full left-3 right-3 z-30 mb-1 overflow-hidden rounded-xl border border-white/10 bg-sidebar-bg shadow-lg">
-            <div className="p-1">
-              <Link
-                href="/settings"
-                onClick={() => setUserMenuOpen(false)}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-              >
-                <LuSettings className="h-4 w-4" />
-                Settings
-              </Link>
-              <button
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-              >
-                {loggingOut ? (
-                  <LuLoader className="h-4 w-4 animate-spin" />
-                ) : (
+            {showSignOutConfirm ? (
+              <div className="p-3">
+                <p className="mb-1 text-xs font-semibold text-white">Sign out?</p>
+                <p className="mb-3 text-xs text-white/50">
+                  You will be returned to the login page.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowSignOutConfirm(false)}
+                    className="flex-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/30 hover:text-red-300 disabled:opacity-50"
+                  >
+                    {loggingOut ? (
+                      <LuLoader className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <LuLogOut className="h-3 w-3" />
+                    )}
+                    {loggingOut ? "Signing out…" : "Yes, sign out"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-1">
+                <Link
+                  href="/settings"
+                  onClick={closeUserMenu}
+                  className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <LuSettings className="h-4 w-4" />
+                  Settings
+                </Link>
+                <button
+                  onClick={() => setShowSignOutConfirm(true)}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+                >
                   <LuLogOut className="h-4 w-4" />
-                )}
-                {loggingOut ? "Signing out…" : "Sign out"}
-              </button>
-            </div>
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         )}
 
