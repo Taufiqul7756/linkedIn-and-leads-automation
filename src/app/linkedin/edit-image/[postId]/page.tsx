@@ -105,7 +105,12 @@ function getInitialContent(post: AgentPost): object {
 
 // ─── Image thinking steps (shown while image.status === "pending") ────────────
 
-const IMAGE_STEPS = ["Thought process", "Image plan ready", "Image ready"];
+const IMAGE_STEPS = [
+  { label: "Thought process", detail: "Analyzing your prompt and understanding the context…" },
+  { label: "Image plan ready", detail: "Structuring composition, colors, and visual elements…" },
+  { label: "Rendering image", detail: "Applying style, lighting, and fine details…" },
+  { label: "Image ready", detail: "Your image has been generated successfully." },
+];
 
 function ImageThinkingSteps() {
   const [visibleCount, setVisibleCount] = useState(1);
@@ -113,32 +118,45 @@ function ImageThinkingSteps() {
   useEffect(() => {
     const t1 = setTimeout(() => setVisibleCount(2), 1500);
     const t2 = setTimeout(() => setVisibleCount(3), 3200);
+    const t3 = setTimeout(() => setVisibleCount(4), 5000);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
+      clearTimeout(t3);
     };
   }, []);
 
   return (
-    <div className="mt-1 flex flex-col gap-1.5 rounded-2xl rounded-tl-sm border border-gray-100 bg-white px-4 py-3 shadow-sm">
-      {IMAGE_STEPS.map((step, i) => (
-        <div
-          key={step}
-          className={cn(
-            "flex items-center gap-2 text-sm transition-opacity duration-500",
-            i < visibleCount ? "opacity-100" : "opacity-0"
-          )}
-        >
-          {i < visibleCount - 1 ? (
-            <LuCheck className="h-3.5 w-3.5 shrink-0 text-green-500" />
-          ) : (
-            <LuLoader className="h-3.5 w-3.5 shrink-0 animate-spin text-blue-500" />
-          )}
-          <span className={cn("text-sm", i < visibleCount - 1 ? "text-gray-400" : "text-gray-700")}>
-            {step}
-          </span>
-        </div>
-      ))}
+    <div className="mt-1 flex flex-col gap-2 pl-1">
+      {IMAGE_STEPS.slice(0, visibleCount).map((step, i) => {
+        const isDone = i < visibleCount - 1;
+        return (
+          <div key={step.label} className="flex items-start gap-2.5 animate-fade-in-up">
+            <div className="mt-0.5 shrink-0">
+              {isDone ? (
+                <LuCheck className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <LuLoader className="h-3.5 w-3.5 animate-spin text-blue-500" />
+              )}
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span
+                className={cn(
+                  "text-sm font-medium leading-tight",
+                  isDone ? "text-gray-400" : "text-gray-700"
+                )}
+              >
+                {step.label}
+              </span>
+              <span
+                className={cn("text-xs leading-snug", isDone ? "text-gray-300" : "text-gray-400")}
+              >
+                {step.detail}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -545,6 +563,8 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const [addedImageId, setAddedImageId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   // Extra images uploaded via "Add more"
   const [extraImages, setExtraImages] = useState<{ id: number; name: string; url: string }[]>([]);
@@ -630,6 +650,8 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
       try {
         const c = await imageChatService(workspaceId).openChat(postId);
         setChat(c);
+        const alreadyAdded = c.images.find((img) => img.is_added_on_post);
+        if (alreadyAdded) setAddedImageId(alreadyAdded.id);
         // resume polling if a generation is already running
         if (c.status === "running") startPolling(c.id);
       } catch (err) {
@@ -649,6 +671,18 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     if (!text || isSending || isChatRunning || !chat) return;
     setIsSending(true);
     setInput("");
+    // Optimistically append the user message immediately
+    setChat((prev) => {
+      if (!prev) return prev;
+      const optimistic: ChatMessage = {
+        id: `optimistic-${Date.now()}`,
+        role: "user",
+        text,
+        image: null,
+        created_at: new Date().toISOString(),
+      };
+      return { ...prev, messages: [...prev.messages, optimistic] };
+    });
     try {
       const c = await imageChatService(workspaceId).sendMessage(chat.id, text);
       setChat(c);
@@ -656,7 +690,12 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     } catch (err) {
       const msg = extractErrorMessage(err);
       toast.error(msg);
-      setInput(text); // restore input so user can retry
+      // Remove the optimistic message and restore input on failure
+      setChat((prev) => {
+        if (!prev) return prev;
+        return { ...prev, messages: prev.messages.filter((m) => !m.id.startsWith("optimistic-")) };
+      });
+      setInput(text);
     } finally {
       setIsSending(false);
     }
@@ -794,28 +833,50 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            {chatLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {chat?.messages.map((msg) => (
-                  <ChatMessageItem
-                    key={msg.id}
-                    message={msg}
-                    addedImageId={addedImageId}
-                    onAddToPost={handleAddToPost}
-                    onPreviewImage={(url) => {
-                      setPreviewUrl(url);
-                      setPreviewOpen(true);
-                    }}
-                  />
-                ))}
-                <div ref={messagesEndRef} />
+          <div className="relative min-h-0 flex-1">
+            {showScrollBtn && (
+              <div className="absolute left-0 right-0 top-2 z-10 flex justify-center pointer-events-none">
+                <button
+                  onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+                  className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors"
+                >
+                  <LuArrowLeft className="h-3 w-3 rotate-[-90deg]" />
+                  Scroll to newest
+                </button>
               </div>
             )}
+            <div
+              ref={chatContainerRef}
+              className="h-full overflow-y-auto px-4 py-4"
+              onScroll={() => {
+                const el = chatContainerRef.current;
+                if (!el) return;
+                const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+                setShowScrollBtn(distFromBottom > 120);
+              }}
+            >
+              {chatLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {chat?.messages.map((msg) => (
+                    <ChatMessageItem
+                      key={msg.id}
+                      message={msg}
+                      addedImageId={addedImageId}
+                      onAddToPost={handleAddToPost}
+                      onPreviewImage={(url) => {
+                        setPreviewUrl(url);
+                        setPreviewOpen(true);
+                      }}
+                    />
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
           </div>
 
           {isPublished ? (

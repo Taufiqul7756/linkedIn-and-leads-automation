@@ -26,7 +26,7 @@ export default function LoginPage() {
     onSuccess: (data: LoginResponse) => {
       login(data);
       toast.success("Welcome back!");
-      router.replace("/linkedin-autopilot");
+      router.replace("/linkedin/automation");
     },
     onError: (error: unknown) => {
       toast.error(extractErrorMessage(error));

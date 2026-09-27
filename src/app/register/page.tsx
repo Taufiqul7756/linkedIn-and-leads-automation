@@ -37,7 +37,7 @@ export default function RegisterPage() {
     onSuccess: (data: LoginResponse) => {
       login(data);
       toast.success("Account created!");
-      router.replace("/linkedin-autopilot");
+      router.replace("/linkedin/automation");
     },
     onError: (error: unknown) => {
       toast.error(extractErrorMessage(error));

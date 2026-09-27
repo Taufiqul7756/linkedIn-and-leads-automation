@@ -3,6 +3,8 @@
 This file is read by Claude at the start of every session.
 It contains all conventions, patterns, and rules for this project.
 
+**Also read `CONTEXT.md` at the start of every session.** It contains the domain glossary, active routes, and post status flow. Keep it up to date — if a new feature adds a new term, route, or status, update `CONTEXT.md` in the same session.
+
 ## Tech Stack
 
 - **Framework**: Next.js 16, App Router, TypeScript
@@ -250,9 +252,11 @@ Keep the URL→context sync effect's deps narrow too: `[searchParams, workspaces
 Used on `/linkedin/edit-image/[postId]` — `imageChatService` uses axios directly (same as `linkedinAgentService`).
 
 ```ts
-// Open chat on mount
+// Open chat on mount — also restores "Added" button state
 const c = await imageChatService(workspaceId).openChat(postId);
 setChat(c);
+const alreadyAdded = c.images.find((img) => img.is_added_on_post);
+if (alreadyAdded) setAddedImageId(alreadyAdded.id);
 if (c.status === "running") startPolling(c.id);
 
 // Poll every 2s while running
@@ -262,10 +266,12 @@ pollRef.current = setInterval(async () => {
   if (c.status === "ready") stopPolling();
 }, 2000);
 
-// Send message
+// Send message — optimistic UI: append user message immediately, replace on response
+setChat((prev) => prev ? { ...prev, messages: [...prev.messages, optimisticMsg] } : prev);
 const c = await imageChatService(workspaceId).sendMessage(chat.id, prompt);
-setChat(c);
+setChat(c); // server response replaces state wholesale (removes optimistic msg)
 if (c.status === "running") startPolling(c.id);
+// On error: remove optimistic message and restore input
 
 // Add image to post
 const c = await imageChatService(workspaceId).addToPost(chat.id, imageId);
@@ -273,15 +279,52 @@ setChat(c); // post_image_url updated in returned chat
 ```
 
 - Send button disabled while `chat.status === "running"`
-- Replace state wholesale from each response — never append client-side
+- Replace state wholesale from each response — never append client-side (except the optimistic user message pre-send)
 - `chat.post_image_url` drives both the preview and media section (persists on reload)
+- `is_added_on_post: boolean` on `GeneratedImage` — read on `openChat` to restore `addedImageId` after reload
 - Delete image: `PATCH posts/{id}/ { image_url: "" }` then `setChat(prev => ({ ...prev, post_image_url: "" }))`
 - Auto-scroll: `useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat?.messages])`
+- Scroll-to-newest button: shown when `chatContainerRef` scroll distance from bottom >120px
+
+## Docs Maintenance
+
+After every feature change or bug fix, update the relevant docs **in the same session** — never leave them stale.
+
+| What changed | Where to update |
+| --- | --- |
+| LinkedIn Agent feature (UI logic, state, components) | `docs/prd/linkedin-agent.md` |
+| Leads feature (UI logic, state, components) | `docs/prd/leads-agent.md` |
+| API shape changed (new field, new endpoint, new error, renamed param) | `docs/api-reference.md` |
+| New route, new domain term, or status change | `CONTEXT.md` |
+| Cross-session pattern or architectural decision | `CLAUDE.md` + `memory/MEMORY.md` |
+
+Rules:
+- If an API field is added or removed, update the TypeScript type block **and** the JSON example in `docs/api-reference.md`
+- If a PRD section says "pending" and the feature ships, remove the pending note and replace with the implemented behaviour
+- If only the frontend implementation changed (no API shape change), only the PRD needs updating — not `api-reference.md`
 
 ## Do Not
 
 - Read `process.env` directly in components
-- Use hardcoded colors — add to Tailwind CSS vars in `globals.css`
+- Hardcode **anything** visual in component files — no raw hex values, no arbitrary px/rem spacing, no magic numbers for sizes, shadows, radii, or z-indices. Every design value must come from `src/app/globals.css`
+
+## No Hardcoding Rule
+
+All design tokens live in `src/app/globals.css` as CSS variables and Tailwind utility extensions. Components reference tokens — they never define values.
+
+| Category | Wrong | Right |
+| --- | --- | --- |
+| Color | `bg-[#E9ECF5]` / `color: #2563eb` | CSS var defined in `globals.css`, referenced via Tailwind class |
+| Spacing | `mt-[18px]` / `padding: 14px` | Standard Tailwind scale (`mt-4`, `p-3`) or a named CSS var |
+| Border radius | `rounded-[10px]` | Standard Tailwind scale or a CSS var |
+| Shadow | `shadow-[0_2px_8px_rgba(0,0,0,0.1)]` | Named shadow CSS var in `globals.css` |
+| Z-index | `z-[999]` | Named z-index CSS var or standard Tailwind scale |
+| Font size / weight | `text-[13px]` | Standard Tailwind scale |
+
+**When adding a new design value:**
+1. Define it as a CSS variable in `globals.css` under the relevant section
+2. Use it via Tailwind or `var(--name)` in the component
+3. Never repeat the raw value in two places — the variable is the single source of truth
 - Use `any` type
 - Commit directly to `main` — always use PRs
 - Use `useEffect` to sync props into state inside a modal — use `key={item?.id}` on the modal in the parent instead

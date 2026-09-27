@@ -4,6 +4,7 @@ export type GeneratedImage = {
   url: string;
   prompt: string;
   is_base: boolean;
+  is_added_on_post: boolean;
   kind: "edit" | "new";
   source: string | null;
   error: string;

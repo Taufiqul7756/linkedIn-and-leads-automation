@@ -8,7 +8,7 @@ import { LuUsers } from "react-icons/lu";
 const products = [
   {
     name: "LinkedIn Autopilot",
-    href: "/linkedin-autopilot",
+    href: "/linkedin/automation",
     desc: "AI-powered content generation & scheduling",
     icon: <FaLinkedinIn className="h-4 w-4 text-teal-500" />,
   },
