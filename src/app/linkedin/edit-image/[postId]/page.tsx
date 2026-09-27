@@ -403,34 +403,25 @@ function LinkedInPostPreview({
               className="flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
               style={{ backgroundColor: "var(--reaction-like)" }}
             >
-              <Image
-                src="/icons/Linkedin-Like-Icon-Thumbup.png"
-                alt="Like"
-                width={13}
-                height={13}
-              />
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3m7-10v4a2 2 0 0 1-2 2H9l-2 5v1h12l1-9H14z" />
+              </svg>
             </div>
             <div
               className="-ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
               style={{ backgroundColor: "var(--reaction-support)" }}
             >
-              <Image
-                src="/icons/Linkedin-Support-Icon-HeartinHand.png"
-                alt="Support"
-                width={13}
-                height={13}
-              />
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
             </div>
             <div
               className="-ml-1 flex h-[18px] w-[18px] items-center justify-center rounded-full ring-1 ring-white"
               style={{ backgroundColor: "var(--reaction-celebrate)" }}
             >
-              <Image
-                src="/icons/Linkedin-Celebrate-Icon-ClappingHands.png"
-                alt="Celebrate"
-                width={13}
-                height={13}
-              />
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
             </div>
           </div>
           <span className="ml-1 text-xs text-gray-500">1,37</span>
