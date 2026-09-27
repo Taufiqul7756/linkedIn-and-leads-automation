@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import Image from "next/image";
 import { LuEye, LuEyeOff, LuCheck } from "react-icons/lu";
 import { FaLinkedinIn } from "react-icons/fa";
 import { authService } from "@/service/authService";
@@ -26,7 +27,7 @@ export default function LoginPage() {
     onSuccess: (data: LoginResponse) => {
       login(data);
       toast.success("Welcome back!");
-      router.replace("/linkedin-autopilot");
+      router.replace("/linkedin/automation");
     },
     onError: (error: unknown) => {
       toast.error(extractErrorMessage(error));
@@ -67,18 +68,15 @@ export default function LoginPage() {
             </svg>
             Back
           </Link>
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500">
-              <span className="text-sm font-bold text-white">R</span>
-            </div>
-            <span className="font-bold text-slate-900">Relay</span>
+          <Link href="/">
+            <Image src="/cg-logo.svg" alt="Creative genie" width={130} height={30} />
           </Link>
         </div>
 
         {/* Form — vertically centred */}
         <div className="mx-auto w-full max-w-sm py-12">
           <h1 className="text-2xl font-bold text-slate-900">Welcome back</h1>
-          <p className="mt-1.5 text-sm text-slate-500">Sign in to your Relay account</p>
+          <p className="mt-1.5 text-sm text-slate-500">Sign in to your Creative genie account</p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             {/* Email */}
@@ -155,7 +153,7 @@ export default function LoginPage() {
 
         {/* Bottom legal */}
         <p className="text-center text-xs text-slate-400">
-          By using Relay, you are agreeing to our{" "}
+          By using Creative genie, you are agreeing to our{" "}
           <span className="cursor-pointer underline underline-offset-2">Terms of Service</span> and{" "}
           <span className="cursor-pointer underline underline-offset-2">Privacy Policy</span>.
         </p>
@@ -178,8 +176,8 @@ export default function LoginPage() {
             </div>
             <p className="text-sm leading-relaxed text-slate-600">
               &ldquo;I&apos;ve used every single LinkedIn automation tool under the sun. Nothing is
-              safer and nothing is more effective than Relay. The AI writes posts that actually
-              sound like me.&rdquo;
+              safer and nothing is more effective than Creative genie. The AI writes posts that
+              actually sound like me.&rdquo;
             </p>
             <div className="mt-4 flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500 text-sm font-bold text-white">
@@ -201,10 +199,8 @@ export default function LoginPage() {
                 <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/70" />
                 <div className="h-2.5 w-2.5 rounded-full bg-green-400/70" />
                 <span className="ml-3 flex items-center gap-1.5 text-xs text-slate-400">
-                  <div className="flex h-4 w-4 items-center justify-center rounded bg-teal-500">
-                    <span className="text-[9px] font-bold text-white">R</span>
-                  </div>
-                  Relay Dashboard
+                  <Image src="/cg-fav.svg" alt="" width={16} height={16} />
+                  Creative genie Dashboard
                 </span>
               </div>
 

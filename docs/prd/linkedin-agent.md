@@ -394,9 +394,9 @@ type BlockNode =
 
 ---
 
-## V2 — Agent Mode Integration (see also: `docs/agent-mode-integration.md`)
+## V2 — Agent Mode Integration (see also: `docs/api-reference.md`)
 
-> Full spec in `docs/agent-mode-integration.md`. Summary of what changed from V1:
+> Full spec in `docs/api-reference.md` (Part 1 — LinkedIn Agent). Summary of what changed from V1:
 
 ### New: Attachments (per-conversation sources)
 
@@ -527,6 +527,66 @@ This prevents a new conversation from being created every time the user clicks E
 - Type badges: www=slate, PDF=purple, DOCX=blue, TXT=gray; status badges: Ready=green, Error=red, Processing=amber
 - `timeAgo()` helper for `created_at` display
 - Polling: `refetchInterval` while any item non-terminal (same 3s pattern)
+
+---
+
+## Image Chat — Edit Image Page (`/linkedin/edit-image/[postId]`)
+
+Full spec: `docs/api-reference.md` (Part 2 — Image Chat)
+
+### Key files
+- Page: `src/app/linkedin/edit-image/[postId]/page.tsx`
+- Service: `src/service/imageChatService.ts`
+- Types: `src/types/ImageChat.ts`
+
+### API base
+```
+/workspaces/{workspaceId}/image-chats/
+```
+
+### Endpoints
+
+| Method | Path | Returns | Notes |
+|---|---|---|---|
+| `POST` | `image-chats/` | `201` new / `200` existing | `{ post: id }` — one chat per post |
+| `GET` | `image-chats/{id}/` | `200` full chat | Poll while `status === "running"` |
+| `POST` | `image-chats/{id}/messages/` | `202` generating / `200` text-only | `{ prompt }` |
+| `POST` | `image-chats/{id}/add_to_post/` | `200` full chat | `{ image: imageId }` |
+
+### Polling rule
+Poll `GET image-chats/{id}/` every 2s while `chat.status === "running"`. Stop on `"ready"`. Send button disabled while running.
+
+### Image card states
+- `image.status === "pending"` → show `ImageThinkingSteps` spinner
+- `image.status === "ready"` → show `<img>` (16:9) + Add to post button
+- `image.status === "failed"` → show text only (backend rewrites the message text)
+
+### Add to post
+- Calls `add_to_post` → returns updated chat with new `post_image_url`
+- Preview and media section both read `chat.post_image_url` — update automatically
+- Delete image: `PATCH /content/posts/{id}/ { image_url: "" }` then clear local chat state
+
+### Reload persistence
+- Preview persists after reload: `chat.post_image_url` is always returned by API
+- Media section persists after reload: reads `chat.post_image_url` directly (not local `addedImageId`)
+- "Added" button state persists after reload: on `openChat` response, find `c.images.find(img => img.is_added_on_post)` and set `addedImageId` to its id
+
+### Optimistic send
+User's typed message is appended to `chat.messages` immediately (before API response). On success, server response replaces state wholesale. On error, optimistic message is removed and input is restored.
+
+### ImageThinkingSteps (shown while `image.status === "pending"`)
+- No card wrapper — steps render inline, no border/shadow/background
+- 4 steps with a label + detail subtitle each, appearing one by one with fade+slide-up animation
+- Timing: 0 ms → 1500 ms → 3200 ms → 5000 ms
+- Steps: "Thought process" / "Image plan ready" / "Rendering image" / "Image ready"
+
+### Scroll to newest button
+- Floats at top of chat scroll area (absolute positioned)
+- Visible only when user has scrolled up >120px from bottom
+- Clicking scrolls `messagesEndRef` into view (smooth)
+
+### Pending backend items
+1. `DELETE attachment/{id}/` — not yet available
 
 ---
 

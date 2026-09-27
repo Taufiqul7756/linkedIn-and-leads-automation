@@ -26,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
-      <body className="h-screen overflow-hidden bg-page-bg">
+      <body className="h-screen overflow-hidden bg-page-bg" suppressHydrationWarning>
         <Providers>
           <div className="flex h-full w-full gap-[10px]">
             <Sidebar />

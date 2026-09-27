@@ -1744,7 +1744,7 @@ export default function AutomationView() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">LinkedIn Agent</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Generate post drafts, approve them, and let Relay schedule &amp; publish.
+            Generate post drafts, approve them, and let Creative genie schedule &amp; publish.
           </p>
         </div>
       </div>
@@ -1779,7 +1779,7 @@ export default function AutomationView() {
                   : "bg-white text-gray-400"
               )}
             >
-              <span>Headlines before drafting</span>
+              <span>Concept/Idea before drafting</span>
               <Toggle
                 small
                 checked={!settings.ignore_headline}

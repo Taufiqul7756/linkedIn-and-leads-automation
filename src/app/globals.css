@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.3s ease-out both;
+}
+
 @keyframes shimmer-card {
   0% {
     background-position: 200% center;
@@ -31,6 +46,9 @@
   --sidebar-dark: #1a1740;
   --chat-panel-bg: #f4f5fb;
   --post-panel-bg: #f0f2f5;
+  --reaction-like: #8ecae6;
+  --reaction-support: #ddd5ec;
+  --reaction-celebrate: #b0d98f;
 }
 
 @theme inline {
@@ -41,6 +59,9 @@
   --color-sidebar-dark: var(--sidebar-dark);
   --color-chat-panel-bg: var(--chat-panel-bg);
   --color-post-panel-bg: var(--post-panel-bg);
+  --color-reaction-like: var(--reaction-like);
+  --color-reaction-support: var(--reaction-support);
+  --color-reaction-celebrate: var(--reaction-celebrate);
   --font-sans: var(--font-inter);
   --font-mono: ui-monospace, monospace;
 }

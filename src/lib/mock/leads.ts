@@ -123,8 +123,8 @@ export const mockLeads: Lead[] = [
   {
     id: 7,
     name: "Liam Walsh",
-    company: "Relay HQ",
-    email: "liam.walsh@relayhq.com",
+    company: "Creative genie",
+    email: "liam.walsh@creativegenie.io",
     phone: "+353 1 437 2906",
     status: "Valid",
     outreach: "Replied",
