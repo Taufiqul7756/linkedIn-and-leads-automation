@@ -1940,7 +1940,12 @@ export default function AutomationView() {
                   // Agent messages — edit turn
                   if (msg.kind === "edit") {
                     const field = msg.payload.field as "text" | "image" | undefined;
-                    const afterSnapshots = (msg.payload.after as PostSnapshot[] | undefined) ?? [];
+                    const afterRaw = msg.payload.after as PostSnapshot | PostSnapshot[] | undefined;
+                    const afterSnapshots = afterRaw
+                      ? Array.isArray(afterRaw)
+                        ? afterRaw
+                        : [afterRaw]
+                      : [];
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
