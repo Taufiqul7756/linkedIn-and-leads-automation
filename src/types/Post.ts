@@ -50,6 +50,8 @@ export type PostType = {
   suggested_publish_at: string | null;
   published_at: string | null;
   linkedin_urn: string;
+  conversation_id: string | null;
+  single_post_conversation_id: string | null;
   engagement: PostEngagement | null;
   created_at: string;
 };

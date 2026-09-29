@@ -141,6 +141,7 @@ export interface AgentPost {
   published_at: string | null;
   linkedin_urn: string;
   conversation_id: string | null;
+  single_post_conversation_id: string | null;
   created_at: string;
 }
 

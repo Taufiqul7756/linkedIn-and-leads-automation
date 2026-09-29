@@ -566,7 +566,11 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
                     )}
                     <button
                       onClick={() => {
-                        window.location.href = `/linkedin/automation?editPostId=${post.id}`;
+                        if (post.single_post_conversation_id) {
+                          window.location.href = `/linkedin/automation?conv=${post.single_post_conversation_id}`;
+                        } else {
+                          window.location.href = `/linkedin/automation?editPostId=${post.id}`;
+                        }
                       }}
                       className="flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2 py-1 text-xs font-medium text-violet-600 shadow-sm hover:bg-violet-50"
                     >

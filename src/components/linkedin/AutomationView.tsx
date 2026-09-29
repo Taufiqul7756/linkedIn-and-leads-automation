@@ -314,6 +314,7 @@ function snapshotToAgentPost(snap: PostSnapshot): AgentPost {
     published_at: null,
     linkedin_urn: "",
     conversation_id: null,
+    single_post_conversation_id: null,
     created_at: "",
   };
 }
@@ -1303,14 +1304,14 @@ export default function AutomationView() {
 
         if (editPostId) {
           try {
-            // Check if the post already has a linked conversation
+            // Check if the post already has a single-post conversation
             const post = await svc().getAgentPost(editPostId);
             let conv: Conversation;
-            if (post.conversation_id) {
-              // Resume the existing conversation for this post
-              conv = await svc().getConversation(post.conversation_id);
+            if (post.single_post_conversation_id) {
+              // Resume the existing single-post conversation
+              conv = await svc().getConversation(post.single_post_conversation_id);
             } else {
-              // No linked conversation yet — create one
+              // No single-post conversation yet — create one
               const created = await svc().createConversation(editPostId);
               conv =
                 created.messages.length > 0 ? created : await svc().getConversation(created.id);
