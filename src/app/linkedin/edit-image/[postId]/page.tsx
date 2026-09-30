@@ -1006,7 +1006,14 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             )}
             <div className="ml-auto flex items-center gap-2">
               <button
-                onClick={() => router.push(`/linkedin/automation?editPostId=${postId}`)}
+                onClick={() => {
+                  const convId = post?.single_post_conversation_id ?? post?.conversation_id;
+                  if (convId) {
+                    router.push(`/linkedin/automation?conv=${convId}`);
+                  } else {
+                    router.push(`/linkedin/automation?editPostId=${postId}`);
+                  }
+                }}
                 className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100"
               >
                 <LuBot className="h-3.5 w-3.5" />

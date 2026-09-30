@@ -314,6 +314,7 @@ function snapshotToAgentPost(snap: PostSnapshot): AgentPost {
     published_at: null,
     linkedin_urn: "",
     conversation_id: null,
+    single_post_conversation_id: null,
     created_at: "",
   };
 }
@@ -1303,14 +1304,14 @@ export default function AutomationView() {
 
         if (editPostId) {
           try {
-            // Check if the post already has a linked conversation
+            // Check if the post already has a single-post conversation
             const post = await svc().getAgentPost(editPostId);
             let conv: Conversation;
-            if (post.conversation_id) {
-              // Resume the existing conversation for this post
-              conv = await svc().getConversation(post.conversation_id);
+            if (post.single_post_conversation_id) {
+              // Resume the existing single-post conversation
+              conv = await svc().getConversation(post.single_post_conversation_id);
             } else {
-              // No linked conversation yet — create one
+              // No single-post conversation yet — create one
               const created = await svc().createConversation(editPostId);
               conv =
                 created.messages.length > 0 ? created : await svc().getConversation(created.id);
@@ -1939,7 +1940,12 @@ export default function AutomationView() {
                   // Agent messages — edit turn
                   if (msg.kind === "edit") {
                     const field = msg.payload.field as "text" | "image" | undefined;
-                    const afterSnapshots = (msg.payload.after as PostSnapshot[] | undefined) ?? [];
+                    const afterRaw = msg.payload.after as PostSnapshot | PostSnapshot[] | undefined;
+                    const afterSnapshots = afterRaw
+                      ? Array.isArray(afterRaw)
+                        ? afterRaw
+                        : [afterRaw]
+                      : [];
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
