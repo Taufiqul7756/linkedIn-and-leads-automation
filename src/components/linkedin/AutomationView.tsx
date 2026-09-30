@@ -385,11 +385,16 @@ function QuestionField({
           <div className="relative">
             <select
               value={freeText ? "" : value}
+              disabled={!!freeText}
               onChange={(e) => {
                 setFreeText("");
                 onChange(e.target.value);
               }}
-              className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              className={`w-full appearance-none rounded-lg border py-2.5 pl-3 pr-8 text-sm outline-none transition-colors ${
+                freeText
+                  ? "cursor-not-allowed border-gray-100 bg-gray-100 text-gray-400"
+                  : "border-gray-200 bg-white text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              }`}
             >
               {question.options.map((opt) => (
                 <option key={opt} value={opt}>
@@ -397,7 +402,9 @@ function QuestionField({
                 </option>
               ))}
             </select>
-            <LuChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <LuChevronDown
+              className={`pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 ${freeText ? "text-gray-300" : "text-gray-400"}`}
+            />
           </div>
           <input
             type="text"
@@ -1091,6 +1098,8 @@ export default function AutomationView() {
   const imagePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const postsRef = useRef<AgentPost[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const hasScrolledToBottomRef = useRef(false);
   const promptRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
@@ -1362,12 +1371,36 @@ export default function AutomationView() {
     params.set("conv", conversation.id);
     params.delete("editPostId"); // clear once conversation is created
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    // Reset scroll flag so the new conversation snaps to bottom on load
+    hasScrolledToBottomRef.current = false;
   }, [conversation?.id]);
 
-  // ── scroll to bottom only when new messages or posts arrive (not on every poll status update) ──
+  // ── scroll to bottom on new messages/posts/questions; snap instantly on initial load ──
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversation?.messages?.length, posts.length]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    // Double RAF: first frame commits DOM, second frame has final scrollHeight
+    let raf2: number;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        if (!hasScrolledToBottomRef.current) {
+          container.scrollTop = container.scrollHeight;
+          hasScrolledToBottomRef.current = true;
+        } else {
+          container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+    // pending_interrupt?.id covers new grilling question sets arriving (not message-based)
+  }, [
+    conversation?.messages?.length,
+    posts.length,
+    (conversation?.pending_interrupt as { id?: string } | null)?.id,
+  ]);
 
   // ── load settings once ──
   useEffect(() => {
@@ -1829,7 +1862,7 @@ export default function AutomationView() {
             {/* Chat column */}
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {/* Messages area */}
-              <div className="flex-1 overflow-y-auto px-5 py-6">
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-5 py-6">
                 {/* Loading state while restoring conversation */}
                 {restoringConv && (
                   <div className="flex items-start gap-3">
