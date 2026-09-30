@@ -385,11 +385,16 @@ function QuestionField({
           <div className="relative">
             <select
               value={freeText ? "" : value}
+              disabled={!!freeText}
               onChange={(e) => {
                 setFreeText("");
                 onChange(e.target.value);
               }}
-              className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              className={`w-full appearance-none rounded-lg border py-2.5 pl-3 pr-8 text-sm outline-none transition-colors ${
+                freeText
+                  ? "cursor-not-allowed border-gray-100 bg-gray-100 text-gray-400"
+                  : "border-gray-200 bg-white text-gray-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+              }`}
             >
               {question.options.map((opt) => (
                 <option key={opt} value={opt}>
@@ -397,7 +402,9 @@ function QuestionField({
                 </option>
               ))}
             </select>
-            <LuChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <LuChevronDown
+              className={`pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 ${freeText ? "text-gray-300" : "text-gray-400"}`}
+            />
           </div>
           <input
             type="text"

@@ -108,7 +108,6 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const [bodyJson, setBodyJson] = useState<object>({ type: "doc", content: [] });
   const [editorKey, setEditorKey] = useState(0);
@@ -116,9 +115,7 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
   const [imageRemoved, setImageRemoved] = useState(false);
   const [videoRemoved, setVideoRemoved] = useState(false);
   const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
-  const [newVideoPreview, setNewVideoPreview] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [saving, setSaving] = useState(false);
@@ -131,7 +128,6 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
     setImageRemoved(false);
     setVideoRemoved(false);
     setNewImagePreview(null);
-    setNewVideoPreview(null);
     setScheduledDate(isoToDateInput(post.suggested_publish_at));
     setScheduledTime(isoToTimeInput(post.suggested_publish_at));
     setBodyJson(getInitialContent(post));
@@ -167,24 +163,6 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
     }
   };
 
-  const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !post) return;
-    setNewVideoPreview(URL.createObjectURL(file));
-    setVideoRemoved(false);
-    setIsUploadingVideo(true);
-    try {
-      await postsService(workspaceId).uploadVideo(post.id, file);
-      toast.success("Video uploaded.");
-    } catch (err) {
-      toast.error(extractErrorMessage(err));
-      setNewVideoPreview(null);
-    } finally {
-      setIsUploadingVideo(false);
-      if (videoInputRef.current) videoInputRef.current.value = "";
-    }
-  };
-
   const handleSave = async () => {
     if (!post || !workspaceId) return;
     setSaving(true);
@@ -212,14 +190,11 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
 
   if (!post) return null;
 
-  const isUploading = isUploadingImage || isUploadingVideo;
+  const isUploading = isUploadingImage;
 
   const showExistingImage = !!post.image_url && !imageRemoved && !newImagePreview;
   const showNewImagePreview = !!newImagePreview;
   const showImageUpload = (imageRemoved || !post.image_url) && !newImagePreview;
-  const showExistingVideo = !!post.video_url && !videoRemoved && !newVideoPreview;
-  const showNewVideoPreview = !!newVideoPreview;
-  const showVideoUpload = (videoRemoved || !post.video_url) && !newVideoPreview;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -394,96 +369,24 @@ export default function EditDraftModal({ post, onClose, onSave }: Props) {
                 )}
               </div>
 
-              {/* ── Video panel ── */}
-              <div
-                className={`rounded-xl border-2 p-3 transition-colors ${
-                  activeMedia === "video" ? "border-blue-400 bg-blue-50/30" : "border-gray-200"
-                }`}
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
-                    <LuVideo className="h-3.5 w-3.5" />
-                    Video
-                  </span>
-                  {activeMedia === "video" ? (
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                      Active
+              {/* ── Video panel — coming soon ── */}
+              <div className="relative cursor-not-allowed rounded-xl border-2 border-gray-200 p-3">
+                <div className="pointer-events-none select-none opacity-40">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                      <LuVideo className="h-3.5 w-3.5" />
+                      Video
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setActiveMedia("video")}
-                      className="text-[10px] font-medium text-blue-600 hover:underline"
-                    >
-                      Use for post
-                    </button>
-                  )}
-                </div>
-
-                {showExistingVideo && (
-                  <div className="relative overflow-hidden rounded-lg border border-gray-200">
-                    <video src={post.video_url} controls className="h-36 w-full object-cover" />
-                    <button
-                      onClick={() => setVideoRemoved(true)}
-                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                    >
-                      <LuX className="h-3 w-3" />
-                    </button>
                   </div>
-                )}
-
-                {showNewVideoPreview && (
-                  <div className="relative overflow-hidden rounded-lg border border-gray-200">
-                    <video src={newVideoPreview!} controls className="h-36 w-full object-cover" />
-                    {isUploadingVideo ? (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                        <LuLoader className="h-5 w-5 animate-spin text-white" />
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setNewVideoPreview(null);
-                          if (videoInputRef.current) videoInputRef.current.value = "";
-                        }}
-                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-                      >
-                        <LuX className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {showVideoUpload && (
-                  <button
-                    onClick={() => videoInputRef.current?.click()}
-                    disabled={isUploadingVideo}
-                    className="flex h-36 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-500 disabled:opacity-50"
-                  >
+                  <div className="flex h-36 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400">
                     <LuUpload className="h-4 w-4" />
                     <span className="text-xs font-medium">Upload video</span>
                     <span className="text-[10px]">MP4, MOV, WEBM</span>
-                  </button>
-                )}
-
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
-                  className="hidden"
-                  onChange={handleVideoChange}
-                />
-
-                {videoRemoved && !newVideoPreview && post.video_url && (
-                  <p className="mt-1.5 text-[10px] text-gray-400">
-                    Removed.{" "}
-                    <button
-                      onClick={() => setVideoRemoved(false)}
-                      className="font-medium text-blue-600 hover:underline"
-                    >
-                      Undo
-                    </button>
-                  </p>
-                )}
+                  </div>
+                </div>
+                <span className="absolute right-2.5 top-2.5 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-600">
+                  Soon
+                </span>
               </div>
             </div>
           </div>
