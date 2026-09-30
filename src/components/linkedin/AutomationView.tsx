@@ -1125,7 +1125,7 @@ export default function AutomationView() {
       setApprovingIds((prev) => new Set(prev).add(id));
       try {
         await postsService(workspaceId).approvePost(id);
-        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, status: "approved" } : p)));
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, status: "scheduled" } : p)));
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
@@ -1329,9 +1329,9 @@ export default function AutomationView() {
             setConversation(conv);
             refreshHistory();
             if (conv.status === "running") startPolling(conv.id);
-            if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
-              fetchPosts(conv.artifacts.post_ids);
-            }
+            // Always fetch the edited post so its live status is in state
+            // (approve/reject updates posts state; cards read from it, not the frozen snapshot)
+            fetchPosts(conv.artifacts.post_ids.length > 0 ? conv.artifacts.post_ids : [editPostId]);
           } catch {
             /* ignore */
           }
@@ -2019,7 +2019,10 @@ export default function AutomationView() {
                           {afterSnapshots.length > 0 && (
                             <div className="flex gap-3 pt-4">
                               {afterSnapshots.map((snap) => {
-                                const displayPost = snapshotToAgentPost(snap);
+                                // Prefer live post from state so status updates after approve/reject
+                                const displayPost =
+                                  posts.find((p) => p.id === snap.post_id) ??
+                                  snapshotToAgentPost(snap);
                                 return (
                                   <DraftCard
                                     key={snap.post_id}
