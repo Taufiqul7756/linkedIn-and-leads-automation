@@ -21,6 +21,7 @@ import {
   LuLoader,
   LuCheck,
   LuTrash2,
+  LuSettings,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -590,6 +591,13 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Image chat settings
+  const [imgSettings, setImgSettings] = useState({ use_post_body: true });
+  const [imgSettingsLoaded, setImgSettingsLoaded] = useState(false);
+  const [imgSettingsOpen, setImgSettingsOpen] = useState(false);
+  const [imgSettingsSaving, setImgSettingsSaving] = useState(false);
+  const imgSettingsRef = useRef<HTMLDivElement>(null);
+
   const isPublished = post?.status === "published";
   const isChatRunning = chat?.status === "running";
 
@@ -670,6 +678,46 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     void openChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, postId]);
+
+  // ── Load image chat settings ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!workspaceId || imgSettingsLoaded) return;
+    imageChatService(workspaceId)
+      .getSettings()
+      .then((s) => {
+        setImgSettings(s);
+        setImgSettingsLoaded(true);
+      })
+      .catch(() => setImgSettingsLoaded(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+
+  // ── Close settings popup on outside click ────────────────────────────────────
+
+  useEffect(() => {
+    if (!imgSettingsOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (imgSettingsRef.current && !imgSettingsRef.current.contains(e.target as Node))
+        setImgSettingsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [imgSettingsOpen]);
+
+  async function handleImgSettingChange(value: boolean) {
+    const next = { use_post_body: value };
+    setImgSettings(next);
+    setImgSettingsSaving(true);
+    try {
+      await imageChatService(workspaceId).patchSettings(next);
+    } catch {
+      setImgSettings(imgSettings);
+      toast.error("Failed to save settings.");
+    } finally {
+      setImgSettingsSaving(false);
+    }
+  }
 
   // ── Send message ────────────────────────────────────────────────────────────
 
@@ -942,6 +990,20 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                   rows={2}
                   className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
                 />
+                {imgSettings.use_post_body && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                      <LuFileText className="h-3 w-3" />
+                      <span>Post body</span>
+                      <button
+                        onClick={() => void handleImgSettingChange(false)}
+                        className="ml-0.5 rounded-full p-0.5 hover:bg-violet-200 transition-colors"
+                      >
+                        <LuX className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <div className="group relative">
@@ -961,17 +1023,78 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                       </span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => void handleSend()}
-                    disabled={!input.trim() || isSending || isChatRunning}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-40"
-                  >
-                    {isSending || isChatRunning ? (
-                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <LuSend className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {/* Settings */}
+                    <div ref={imgSettingsRef} className="relative">
+                      <button
+                        onClick={() => setImgSettingsOpen((v) => !v)}
+                        className={cn(
+                          "flex h-7 w-7 items-center justify-center rounded-lg border border-gray-300 text-gray-500 transition-colors hover:bg-gray-100",
+                          imgSettingsSaving && "opacity-50"
+                        )}
+                      >
+                        <LuSettings className="h-3.5 w-3.5" />
+                      </button>
+
+                      {imgSettingsOpen && (
+                        <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                          <div className="flex items-center justify-between px-4 py-3">
+                            <span className="text-sm font-semibold text-gray-900">
+                              Image agent settings
+                            </span>
+                            <button
+                              onClick={() => setImgSettingsOpen(false)}
+                              className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                            >
+                              <LuX className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          <div className="divide-y divide-gray-100 px-4 pb-4">
+                            <div className="flex items-start justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">Use post body</p>
+                                <p className="text-xs text-gray-400">
+                                  Include post text as context for image generation
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={imgSettings.use_post_body}
+                                onClick={() =>
+                                  void handleImgSettingChange(!imgSettings.use_post_body)
+                                }
+                                className={cn(
+                                  "inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200",
+                                  imgSettings.use_post_body ? "bg-blue-600" : "bg-gray-200"
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200",
+                                    imgSettings.use_post_body ? "translate-x-5" : "translate-x-0"
+                                  )}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Send */}
+                    <button
+                      onClick={() => void handleSend()}
+                      disabled={!input.trim() || isSending || isChatRunning}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-40"
+                    >
+                      {isSending || isChatRunning ? (
+                        <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <LuSend className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

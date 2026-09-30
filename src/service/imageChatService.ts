@@ -20,6 +20,13 @@ async function axiosGet<T>(path: string): Promise<T> {
   return res.data;
 }
 
+async function axiosPatch<T>(path: string, data?: unknown): Promise<T> {
+  const res = await axios.patch<T>(`${Config.API_URL}${path}`, data, {
+    headers: getAuthHeaders(),
+  });
+  return res.data;
+}
+
 export const imageChatService = (workspaceId: string) => ({
   // POST image-chats/ {"post": id} — 201 new, 200 existing
   openChat: (postId: string) =>
@@ -38,4 +45,15 @@ export const imageChatService = (workspaceId: string) => ({
     axiosPost<ImageChat>(`/workspaces/${workspaceId}/image-chats/${chatId}/add_to_post/`, {
       image: imageId,
     }),
+
+  // GET image-chats/settings/
+  getSettings: () =>
+    axiosGet<{ use_post_body: boolean }>(`/workspaces/${workspaceId}/image-chats/settings/`),
+
+  // PATCH image-chats/settings/
+  patchSettings: (data: Partial<{ use_post_body: boolean }>) =>
+    axiosPatch<{ use_post_body: boolean }>(
+      `/workspaces/${workspaceId}/image-chats/settings/`,
+      data
+    ),
 });

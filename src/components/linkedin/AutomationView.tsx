@@ -1843,6 +1843,53 @@ export default function AutomationView() {
               />
             </div>
           )}
+
+          {/* Default media — AI img / Stock img checkbox */}
+          {!settingsLoaded ? (
+            <div className="h-7 w-48 animate-pulse rounded-lg bg-gray-200" />
+          ) : (
+            <div className="flex items-center gap-2.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-600">
+              <span className="text-gray-500">Default media</span>
+              {(
+                [
+                  { label: "AI img", value: true },
+                  { label: "Stock img", value: false },
+                ] as const
+              ).map((opt) => {
+                const checked = opt.value === settings.use_ai_image;
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => handleSettingChange("use_ai_image", opt.value)}
+                    className="flex cursor-pointer items-center gap-1 select-none"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-3.5 w-3.5 items-center justify-center rounded border transition-colors",
+                        checked ? "border-blue-600 bg-blue-600" : "border-gray-300 bg-white"
+                      )}
+                    >
+                      {checked && (
+                        <svg
+                          viewBox="0 0 10 10"
+                          className="h-2 w-2 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <polyline points="1.5,5 4,7.5 8.5,2.5" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className={checked ? "font-medium text-blue-700" : "text-gray-400"}>
+                      {opt.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Agent composer card */}
@@ -2530,18 +2577,6 @@ export default function AutomationView() {
                                 <Toggle
                                   checked={settings.use_hashtags}
                                   onChange={(v) => handleSettingChange("use_hashtags", v)}
-                                />
-                              </div>
-                              <div className="flex items-start justify-between gap-3 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-800">Use AI image</p>
-                                  <p className="text-xs text-gray-400">
-                                    Generate a visual for each draft
-                                  </p>
-                                </div>
-                                <Toggle
-                                  checked={settings.use_ai_image}
-                                  onChange={(v) => handleSettingChange("use_ai_image", v)}
                                 />
                               </div>
                               <div className="flex items-start justify-between gap-3 py-3">
