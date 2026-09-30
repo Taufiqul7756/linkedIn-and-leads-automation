@@ -1089,6 +1089,7 @@ export default function AutomationView() {
     use_ai_image: true,
     ignore_headline: false,
     ignore_grilling: false,
+    ask_questions: true,
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -1818,6 +1819,27 @@ export default function AutomationView() {
                 small
                 checked={!settings.ignore_headline}
                 onChange={(v) => handleSettingChange("ignore_headline", !v)}
+              />
+            </div>
+          )}
+
+          {/* Questions before drafting toggle */}
+          {!settingsLoaded ? (
+            <div className="h-7 w-44 animate-pulse rounded-lg bg-gray-200" />
+          ) : (
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-1 text-xs",
+                settings.ask_questions
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "bg-white text-gray-400"
+              )}
+            >
+              <span>Questions ask before drafts</span>
+              <Toggle
+                small
+                checked={settings.ask_questions}
+                onChange={(v) => handleSettingChange("ask_questions", v)}
               />
             </div>
           )}

@@ -92,6 +92,7 @@ export interface AgentSettings {
   use_ai_image: boolean;
   ignore_headline: boolean;
   ignore_grilling: boolean;
+  ask_questions: boolean;
 }
 
 export interface SpanNode {
