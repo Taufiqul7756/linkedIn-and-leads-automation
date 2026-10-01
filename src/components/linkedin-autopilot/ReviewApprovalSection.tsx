@@ -130,6 +130,13 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
+function getSuggestedPublishError(error: unknown): string | null {
+  const data = (error as { response?: { data?: Record<string, unknown> } })?.response?.data;
+  const arr = data?.suggested_publish_at;
+  if (Array.isArray(arr) && arr.length > 0) return arr[0] as string;
+  return null;
+}
+
 const PAGE_SIZE_OPTIONS = [4, 8, 12, 16, 20];
 
 export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manual" }) {
@@ -233,8 +240,15 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
         toast.success("Post approved!");
         setApprovingId(null);
       },
-      onError: (error: unknown) => {
-        toast.error(extractErrorMessage(error));
+      onError: (error: unknown, id: string) => {
+        const fieldErr = getSuggestedPublishError(error);
+        if (fieldErr) {
+          toast.error(fieldErr);
+          const post = posts.find((p) => p.id === id);
+          if (post) openPublishModal(post);
+        } else {
+          toast.error(extractErrorMessage(error));
+        }
         setApprovingId(null);
       },
     }
@@ -260,6 +274,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
   const [publishModalPost, setPublishModalPost] = useState<PostType | null>(null);
   const [publishDraft, setPublishDraft] = useState("");
   const [savingPublish, setSavingPublish] = useState(false);
+  const [publishTimeError, setPublishTimeError] = useState<string | null>(null);
 
   const formatSuggested = (iso: string) =>
     new Date(iso).toLocaleString(undefined, {
@@ -282,6 +297,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
   const openPublishModal = (post: PostType) => {
     setPublishModalPost(post);
     setPublishDraft(post.suggested_publish_at ? isoToLocal(post.suggested_publish_at) : "");
+    setPublishTimeError(null);
   };
 
   const savePublishTime = async () => {
@@ -290,7 +306,7 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
     const postId = publishModalPost.id;
     setSavingPublish(true);
     try {
-      await postsService(workspaceId).patchPost(postId, { suggested_publish_at: newIso });
+      await postsService(workspaceId).patchPostRaw(postId, { suggested_publish_at: newIso });
       queryClient.setQueryData(
         ["posts", "draft", workspaceId, mode, page, pageSize, selectedConvId],
         (
@@ -309,8 +325,14 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
       );
       toast.success("Suggested time updated.");
       setPublishModalPost(null);
+      setPublishTimeError(null);
     } catch (err) {
-      toast.error(extractErrorMessage(err));
+      const fieldErr = getSuggestedPublishError(err);
+      if (fieldErr) {
+        setPublishTimeError(fieldErr);
+      } else {
+        toast.error(extractErrorMessage(err));
+      }
     } finally {
       setSavingPublish(false);
     }
@@ -620,7 +642,10 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
 
       <Modal
         isOpen={publishModalPost !== null}
-        onClose={() => setPublishModalPost(null)}
+        onClose={() => {
+          setPublishModalPost(null);
+          setPublishTimeError(null);
+        }}
         title="Edit Suggested Publish Time"
         width="sm"
       >
@@ -632,17 +657,24 @@ export default function ReviewApprovalSection({ mode }: { mode?: "agent" | "manu
             <input
               type="datetime-local"
               value={publishDraft}
-              onChange={(e) => setPublishDraft(e.target.value)}
-              className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              onChange={(e) => {
+                setPublishDraft(e.target.value);
+                setPublishTimeError(null);
+              }}
+              className={`h-10 w-full rounded-xl border px-3 text-sm text-gray-700 focus:outline-none focus:ring-1 ${publishTimeError ? "border-red-400 focus:border-red-400 focus:ring-red-400" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
             />
+            {publishTimeError && <p className="mt-1.5 text-xs text-red-500">{publishTimeError}</p>}
           </div>
-          {publishDraft && (
+          {publishDraft && !publishTimeError && (
             <p className="text-xs text-gray-400">UTC: {new Date(publishDraft).toISOString()}</p>
           )}
         </div>
         <div className="mt-6 flex items-center justify-end gap-2.5">
           <button
-            onClick={() => setPublishModalPost(null)}
+            onClick={() => {
+              setPublishModalPost(null);
+              setPublishTimeError(null);
+            }}
             disabled={savingPublish}
             className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >

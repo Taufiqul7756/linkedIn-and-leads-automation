@@ -432,6 +432,46 @@ POST   conversations/f4d6…/messages/                  202
 
 ---
 
+# 3. Posts API
+
+**Base path**: `{{baseUrl}}/workspaces/{{workspaceId}}/content/posts/`
+
+Relevant endpoints for the Review & Approval and Agent Composer flows.
+
+---
+
+## `POST posts/{id}/approve/`
+
+Moves a draft post to `approved` / `scheduled` status.
+
+**Success `200`** — the updated `PostType` object.
+
+### Errors
+
+| Status | Body | When |
+|---|---|---|
+| `400` | `{"suggested_publish_at": ["This post's suggested time has already passed. Move it to a future time before approving."]}` | `suggested_publish_at` is in the past at approve time |
+
+**UI behaviour on this 400**: show the error message as a toast **and** auto-open the Edit Suggested Publish Time modal for that post, pre-filled with the current `suggested_publish_at`.
+
+---
+
+## `PATCH posts/{id}/`
+
+Partial update of a post. Accepts `body_blocks`, `suggested_publish_at`, `image_url`, `video_url`, `status`, `media`, etc.
+
+**Success `200`** — the updated `PostType` object.
+
+### Errors (field-level)
+
+| Status | Body | When |
+|---|---|---|
+| `400` | `{"suggested_publish_at": ["Cannot schedule a post in the past. Send a time in the future."]}` | `suggested_publish_at` value is a past datetime |
+
+**UI behaviour on this 400 (Edit Suggested Publish Time modal)**: keep the modal open, display the error message inline under the datetime input (red border + red text). Do **not** fire a toast. Clear the error when the user changes the input value.
+
+---
+
 # 2. Image Chat API
 
 One post, one conversation about its picture. The user says in their own words how the picture should change, and the backend makes a new one. They keep going until happy, then press **Add to post**.

@@ -1,4 +1,4 @@
-import { get, post, postRaw, patch, del } from "@/lib/api";
+import { get, post, postRaw, patch, patchRaw, del } from "@/lib/api";
 import {
   PostStatsType,
   PostType,
@@ -59,6 +59,19 @@ export const postsService = (workspaceId: string) => ({
         }
       | FormData
   ) => patch<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/`, data),
+  patchPostRaw: (
+    id: string,
+    data: {
+      body?: string;
+      body_blocks?: object;
+      hashtags?: string[];
+      image_url?: string;
+      video_url?: string;
+      suggested_publish_at?: string | null;
+      status?: string;
+      media?: "image" | "video";
+    }
+  ) => patchRaw<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/`, data),
   uploadImage: (id: string, file: File) => {
     const form = new FormData();
     form.append("image", file);
@@ -70,7 +83,7 @@ export const postsService = (workspaceId: string) => ({
     return post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/upload_video/`, form);
   },
   approvePost: (id: string) =>
-    post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/approve/`),
+    postRaw<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/approve/`),
   rejectPost: (id: string) => del<void>(`/workspaces/${workspaceId}/content/posts/${id}/`),
   generateImage: (id: string, image_prompt: string) =>
     post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/generate_image/`, {
