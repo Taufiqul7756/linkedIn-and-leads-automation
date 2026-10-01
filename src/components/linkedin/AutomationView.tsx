@@ -535,7 +535,7 @@ function GrillForm({
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
           >
             {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
-            Generate drafts
+            Next
           </button>
           {canSkip && (
             <button
@@ -1835,7 +1835,7 @@ export default function AutomationView() {
                   : "bg-white text-gray-400"
               )}
             >
-              <span>Questions ask before drafts</span>
+              <span>Ask questions before drafts</span>
               <Toggle
                 small
                 checked={settings.ask_questions}
