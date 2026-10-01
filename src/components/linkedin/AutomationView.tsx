@@ -80,6 +80,13 @@ function isoToLocal(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function getSuggestedPublishError(error: unknown): string | null {
+  const data = (error as { response?: { data?: Record<string, unknown> } })?.response?.data;
+  const arr = data?.suggested_publish_at;
+  if (Array.isArray(arr) && arr.length > 0) return arr[0] as string;
+  return null;
+}
+
 function formatSuggestedDate(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -1063,6 +1070,7 @@ export default function AutomationView() {
   const [timeEditPost, setTimeEditPost] = useState<AgentPost | null>(null);
   const [timeEditDraft, setTimeEditDraft] = useState("");
   const [savingTimeEdit, setSavingTimeEdit] = useState(false);
+  const [timeEditError, setTimeEditError] = useState<string | null>(null);
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewAllPosts, setViewAllPosts] = useState<AgentPost[]>([]);
   const [restoringConv, setRestoringConv] = useState(true);
@@ -1131,7 +1139,20 @@ export default function AutomationView() {
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
         toast.success("Post approved!");
       } catch (err) {
-        toast.error(extractErrorMessage(err) || "Failed to approve post.");
+        const fieldErr = getSuggestedPublishError(err);
+        if (fieldErr) {
+          toast.error(fieldErr);
+          const failedPost = postsRef.current.find((p) => p.id === id);
+          if (failedPost) {
+            setTimeEditPost(failedPost);
+            setTimeEditDraft(
+              failedPost.suggested_publish_at ? isoToLocal(failedPost.suggested_publish_at) : ""
+            );
+            setTimeEditError(null);
+          }
+        } else {
+          toast.error(extractErrorMessage(err) || "Failed to approve post.");
+        }
       } finally {
         setApprovingIds((prev) => {
           const next = new Set(prev);
@@ -1169,6 +1190,7 @@ export default function AutomationView() {
   const openTimeEdit = (post: AgentPost) => {
     setTimeEditPost(post);
     setTimeEditDraft(post.suggested_publish_at ? isoToLocal(post.suggested_publish_at) : "");
+    setTimeEditError(null);
   };
 
   const saveTimeEdit = async () => {
@@ -1176,14 +1198,22 @@ export default function AutomationView() {
     const newIso = new Date(timeEditDraft).toISOString();
     setSavingTimeEdit(true);
     try {
-      await postsService(workspaceId).patchPost(timeEditPost.id, { suggested_publish_at: newIso });
+      await postsService(workspaceId).patchPostRaw(timeEditPost.id, {
+        suggested_publish_at: newIso,
+      });
       setPosts((prev) =>
         prev.map((p) => (p.id === timeEditPost.id ? { ...p, suggested_publish_at: newIso } : p))
       );
       toast.success("Suggested time updated.");
       setTimeEditPost(null);
+      setTimeEditError(null);
     } catch (err) {
-      toast.error(extractErrorMessage(err));
+      const fieldErr = getSuggestedPublishError(err);
+      if (fieldErr) {
+        setTimeEditError(fieldErr);
+      } else {
+        toast.error(extractErrorMessage(err));
+      }
     } finally {
       setSavingTimeEdit(false);
     }
@@ -2771,7 +2801,10 @@ export default function AutomationView() {
       {/* Time edit modal */}
       <Modal
         isOpen={timeEditPost !== null}
-        onClose={() => setTimeEditPost(null)}
+        onClose={() => {
+          setTimeEditPost(null);
+          setTimeEditError(null);
+        }}
         title="Edit Suggested Publish Time"
         width="sm"
       >
@@ -2783,17 +2816,24 @@ export default function AutomationView() {
             <input
               type="datetime-local"
               value={timeEditDraft}
-              onChange={(e) => setTimeEditDraft(e.target.value)}
-              className="h-10 w-full rounded-xl border border-gray-200 px-3 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              onChange={(e) => {
+                setTimeEditDraft(e.target.value);
+                setTimeEditError(null);
+              }}
+              className={`h-10 w-full rounded-xl border px-3 text-sm text-gray-700 focus:outline-none focus:ring-1 ${timeEditError ? "border-red-400 focus:border-red-400 focus:ring-red-400" : "border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
             />
+            {timeEditError && <p className="mt-1.5 text-xs text-red-500">{timeEditError}</p>}
           </div>
-          {timeEditDraft && (
+          {timeEditDraft && !timeEditError && (
             <p className="text-xs text-gray-400">UTC: {new Date(timeEditDraft).toISOString()}</p>
           )}
         </div>
         <div className="mt-6 flex items-center justify-end gap-2.5">
           <button
-            onClick={() => setTimeEditPost(null)}
+            onClick={() => {
+              setTimeEditPost(null);
+              setTimeEditError(null);
+            }}
             disabled={savingTimeEdit}
             className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >

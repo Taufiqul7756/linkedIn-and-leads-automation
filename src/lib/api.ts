@@ -71,6 +71,12 @@ export async function patch<T>(url: string, data?: unknown): Promise<T | undefin
   }
 }
 
+/** Like `patch` but re-throws on error — use when onError handling is needed. */
+export async function patchRaw<T>(url: string, data?: unknown): Promise<T> {
+  const response = await api.patch<T>(url, data);
+  return response.data;
+}
+
 export async function del<T>(url: string): Promise<T | undefined> {
   try {
     const response = await api.delete<T>(url);
