@@ -57,9 +57,10 @@ Always create `docs/prd/<feature>.md` and `docs/tasks/<feature>.md` before build
 ### Axios Instance
 Located at `src/lib/api.ts`. Includes:
 - `baseURL` from `Config.API_URL`
-- `withCredentials: true` (httpOnly cookies)
-- 401 interceptor with token refresh and retry
-- Exported helpers: `get<T>`, `post<T>`, `patch<T>`, `del<T>`
+- `withCredentials: false` (token in `Authorization` header)
+- 401 interceptor → clears localStorage + redirects to `/login`
+- Exported helpers: `get<T>`, `post<T>`, `patch<T>`, `del<T>` — these **swallow errors** (return `undefined` on failure)
+- Raw variants: `postRaw<T>`, `patchRaw<T>` — these **re-throw on error** — use whenever callers need `onError` / `catch` handling (e.g. showing inline errors, opening a modal on failure)
 
 ### Config Object
 Located at `src/config/config.ts`.

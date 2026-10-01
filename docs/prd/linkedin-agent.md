@@ -456,9 +456,11 @@ interface AgentSettings {
 - Size: `h-72 w-96`; outer wrapper has `group` class for CSS `group-hover`
 - **Hover buttons** (bottom-right, `opacity-0 group-hover:opacity-100`): **Edit text** · **Edit image** — both open `EditDraftModal`
 - **No "Edit with agent" button** on agent composer cards (only on Review & Approval cards)
-- Time row: `LuPencil` icon → opens a **dedicated time-edit modal** (`<Modal width="sm">`) with a `datetime-local` input; saves via `PATCH posts/{id}/` `{ suggested_publish_at }`, then invalidates posts cache
+- Time row: `LuPencil` icon → opens a **dedicated time-edit modal** (`<Modal width="sm">`) with a `datetime-local` input; saves via `patchPostRaw` (`PATCH posts/{id}/ { suggested_publish_at }`)
+  - **Past date validation**: if backend returns `400 { suggested_publish_at: [...] }`, modal stays open and shows an inline red error under the input — no toast. Error clears when the user edits the input.
 - Delete (reject) flow: clicking the `LuX` floating button sets `rejectConfirmPost` state → `RejectConfirmModal` confirmation before calling `onReject`
-- `LuCheck` floating button (top-right, `-translate-y-1/2`): approves post; no confirmation required
+- `LuCheck` floating button (top-right, `-translate-y-1/2`): approves post via `approvePost` (uses `postRaw` — throws on error); no confirmation required
+  - **Past date on approve**: if backend returns `400 { suggested_publish_at: [...] }` → toast shows the error + Edit Suggested Publish Time modal auto-opens for that post pre-filled with its current `suggested_publish_at`
 
 ### Edit with Agent Flow (Review & Approval → Agent Page)
 
@@ -469,6 +471,18 @@ When the user clicks **Edit with agent** on a Review & Approval card:
 3. Blank chat area renders the fetched `DraftCard` above the message input
 4. User types a prompt and sends → conversation is created → `?conv=<id>` replaces `?editPostId=` in URL
 5. `handleNewChat()` clears `editDraftPost` state
+
+### Review & Approval Section (`ReviewApprovalSection.tsx`)
+
+Renders a paginated grid of draft post cards for human review. Used in both agent mode and manual mode (controlled by `mode` prop).
+
+- **Approve button** (`LuCheck`, top-right floating, `-translate-y-1/2`): calls `approvePost` (uses `postRaw` — throws on error)
+  - **Past date on approve**: `400 { suggested_publish_at: [...] }` → toast with the error message + Edit Suggested Publish Time modal auto-opens pre-filled with the post's current `suggested_publish_at`
+- **Edit Suggested Publish Time modal**: `datetime-local` input; saves via `patchPostRaw`
+  - **Past date validation**: `400 { suggested_publish_at: [...] }` → modal stays open, inline red error under the input, no toast. Clears on input change or modal close.
+- Conversation filter dropdown: filters drafts by `?conversation=<id>` query param; "All conversations" = no filter
+- Paginated with `PAGE_SIZE_OPTIONS = [4, 8, 12, 16, 20]`
+- Hover buttons (bottom-right): **Edit text** → `EditPostModal` · **Edit image** → `/linkedin/edit-image/[postId]?from=review` · **Edit with agent** → `/linkedin/automation?editPostId=<id>` or `?conv=<id>` if the post has a `single_post_conversation_id`
 
 ### AllDraftsModal Card Design
 
