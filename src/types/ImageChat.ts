@@ -30,3 +30,32 @@ export type ImageChat = {
   created_at: string;
   updated_at: string;
 };
+
+export type ImageRatioOption = {
+  is_active: boolean;
+  title: string;
+  size: string;
+  ratio: string;
+  image: string;
+};
+
+export type ImageModelOption = {
+  is_active: boolean;
+  title: string;
+  model_name: string;
+  image: string;
+};
+
+// GET image-chats/settings/{chatId}/
+export type ImageChatSettings = {
+  use_post_body: boolean;
+  image_ratio: ImageRatioOption[];
+  ai_model: ImageModelOption[];
+};
+
+// PATCH image-chats/settings/{chatId}/ — send only the changed field
+export type ImageChatSettingsPatch = Partial<{
+  use_post_body: boolean;
+  image_ratio: string; // ImageRatioOption.ratio
+  ai_model: string; // ImageModelOption.model_name
+}>;

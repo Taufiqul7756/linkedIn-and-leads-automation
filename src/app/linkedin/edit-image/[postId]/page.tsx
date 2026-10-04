@@ -22,6 +22,9 @@ import {
   LuCheck,
   LuTrash2,
   LuSettings,
+  LuRatio,
+  LuCpu,
+  LuChevronDown,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -34,8 +37,16 @@ import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import toast from "react-hot-toast";
 import TiptapEditor from "@/components/ui/TiptapEditor";
+import ImageRatioModal from "@/components/linkedin/ImageRatioModal";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
-import type { ImageChat, ChatMessage, GeneratedImage } from "@/types/ImageChat";
+import type {
+  ImageChat,
+  ChatMessage,
+  GeneratedImage,
+  ImageChatSettings,
+  ImageChatSettingsPatch,
+  ImageModelOption,
+} from "@/types/ImageChat";
 
 // ─── body_blocks → Tiptap helpers ────────────────────────────────────────────
 
@@ -103,6 +114,9 @@ function getInitialContent(post: AgentPost): object {
     return legacyBlocksToTiptap(bb as BlockNode[]);
   return post.body ? plainTextToTiptap(post.body) : { type: "doc", content: [] };
 }
+
+// Chat input grows with its content up to this many lines, then scrolls inside
+const CHAT_INPUT_MAX_ROWS = 8;
 
 // Fixed prompt sent by the "AI Generated Image" quick-action button
 const AI_GENERATED_IMAGE_PROMPT = "Make Ai generated image";
@@ -288,6 +302,26 @@ function ChatMessageItem({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── AI model avatar (model image, or a fallback icon when the API sends none) ─
+
+function ModelAvatar({ model, size }: { model?: ImageModelOption; size: "sm" | "md" }) {
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center overflow-hidden border border-gray-200 bg-gray-50 text-gray-400",
+        size === "sm" ? "h-5 w-5 rounded-md" : "h-9 w-9 rounded-lg"
+      )}
+    >
+      {model?.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={model.image} alt={model.title} className="h-full w-full object-cover" />
+      ) : (
+        <LuCpu className={size === "sm" ? "h-3 w-3" : "h-4 w-4"} />
+      )}
+    </span>
   );
 }
 
@@ -612,11 +646,19 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Image chat settings
-  const [imgSettings, setImgSettings] = useState({ use_post_body: true });
-  const [imgSettingsLoaded, setImgSettingsLoaded] = useState(false);
+  const [imgSettings, setImgSettings] = useState<ImageChatSettings>({
+    use_post_body: true,
+    image_ratio: [],
+    ai_model: [],
+  });
   const [imgSettingsOpen, setImgSettingsOpen] = useState(false);
   const [imgSettingsSaving, setImgSettingsSaving] = useState(false);
   const imgSettingsRef = useRef<HTMLDivElement>(null);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const [ratioModalOpen, setRatioModalOpen] = useState(false);
+  const activeModel = imgSettings.ai_model.find((m) => m.is_active);
+  const activeRatio = imgSettings.image_ratio.find((r) => r.is_active);
 
   const isPublished = post?.status === "published";
   const isChatRunning = chat?.status === "running";
@@ -704,17 +746,17 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   // ── Load image chat settings ─────────────────────────────────────────────────
 
+  // Settings are per chat — load once the chat is open
+  const chatId = chat?.id;
   useEffect(() => {
-    if (!workspaceId || imgSettingsLoaded) return;
+    if (!workspaceId || !chatId) return;
     imageChatService(workspaceId)
-      .getSettings()
-      .then((s) => {
-        setImgSettings(s);
-        setImgSettingsLoaded(true);
-      })
-      .catch(() => setImgSettingsLoaded(true));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+      .getSettings(chatId)
+      .then(setImgSettings)
+      .catch(() => {
+        // keep defaults on failure
+      });
+  }, [workspaceId, chatId]);
 
   // ── Close settings popup on outside click ────────────────────────────────────
 
@@ -728,18 +770,61 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     return () => document.removeEventListener("mousedown", handler);
   }, [imgSettingsOpen]);
 
-  async function handleImgSettingChange(value: boolean) {
-    const next = { use_post_body: value };
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node))
+        setModelMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelMenuOpen]);
+
+  // Optimistic update — apply `next` locally, PATCH only the changed field, roll back on failure
+  async function saveImgSettings(next: ImageChatSettings, patch: ImageChatSettingsPatch) {
+    if (!chatId) return;
+    const prev = imgSettings;
     setImgSettings(next);
     setImgSettingsSaving(true);
     try {
-      await imageChatService(workspaceId).patchSettings(next);
+      await imageChatService(workspaceId).patchSettings(chatId, patch);
     } catch {
-      setImgSettings(imgSettings);
+      setImgSettings(prev);
       toast.error("Failed to save settings.");
     } finally {
       setImgSettingsSaving(false);
     }
+  }
+
+  function handleImgSettingChange(value: boolean) {
+    void saveImgSettings({ ...imgSettings, use_post_body: value }, { use_post_body: value });
+  }
+
+  function handleModelChange(modelName: string) {
+    setModelMenuOpen(false);
+    if (modelName === activeModel?.model_name) return;
+    void saveImgSettings(
+      {
+        ...imgSettings,
+        ai_model: imgSettings.ai_model.map((m) => ({
+          ...m,
+          is_active: m.model_name === modelName,
+        })),
+      },
+      { ai_model: modelName }
+    );
+  }
+
+  function handleRatioChange(ratio: string) {
+    setRatioModalOpen(false);
+    if (ratio === activeRatio?.ratio) return;
+    void saveImgSettings(
+      {
+        ...imgSettings,
+        image_ratio: imgSettings.image_ratio.map((r) => ({ ...r, is_active: r.ratio === ratio })),
+      },
+      { image_ratio: ratio }
+    );
   }
 
   // ── Send message ────────────────────────────────────────────────────────────
@@ -804,6 +889,17 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   // ── Right-panel actions ─────────────────────────────────────────────────────
 
   const [input, setInput] = useState("");
+
+  // Auto-grow the chat input upward with its content (same as the LinkedIn Agent composer):
+  // grows up to CHAT_INPUT_MAX_ROWS lines, then stops and the text scrolls inside.
+  // Shrinks back when the input is cleared on send.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const maxHeight = parseFloat(getComputedStyle(el).lineHeight) * CHAT_INPUT_MAX_ROWS;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+  }, [input]);
 
   async function handleSave() {
     if (!post || !workspaceId) return;
@@ -1022,7 +1118,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                   }}
                   placeholder="Describe the image you want…"
                   rows={2}
-                  className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
+                  className="w-full resize-none overflow-y-auto bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
                 />
                 {imgSettings.use_post_body && (
                   <div className="flex items-center gap-1.5">
@@ -1058,6 +1154,90 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {/* AI model */}
+                    {imgSettings.ai_model.length > 0 && (
+                      <div ref={modelMenuRef} className="relative">
+                        <button
+                          onClick={() => setModelMenuOpen((v) => !v)}
+                          className={cn(
+                            "flex h-7 items-center gap-1.5 rounded-lg border pr-2 pl-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50",
+                            modelMenuOpen ? "border-violet-300 bg-violet-50" : "border-gray-300"
+                          )}
+                        >
+                          <ModelAvatar model={activeModel} size="sm" />
+                          <span className="max-w-28 truncate">{activeModel?.title ?? "Model"}</span>
+                          <LuChevronDown
+                            className={cn(
+                              "h-3 w-3 text-gray-400 transition-transform",
+                              modelMenuOpen && "rotate-180"
+                            )}
+                          />
+                        </button>
+
+                        {modelMenuOpen && (
+                          <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                            <div className="flex items-start justify-between border-b border-gray-100 px-4 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">AI model</p>
+                                <p className="text-xs text-gray-400">
+                                  Choose the model that renders your images
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setModelMenuOpen(false)}
+                                className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                              >
+                                <LuX className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex flex-col gap-1 p-2">
+                              {imgSettings.ai_model.map((m) => (
+                                <button
+                                  key={m.model_name}
+                                  onClick={() => handleModelChange(m.model_name)}
+                                  className={cn(
+                                    "flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 text-left transition-colors",
+                                    m.is_active
+                                      ? "border-violet-200 bg-violet-50"
+                                      : "border-transparent hover:bg-gray-50"
+                                  )}
+                                >
+                                  <ModelAvatar model={m} size="md" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-medium text-gray-900">
+                                      {m.title}
+                                    </p>
+                                    <p className="truncate text-xs text-gray-400">{m.model_name}</p>
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                                      m.is_active
+                                        ? "border-violet-600 bg-violet-600 text-white"
+                                        : "border-gray-300"
+                                    )}
+                                  >
+                                    {m.is_active && <LuCheck className="h-3 w-3" />}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Image ratio */}
+                    {imgSettings.image_ratio.length > 0 && (
+                      <button
+                        onClick={() => setRatioModalOpen(true)}
+                        className="flex h-7 items-center gap-1 rounded-lg border border-gray-300 px-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100"
+                      >
+                        <LuRatio className="h-3.5 w-3.5" />
+                        <span>{activeRatio?.ratio ?? "Size"}</span>
+                      </button>
+                    )}
+
                     {/* Settings */}
                     <div ref={imgSettingsRef} className="relative">
                       <button
@@ -1453,6 +1633,14 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
           </div>
         </div>
       )}
+
+      {/* ── Image ratio picker ────────────────────────────────────────────────── */}
+      <ImageRatioModal
+        isOpen={ratioModalOpen}
+        onClose={() => setRatioModalOpen(false)}
+        options={imgSettings.image_ratio}
+        onSelect={handleRatioChange}
+      />
     </div>
   );
 }

@@ -25,6 +25,7 @@ Token-based auth. `Authorization: Token <key>` header on every API request. Toke
 | **Follow-up Plan** | A new batch of 3 plans that continues an existing plan's strategy; created via `POST /content/plans/{id}/follow-up/` |
 | **Knowledge Base** | Agent-level websites and documents used to generate on-brand posts. Workspace-scoped, managed via `agent/websites/` and `agent/documents/` |
 | **Image Chat** | One-per-post AI conversation for generating and editing a post's image. Accessed at `/linkedin/edit-image/[postId]` |
+| **Image Settings** | Per-chat settings for Image Chat (`image-chats/settings/{chatId}/`): Use post body toggle, **AI Model** (e.g. Nano Banana) and **Image Ratio** / media size (e.g. Landscape Size 1200 X 628, 16:9). One active option each |
 | **Run Agent** | Bulk action that triggers the agentic swarm for selected leads |
 | **Lead Status** | Validation state of a lead: Valid (green) · Risky (amber) · Invalid (red — auto-removed) |
 | **Outreach** | Channel/state of outreach for a lead: Not contacted · Email sent · WhatsApp sent · LinkedIn sent · Replied |

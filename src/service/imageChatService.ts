@@ -1,6 +1,6 @@
 import axios from "axios";
 import { Config } from "@/config/config";
-import type { ImageChat } from "@/types/ImageChat";
+import type { ImageChat, ImageChatSettings, ImageChatSettingsPatch } from "@/types/ImageChat";
 
 function getAuthHeaders(): Record<string, string> {
   const stored = typeof window !== "undefined" ? localStorage.getItem("auth") : null;
@@ -46,14 +46,14 @@ export const imageChatService = (workspaceId: string) => ({
       image: imageId,
     }),
 
-  // GET image-chats/settings/
-  getSettings: () =>
-    axiosGet<{ use_post_body: boolean }>(`/workspaces/${workspaceId}/image-chats/settings/`),
+  // GET image-chats/settings/{chatId}/
+  getSettings: (chatId: string) =>
+    axiosGet<ImageChatSettings>(`/workspaces/${workspaceId}/image-chats/settings/${chatId}/`),
 
-  // PATCH image-chats/settings/
-  patchSettings: (data: Partial<{ use_post_body: boolean }>) =>
-    axiosPatch<{ use_post_body: boolean }>(
-      `/workspaces/${workspaceId}/image-chats/settings/`,
+  // PATCH image-chats/settings/{chatId}/ — send only the changed field
+  patchSettings: (chatId: string, data: ImageChatSettingsPatch) =>
+    axiosPatch<ImageChatSettings>(
+      `/workspaces/${workspaceId}/image-chats/settings/${chatId}/`,
       data
     ),
 });
