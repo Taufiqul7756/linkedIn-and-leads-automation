@@ -602,6 +602,8 @@ User's typed message is appended to `chat.messages` immediately (before API resp
 ### Chat input toolbar
 - Emoji button (`LuSmile`) and file/attachment button (`LuPaperclip`) are **disabled** — `cursor-not-allowed`, greyed out, show a "Soon" tooltip on hover
 - Send button: `bg-violet-600`, disabled while `!input.trim() || isSending || isChatRunning`
+- **"AI Generated Image" button** (`LuSparkles`, violet pill, left side next to emoji/attach): sends the fixed prompt `"Make Ai generated image"` through the same `POST image-chats/{id}/messages/` call as a typed prompt. Same optimistic append + polling flow; does not touch the textarea (not cleared on send, not restored on error). Disabled while `isSending || isChatRunning`
+- **Image style selector — pending**: waiting on backend API returning `{ title, description, img_url, default }[]` (user can set a default). Once shipped, the selected style's title + description will be appended to every prompt (typed or AI Generated Image button)
 
 ### Workspace-switch 404 error state
 - When user switches workspace while on this page, `fetchPost` re-runs with the old `postId` against the new `workspaceId`

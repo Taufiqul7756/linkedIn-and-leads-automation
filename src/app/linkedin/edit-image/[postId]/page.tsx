@@ -22,6 +22,7 @@ import {
   LuCheck,
   LuTrash2,
   LuSettings,
+  LuSparkles,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -103,6 +104,9 @@ function getInitialContent(post: AgentPost): object {
     return legacyBlocksToTiptap(bb as BlockNode[]);
   return post.body ? plainTextToTiptap(post.body) : { type: "doc", content: [] };
 }
+
+// Fixed prompt sent by the "AI Generated Image" quick-action button
+const AI_GENERATED_IMAGE_PROMPT = "Make Ai generated image";
 
 // ─── Image thinking steps (shown while image.status === "pending") ────────────
 
@@ -721,11 +725,19 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   // ── Send message ────────────────────────────────────────────────────────────
 
-  async function handleSend() {
-    const text = input.trim();
+  function handleSend() {
+    void sendPrompt(input.trim(), true);
+  }
+
+  function handleAiGeneratedImage() {
+    void sendPrompt(AI_GENERATED_IMAGE_PROMPT, false);
+  }
+
+  // fromInput: text came from the textarea — clear it on send, restore it on failure
+  async function sendPrompt(text: string, fromInput: boolean) {
     if (!text || isSending || isChatRunning || !chat) return;
     setIsSending(true);
-    setInput("");
+    if (fromInput) setInput("");
     // Optimistically append the user message immediately
     setChat((prev) => {
       if (!prev) return prev;
@@ -750,7 +762,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
         if (!prev) return prev;
         return { ...prev, messages: prev.messages.filter((m) => !m.id.startsWith("optimistic-")) };
       });
-      setInput(text);
+      if (fromInput) setInput(text);
     } finally {
       setIsSending(false);
     }
@@ -1022,6 +1034,14 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                         Soon
                       </span>
                     </div>
+                    <button
+                      onClick={handleAiGeneratedImage}
+                      disabled={isSending || isChatRunning}
+                      className="flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <LuSparkles className="h-3.5 w-3.5" />
+                      AI Generated Image
+                    </button>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {/* Settings */}
