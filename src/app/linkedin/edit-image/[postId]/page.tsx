@@ -22,7 +22,6 @@ import {
   LuCheck,
   LuTrash2,
   LuSettings,
-  LuSparkles,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -289,6 +288,23 @@ function ChatMessageItem({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── AI image suggestion (agent-style nudge after the last agent reply) ───────
+
+function AiImageSuggestion({ onGenerate }: { onGenerate: () => void }) {
+  return (
+    // pl-10.5 = agent avatar (w-8) + gap (2.5) — aligns with the agent message content above
+    <p className="animate-fade-in-up pb-6 pl-10.5 text-sm leading-relaxed text-gray-700">
+      Next, I could generate another image for you. Just click on this:{" "}
+      <button
+        onClick={onGenerate}
+        className="text-blue-600 underline underline-offset-2 hover:text-blue-700"
+      >
+        AI generated image
+      </button>
+    </p>
   );
 }
 
@@ -604,6 +620,9 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   const isPublished = post?.status === "published";
   const isChatRunning = chat?.status === "running";
+  // Agent-style "generate another image" nudge — only after the latest agent reply, when idle
+  const showAiImageSuggestion =
+    !isPublished && !isSending && !isChatRunning && chat?.messages.at(-1)?.role === "agent";
 
   // ── Polling helpers ─────────────────────────────────────────────────────────
 
@@ -973,6 +992,9 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                       }}
                     />
                   ))}
+                  {showAiImageSuggestion && (
+                    <AiImageSuggestion onGenerate={handleAiGeneratedImage} />
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
               )}
@@ -1034,14 +1056,6 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                         Soon
                       </span>
                     </div>
-                    <button
-                      onClick={handleAiGeneratedImage}
-                      disabled={isSending || isChatRunning}
-                      className="flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <LuSparkles className="h-3.5 w-3.5" />
-                      AI Generated Image
-                    </button>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {/* Settings */}

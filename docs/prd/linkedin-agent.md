@@ -602,7 +602,7 @@ User's typed message is appended to `chat.messages` immediately (before API resp
 ### Chat input toolbar
 - Emoji button (`LuSmile`) and file/attachment button (`LuPaperclip`) are **disabled** — `cursor-not-allowed`, greyed out, show a "Soon" tooltip on hover
 - Send button: `bg-violet-600`, disabled while `!input.trim() || isSending || isChatRunning`
-- **"AI Generated Image" button** (`LuSparkles`, violet pill, left side next to emoji/attach): sends the fixed prompt `"Make Ai generated image"` through the same `POST image-chats/{id}/messages/` call as a typed prompt. Same optimistic append + polling flow; does not touch the textarea (not cleared on send, not restored on error). Disabled while `isSending || isChatRunning`
+- **"AI generated image" suggestion** (`AiImageSuggestion`): plain text line (no bubble, no shadow, no avatar; indented to align with agent content, `pb-6` bottom space) rendered after the last message — _"Next, I could generate another image for you. Just click on this: **AI generated image**"_ — with the link text clickable (blue, underlined). UI-only (not persisted, not part of `chat.messages`). Shown only when the last message is from the agent, chat is idle (`!isSending && !isChatRunning`) and the post is not published. Click sends the fixed prompt `"Make Ai generated image"` through the same `POST image-chats/{id}/messages/` call as a typed prompt — same optimistic append + polling flow; does not touch the textarea
 - **Image style selector — pending**: waiting on backend API returning `{ title, description, img_url, default }[]` (user can set a default). Once shipped, the selected style's title + description will be appended to every prompt (typed or AI Generated Image button)
 
 ### Workspace-switch 404 error state
