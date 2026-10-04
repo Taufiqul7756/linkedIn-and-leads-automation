@@ -115,6 +115,9 @@ function getInitialContent(post: AgentPost): object {
   return post.body ? plainTextToTiptap(post.body) : { type: "doc", content: [] };
 }
 
+// Chat input grows with its content up to this many lines, then scrolls inside
+const CHAT_INPUT_MAX_ROWS = 8;
+
 // Fixed prompt sent by the "AI Generated Image" quick-action button
 const AI_GENERATED_IMAGE_PROMPT = "Make Ai generated image";
 
@@ -887,6 +890,17 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   const [input, setInput] = useState("");
 
+  // Auto-grow the chat input upward with its content (same as the LinkedIn Agent composer):
+  // grows up to CHAT_INPUT_MAX_ROWS lines, then stops and the text scrolls inside.
+  // Shrinks back when the input is cleared on send.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const maxHeight = parseFloat(getComputedStyle(el).lineHeight) * CHAT_INPUT_MAX_ROWS;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+  }, [input]);
+
   async function handleSave() {
     if (!post || !workspaceId) return;
     setSaving(true);
@@ -1104,7 +1118,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                   }}
                   placeholder="Describe the image you want…"
                   rows={2}
-                  className="w-full resize-none bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
+                  className="w-full resize-none overflow-y-auto bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
                 />
                 {imgSettings.use_post_body && (
                   <div className="flex items-center gap-1.5">
