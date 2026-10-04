@@ -491,6 +491,7 @@ One post, one conversation about its picture. The user says in their own words h
 | `POST` | `image-chats/{id}/messages/` | `202` generating / `200` text-only | `{ prompt }` |
 | `POST` | `image-chats/{id}/add_to_post/` | `200` full chat | `{ image: imageId }` |
 | `GET` | `image-chats/` | `200` paginated list | `count`/`next`/`previous`/`results`, page size 25 |
+| `GET`/`PATCH` | `image-chats/settings/{chatId}/` | `200` settings | Per-chat image settings — see §4 |
 
 ---
 
@@ -648,6 +649,73 @@ A greeting, a question about the assistant, anything unrelated: **200 OK**. No n
 |---|---|---|
 | `400` | `{"image": ["No finished image with that id in this chat."]}` | Unknown id, wrong chat, or `pending`/`failed` image |
 | `400` | `{"detail": "This post is already on LinkedIn — its image cannot be changed."}` | Published post |
+
+---
+
+## 4. Image settings — `GET`/`PATCH image-chats/settings/{chatId}/`
+
+Per-chat settings (previously workspace-wide at `image-chats/settings/`). Exactly one item in each list has `is_active: true`.
+
+### GET response
+
+```json
+{
+  "use_post_body": true,
+  "image_ratio": [
+    { "is_active": false, "title": "Post Size", "size": "1080 X 1080", "ratio": "1:1", "image": "" },
+    { "is_active": true, "title": "Landscape Size", "size": "1200 X 628", "ratio": "16:9", "image": "" },
+    { "is_active": false, "title": "Portrait Size", "size": "1080 X 1350", "ratio": "4:5", "image": "" }
+  ],
+  "ai_model": [
+    { "is_active": true, "title": "Nano Banana", "model_name": "nano-banana", "image": "" },
+    { "is_active": false, "title": "Nano Banana 2", "model_name": "nano-banana-2", "image": "" },
+    { "is_active": false, "title": "Nano Banana Pro", "model_name": "nano-banana-pro", "image": "" }
+  ]
+}
+```
+
+### PATCH body — send only the changed field
+
+```json
+{
+  "use_post_body": false,
+  "image_ratio": "1:1",
+  "ai_model": "nano-banana-pro"
+}
+```
+
+`image_ratio` takes an option's `ratio`; `ai_model` takes an option's `model_name`.
+
+### TypeScript types
+
+```ts
+type ImageRatioOption = {
+  is_active: boolean;
+  title: string;
+  size: string;
+  ratio: string;
+  image: string;
+};
+
+type ImageModelOption = {
+  is_active: boolean;
+  title: string;
+  model_name: string;
+  image: string;
+};
+
+type ImageChatSettings = {
+  use_post_body: boolean;
+  image_ratio: ImageRatioOption[];
+  ai_model: ImageModelOption[];
+};
+
+type ImageChatSettingsPatch = Partial<{
+  use_post_body: boolean;
+  image_ratio: string; // ImageRatioOption.ratio
+  ai_model: string; // ImageModelOption.model_name
+}>;
+```
 
 ---
 
