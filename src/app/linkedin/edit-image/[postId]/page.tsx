@@ -104,6 +104,9 @@ function getInitialContent(post: AgentPost): object {
   return post.body ? plainTextToTiptap(post.body) : { type: "doc", content: [] };
 }
 
+// Fixed prompt sent by the "AI Generated Image" quick-action button
+const AI_GENERATED_IMAGE_PROMPT = "Make Ai generated image";
+
 // ─── Image thinking steps (shown while image.status === "pending") ────────────
 
 const IMAGE_STEPS = [
@@ -285,6 +288,23 @@ function ChatMessageItem({
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── AI image suggestion (agent-style nudge after the last agent reply) ───────
+
+function AiImageSuggestion({ onGenerate }: { onGenerate: () => void }) {
+  return (
+    // pl-10.5 = agent avatar (w-8) + gap (2.5) — aligns with the agent message content above
+    <p className="animate-fade-in-up pb-6 pl-10.5 text-sm leading-relaxed text-gray-700">
+      Next, I could generate another image for you. Just click on this:{" "}
+      <button
+        onClick={onGenerate}
+        className="text-blue-600 underline underline-offset-2 hover:text-blue-700"
+      >
+        AI generated image
+      </button>
+    </p>
   );
 }
 
@@ -600,6 +620,9 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   const isPublished = post?.status === "published";
   const isChatRunning = chat?.status === "running";
+  // Agent-style "generate another image" nudge — only after the latest agent reply, when idle
+  const showAiImageSuggestion =
+    !isPublished && !isSending && !isChatRunning && chat?.messages.at(-1)?.role === "agent";
 
   // ── Polling helpers ─────────────────────────────────────────────────────────
 
@@ -721,11 +744,19 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   // ── Send message ────────────────────────────────────────────────────────────
 
-  async function handleSend() {
-    const text = input.trim();
+  function handleSend() {
+    void sendPrompt(input.trim(), true);
+  }
+
+  function handleAiGeneratedImage() {
+    void sendPrompt(AI_GENERATED_IMAGE_PROMPT, false);
+  }
+
+  // fromInput: text came from the textarea — clear it on send, restore it on failure
+  async function sendPrompt(text: string, fromInput: boolean) {
     if (!text || isSending || isChatRunning || !chat) return;
     setIsSending(true);
-    setInput("");
+    if (fromInput) setInput("");
     // Optimistically append the user message immediately
     setChat((prev) => {
       if (!prev) return prev;
@@ -750,7 +781,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
         if (!prev) return prev;
         return { ...prev, messages: prev.messages.filter((m) => !m.id.startsWith("optimistic-")) };
       });
-      setInput(text);
+      if (fromInput) setInput(text);
     } finally {
       setIsSending(false);
     }
@@ -961,6 +992,9 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                       }}
                     />
                   ))}
+                  {showAiImageSuggestion && (
+                    <AiImageSuggestion onGenerate={handleAiGeneratedImage} />
+                  )}
                   <div ref={messagesEndRef} />
                 </div>
               )}
