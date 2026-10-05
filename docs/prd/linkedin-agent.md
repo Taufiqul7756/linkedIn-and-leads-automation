@@ -572,13 +572,27 @@ Poll `GET image-chats/{id}/` every 2s while `chat.status === "running"`. Stop on
 
 ### Image card states
 - `image.status === "pending"` → show `ImageThinkingSteps` spinner
-- `image.status === "ready"` → show `<img>` (16:9) + Add to post button
+- `image.status === "ready"` → show `<img>` + Add to post button
 - `image.status === "failed"` → show text only (backend rewrites the message text)
+
+### Image sizing (natural aspect ratio)
+Images are never forced into a fixed box or cropped — landscape, portrait and square all render at their real ratio.
+- **Chat card**: card shrinks to the image (`w-fit`, max width 26rem, max height `--chat-image-max-h`). Until the `<img>` fires `onLoad`, a 16:9 spinner placeholder holds the space; Add/Download buttons appear only after load.
+- **LinkedIn post preview**: full width, natural height.
+- **Lightbox**: natural ratio, capped at `max-w-2xl` and `--lightbox-image-max-h`.
+- Media list thumbnails stay fixed squares (`object-cover`).
+- Size tokens live in `globals.css`.
 
 ### Add to post
 - Calls `add_to_post` → returns updated chat with new `post_image_url`
 - Preview and media section both read `chat.post_image_url` — update automatically
 - Delete image: `PATCH /content/posts/{id}/ { image_url: "" }` then clear local chat state
+
+### Chat auto-scroll
+- On page load the chat opens already at the latest message (instant jump, no visible scroll through history)
+- The view stays pinned to the bottom while images finish loading and grow the list
+- New messages smooth-scroll into view while pinned; scrolling up unpins (polling updates won't yank the user down)
+- Sending a message or clicking "Scroll to newest" re-pins
 
 ### Reload persistence
 - Preview persists after reload: `chat.post_image_url` is always returned by API
@@ -606,6 +620,7 @@ User's typed message is appended to `chat.messages` immediately (before API resp
 - **"AI generated image" suggestion** (`AiImageSuggestion`): plain text line (no bubble, no shadow, no avatar; indented to align with agent content, `pb-6` bottom space) rendered after the last message — _"Next, I could generate another image for you. Just click on this: **AI generated image**"_ — with the link text clickable (blue, underlined). UI-only (not persisted, not part of `chat.messages`). Shown only when the last message is from the agent, chat is idle (`!isSending && !isChatRunning`) and the post is not published. Click sends the fixed prompt `"Make Ai generated image"` through the same `POST image-chats/{id}/messages/` call as a typed prompt — same optimistic append + polling flow; does not touch the textarea
 - **Image settings are per chat**: loaded via `GET image-chats/settings/{chatId}/` once the chat is open (`chat.id`); all changes go through `saveImgSettings(next, patch)` — optimistic local update, `PATCH` with only the changed field, rollback + toast on failure. Applies to the "Use post body" toggle, model, and ratio
 - **AI model button** (active model's image via `ModelAvatar` + title + chevron that rotates when open, left of Settings; violet border/tint while open): opens a popover styled like "Image agent settings" with an "AI model" header + subtitle (click-outside closes). Lists `ai_model[]` — `ModelAvatar` (`image`, fallback `LuCpu` icon) + title + `model_name` subtext + radio-style indicator (filled violet circle with check when active); active row gets a violet border + tint. Clicking a model PATCHes `{ ai_model: model_name }` and closes the popover
+- **Image style button** (`LuPalette` + active style title, or "Style" when None; chevron; between AI model and Image ratio): same popover pattern as AI model, "Image style" header + subtitle (click-outside closes). Lists `image_style[]` in a scrollable list (`max-h-80`), with "None" always pinned first and followed by a divider labelled "Styles" so the no-style option stands apart — thumbnail (`image`, or `LuX` for None / `LuPalette` fallback when empty) + title + description + radio indicator. No active item (fresh chat) is treated as "None". Clicking a style PATCHes `{ image_style: title }` (`"None"` = no style) and closes the popover. "Custom" is selectable like any other style — no custom text input yet
 - **Image ratio button** (`LuRatio` + active ratio, e.g. "16:9"): opens `ImageRatioModal` (`src/components/linkedin/ImageRatioModal.tsx`) — "Select Media Size" with a card per `image_ratio[]` option (preview, title, size, ratio). Preview (`RatioPreview`) shows `image` whole (`object-contain`, so a 16:9 image isn't cropped by the square tile); if `image` is empty or fails to load (`onError`), it falls back to a frame drawn in that ratio on the dark tile. Active card has a violet border + tint. No confirm button — clicking a card PATCHes `{ image_ratio: ratio }` and closes the modal. Footer: "Selected: <title>" + Cancel
 - Model and ratio buttons are hidden until settings load (empty lists)
 - **Image style selector — pending**: waiting on backend API returning `{ title, description, img_url, default }[]` (user can set a default). Once shipped, the selected style's title + description will be appended to every prompt (typed or AI Generated Image button)

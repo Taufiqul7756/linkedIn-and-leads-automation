@@ -284,7 +284,7 @@ setChat(c); // post_image_url updated in returned chat
 - `chat.post_image_url` drives both the preview and media section (persists on reload)
 - `is_added_on_post: boolean` on `GeneratedImage` — read on `openChat` to restore `addedImageId` after reload
 - Delete image: `PATCH posts/{id}/ { image_url: "" }` then `setChat(prev => ({ ...prev, post_image_url: "" }))`
-- Auto-scroll: `useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat?.messages])`
+- Auto-scroll: first load jumps instantly (`behavior: "auto"`) — never smooth-scroll through history. After that, smooth-scroll on new messages only while `pinnedToBottomRef` is true. A `ResizeObserver` on the message list keeps the view at the bottom while pinned (images load after render and grow the list). Unpin only when `scrollTop` decreases (user scrolled up); re-pin within 120px of the bottom, on send, or via "Scroll to newest"
 - Scroll-to-newest button: shown when `chatContainerRef` scroll distance from bottom >120px
 
 ## Docs Maintenance

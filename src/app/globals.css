@@ -53,6 +53,9 @@
   --brand: #590cc2;
   --brand-dark: #47099b;
   --brand-light: #6447fc;
+  /* Image sizing — images keep their natural aspect ratio, capped by these */
+  --chat-image-max-h: 32rem;
+  --lightbox-image-max-h: 85vh;
 }
 
 @theme inline {

@@ -654,25 +654,43 @@ A greeting, a question about the assistant, anything unrelated: **200 OK**. No n
 
 ## 4. Image settings — `GET`/`PATCH image-chats/settings/{chatId}/`
 
-Per-chat settings (previously workspace-wide at `image-chats/settings/`). Exactly one item in each list has `is_active: true`.
+Per-chat settings (previously workspace-wide at `image-chats/settings/`). Exactly one item in `image_ratio` and `ai_model` has `is_active: true`. `image_style` may have **no** active item on a fresh chat — the frontend treats that as `"None"` (no style applied).
 
 ### GET response
+
+Example (staging, `GET .../image-chats/settings/{chatId}/`):
 
 ```json
 {
   "use_post_body": true,
   "image_ratio": [
-    { "is_active": false, "title": "Post Size", "size": "1080 X 1080", "ratio": "1:1", "image": "" },
-    { "is_active": true, "title": "Landscape Size", "size": "1200 X 628", "ratio": "16:9", "image": "" },
-    { "is_active": false, "title": "Portrait Size", "size": "1080 X 1350", "ratio": "4:5", "image": "" }
+    { "is_active": true, "title": "Post Size", "size": "1080 X 1080", "ratio": "1:1", "image": "https://creativegenie.blob.core.windows.net/backend-staging-media/aspet-ratio-images/image_9.png" },
+    { "is_active": false, "title": "Landscape Size", "size": "1200 X 628", "ratio": "16:9", "image": "https://creativegenie.blob.core.windows.net/backend-staging-media/aspet-ratio-images/image_8.png" },
+    { "is_active": false, "title": "Portrait Size", "size": "1080 X 1350", "ratio": "4:5", "image": "https://creativegenie.blob.core.windows.net/backend-staging-media/aspet-ratio-images/image_6.png" }
   ],
   "ai_model": [
-    { "is_active": true, "title": "Nano Banana", "model_name": "nano-banana", "image": "" },
-    { "is_active": false, "title": "Nano Banana 2", "model_name": "nano-banana-2", "image": "" },
-    { "is_active": false, "title": "Nano Banana Pro", "model_name": "nano-banana-pro", "image": "" }
+    { "is_active": false, "title": "Nano Banana", "model_name": "google/nano-banana", "image": "https://creativegenie.blob.core.windows.net/backend-staging-media/model-dp-images/3f0b9148-01a3-4ece-a84d-55ce8aed006a_1456x816.jpg" },
+    { "is_active": false, "title": "Nano Banana 2", "model_name": "google/nano-banana-2", "image": "https://creativegenie.blob.core.windows.net/backend-staging-media/model-dp-images/image.jpeg" },
+    { "is_active": true, "title": "Nano Banana Pro", "model_name": "google/nano-banana-pro", "image": "https://creativegenie.blob.core.windows.net/backend-staging-media/model-dp-images/nana_banana_pro_hero.webp" }
+  ],
+  "image_style": [
+    { "is_active": false, "title": "None", "description": "No specific style applied", "image": "" },
+    { "is_active": false, "title": "Realistic", "description": "Lifelike precision and detail", "image": "" },
+    { "is_active": false, "title": "Film Noir", "description": "Classic high contrast and moody lighting", "image": "" },
+    { "is_active": false, "title": "Cartoon", "description": "Whimsical and stylized", "image": "" },
+    { "is_active": false, "title": "Comic", "description": "For vibrant storytelling", "image": "" },
+    { "is_active": false, "title": "Painting", "description": "Artistic and textured visual", "image": "" },
+    { "is_active": false, "title": "Sketch", "description": "Hand-drawn feel for creative projects", "image": "" },
+    { "is_active": false, "title": "Anime", "description": "Distinctive aesthetic style", "image": "" },
+    { "is_active": false, "title": "PixelArt", "description": "Perfect for a vintage look", "image": "" },
+    { "is_active": false, "title": "Studio Shot", "description": "Polished and professional", "image": "" },
+    { "is_active": false, "title": "Surreal", "description": "Fantasy meets reality", "image": "" },
+    { "is_active": false, "title": "Custom", "description": "Create your own unique style", "image": "" }
   ]
 }
 ```
+
+`image` can be `""` on any option — the UI shows a fallback icon.
 
 ### PATCH body — send only the changed field
 
@@ -680,11 +698,17 @@ Per-chat settings (previously workspace-wide at `image-chats/settings/`). Exactl
 {
   "use_post_body": false,
   "image_ratio": "1:1",
-  "ai_model": "nano-banana-pro"
+  "ai_model": "google/nano-banana-pro",
+  "image_style": "Realistic"
 }
 ```
 
-`image_ratio` takes an option's `ratio`; `ai_model` takes an option's `model_name`.
+| Field | Value sent | Notes |
+| --- | --- | --- |
+| `use_post_body` | `boolean` | Include post text as context for generation |
+| `image_ratio` | option's `ratio` (e.g. `"1:1"`) | Shape of the next generated image |
+| `ai_model` | option's `model_name` (e.g. `"google/nano-banana-pro"`) | Model that renders the image |
+| `image_style` | option's `title` (e.g. `"Realistic"`) | `"None"` = no style applied. `"Custom"` is currently sent as a plain selection (no custom text field) |
 
 ### TypeScript types
 
@@ -704,16 +728,25 @@ type ImageModelOption = {
   image: string;
 };
 
+type ImageStyleOption = {
+  is_active: boolean;
+  title: string; // "None" = no style applied
+  description: string;
+  image: string; // may be ""
+};
+
 type ImageChatSettings = {
   use_post_body: boolean;
   image_ratio: ImageRatioOption[];
   ai_model: ImageModelOption[];
+  image_style: ImageStyleOption[];
 };
 
 type ImageChatSettingsPatch = Partial<{
   use_post_body: boolean;
   image_ratio: string; // ImageRatioOption.ratio
   ai_model: string; // ImageModelOption.model_name
+  image_style: string; // ImageStyleOption.title
 }>;
 ```
 
@@ -731,7 +764,7 @@ Poll `GET image-chats/{id}/` every 2s while `chat.status === "running"`. The cha
 
 `image_origin` — `"ai"`, `"stock"`, `"upload"`, `"chat"`, or `""`. A picture added from Image Chat is `"chat"` and survives every later rewrite.
 
-Every generated picture is **16:9 (landscape)**. An uploaded picture keeps its original shape until a turn edits it.
+A generated picture follows the chat's active `image_ratio` (1:1, 16:9 or 4:5 — see §4), so it can be square, landscape or portrait. An uploaded picture keeps its original shape until a turn edits it. The frontend always renders images at their natural aspect ratio (never cropped to a fixed box).
 
 ---
 
