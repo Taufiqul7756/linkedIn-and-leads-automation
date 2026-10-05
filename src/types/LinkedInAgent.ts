@@ -23,8 +23,12 @@ export interface PendingInterrupt {
   kind: "questions" | "headlines" | string;
   questions?: Question[];
   headlines?: string[];
+  can_generate_more?: boolean; // headlines round: show "Suggest more headlines"
   can_skip?: boolean;
 }
+
+// answers payload for POST conversations/{id}/answer/
+export type InterruptAnswers = Record<string, string | string[] | boolean>;
 
 export interface Finding {
   title: string;

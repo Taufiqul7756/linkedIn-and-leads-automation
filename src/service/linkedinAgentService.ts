@@ -7,6 +7,7 @@ import type {
   AgentSettings,
   AgentPost,
   PaginatedAgentPosts,
+  InterruptAnswers,
 } from "@/types/LinkedInAgent";
 import { Config } from "@/config/config";
 
@@ -59,7 +60,7 @@ export const linkedinAgentService = (workspaceId: string) => ({
   answerQuestion: (
     id: string,
     interruptId: string,
-    answers: Record<string, string | string[]>,
+    answers: InterruptAnswers,
     skipRemaining?: boolean
   ) =>
     axiosPost<{ run_id: string }>(`/workspaces/${workspaceId}/agent/conversations/${id}/answer/`, {

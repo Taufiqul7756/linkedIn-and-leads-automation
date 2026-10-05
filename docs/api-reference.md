@@ -26,6 +26,9 @@ One prompt box, one conversation. The user types what they want, attaches what t
 > * `pending_interrupt.kind` is no longer always `"questions"`. A new kind,
 >   `"headlines"`, offers each post's first line before it is written. Same
 >   `answer/` route, different payload.
+> * The headlines interrupt carries `can_generate_more`. When `true`, answer with
+>   `"more_headlines": true` + the current list to get more headlines — a new
+>   headlines interrupt (new `id`) comes back. Same `answer/` route.
 > * Three new routes: `POST`/`GET conversations/{id}/attachments/` and
 >   `DELETE conversations/{id}/attachments/{aid}/`.
 > * `GET conversations/{id}/` carries a new `attachments` array.
@@ -209,7 +212,8 @@ The whole conversation, every time. Transcript included.
   "pending_interrupt": {
     "id": "45fb6c398cd543e1aebdf2fed9d30e57",
     "kind": "headlines",
-    "headlines": ["…", "…"]
+    "headlines": ["…", "…"],
+    "can_generate_more": true
   },
   "artifacts": { "post_ids": [] },
   "attachments": [ { "id": "9b1f…", "kind": "url", "status": "ready", "…": "…" } ],
@@ -270,6 +274,18 @@ One route, two payloads. Branch on `pending_interrupt.kind`.
 }
 ```
 
+**Suggest more headlines** (only when the headlines interrupt has `can_generate_more: true`):
+```json
+{
+  "interrupt_id": "45fb6c398cd543e1aebdf2fed9d30e57",
+  "answers": {
+    "more_headlines": true,
+    "headlines": ["…current list on screen (user edits, deletions, custom lines)…"]
+  }
+}
+```
+Same endpoint and `202` + `run_id` flow. The conversation runs again and comes back with a **new** `kind: "headlines"` interrupt (new `id`) holding the updated list and a fresh `can_generate_more`.
+
 **Skip remaining questions** (second round onward, when `can_skip: true`):
 ```json
 {
@@ -308,11 +324,14 @@ Can be sent alone or alongside real answers. Silently ignored if `can_skip` was 
     "The 3am pager taught me more than the postmortem",
     "We cut inference cost 60% and nobody noticed",
     "Your RAG pipeline is a search problem wearing a hat"
-  ]
+  ],
+  "can_generate_more": true
 }
 ```
 
-Each string is one post's first line. Render as an editable list and send back what the user settled on. Keep / reword / delete / add — what comes back is `len(headlines)` posts. Send `[]` and the batch is written with no chosen opener. At most **10** headlines offered. Runs **once** per conversation, only on a new batch turn, never on an edit turn.
+`can_generate_more: boolean` — when `true`, the UI shows a "Suggest more concepts/ideas" button that answers with `more_headlines: true` (see Answer above); when `false`, the button is hidden.
+
+Each string is one post's first line. Render as an editable list and send back what the user settled on. Keep / reword / delete / add — what comes back is `len(headlines)` posts. Send `[]` and the batch is written with no chosen opener. At most **10** headlines offered. Offered only on a new batch turn, never on an edit turn. Normally one round per batch — it repeats only when the user asks for more (`more_headlines: true`); each repeat is a new interrupt with a new `id`, so always send the latest `pending_interrupt.id`.
 
 ### `kind: "questions"`
 
@@ -421,8 +440,11 @@ GET    conversations/f4d6…/                           200  status=awaiting_inp
        pending_interrupt = { kind: "questions", id: "6032…", 3 clarifiers }
 POST   conversations/f4d6…/answer/                    202
 GET    conversations/f4d6…/                           200  status=awaiting_input
-       pending_interrupt = { kind: "headlines", id: "45fb…", headlines: ["…","…","…"] }
-POST   conversations/f4d6…/answer/                    202
+       pending_interrupt = { kind: "headlines", id: "45fb…", headlines: ["…","…","…"], can_generate_more: true }
+POST   conversations/f4d6…/answer/                    202  (optional) { more_headlines: true, headlines: [current list] }
+GET    conversations/f4d6…/                           200  status=awaiting_input
+       pending_interrupt = { kind: "headlines", id: "7a2c…", headlines: [more…], can_generate_more: … }
+POST   conversations/f4d6…/answer/                    202  { headlines: [final list] }
 GET    conversations/f4d6…/                           200  status=completed
        artifacts.post_ids = ["a1…","b2…","c3…"]
 GET    content/posts/?state=agent                     200  → the drafts
