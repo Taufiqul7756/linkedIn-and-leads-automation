@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { Fragment, use, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   LuArrowLeft,
@@ -25,6 +25,7 @@ import {
   LuRatio,
   LuCpu,
   LuChevronDown,
+  LuPalette,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -192,25 +193,41 @@ function ImageResultCard({
   onAdd: () => void;
   onPreview: (url: string) => void;
 }) {
+  const [loaded, setLoaded] = useState(false);
+
   if (image.status === "failed") return null;
 
+  const showSpinner = image.status === "pending" || !loaded;
+
   return (
-    <div className="mt-2 w-[26rem] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
-        {image.status === "pending" ? (
-          <div className="flex h-full w-full items-center justify-center">
+    // Card shrinks to the image's natural aspect ratio (landscape / portrait / square)
+    <div className="mt-2 w-fit max-w-[26rem] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div
+        className={cn(
+          "relative overflow-hidden bg-gray-100",
+          // placeholder box until the real image dimensions are known
+          showSpinner && "aspect-video w-[26rem]"
+        )}
+      >
+        {showSpinner && (
+          <div className="absolute inset-0 flex items-center justify-center">
             <LuLoader className="h-6 w-6 animate-spin text-gray-400" />
           </div>
-        ) : (
+        )}
+        {image.status !== "pending" && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={image.url}
             alt={image.prompt || "Generated image"}
-            className="h-full w-full cursor-zoom-in object-cover"
+            onLoad={() => setLoaded(true)}
+            className={cn(
+              "block h-auto max-h-(--chat-image-max-h) w-auto max-w-full cursor-zoom-in",
+              !loaded && "absolute inset-0 opacity-0"
+            )}
             onClick={() => onPreview(image.url)}
           />
         )}
-        {image.status === "ready" && (
+        {image.status === "ready" && loaded && (
           <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-3 py-2.5">
             <button
               onClick={onAdd}
@@ -449,7 +466,7 @@ function LinkedInPostPreview({
       {totalImages > 0 &&
         (postImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={postImageUrl} alt="Post image" className="w-full aspect-video object-cover" />
+          <img src={postImageUrl} alt="Post image" className="block h-auto w-full" />
         ) : null)}
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-1">
@@ -650,15 +667,25 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     use_post_body: true,
     image_ratio: [],
     ai_model: [],
+    image_style: [],
   });
   const [imgSettingsOpen, setImgSettingsOpen] = useState(false);
   const [imgSettingsSaving, setImgSettingsSaving] = useState(false);
   const imgSettingsRef = useRef<HTMLDivElement>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+  const styleMenuRef = useRef<HTMLDivElement>(null);
   const [ratioModalOpen, setRatioModalOpen] = useState(false);
   const activeModel = imgSettings.ai_model.find((m) => m.is_active);
   const activeRatio = imgSettings.image_ratio.find((r) => r.is_active);
+  // No active style (fresh chat) is the same as "None"
+  const activeStyleTitle = imgSettings.image_style.find((s) => s.is_active)?.title ?? "None";
+  // "None" always pinned to the top, followed by a divider
+  const sortedStyles = [
+    ...imgSettings.image_style.filter((s) => s.title === "None"),
+    ...imgSettings.image_style.filter((s) => s.title !== "None"),
+  ];
 
   const isPublished = post?.status === "published";
   const isChatRunning = chat?.status === "running";
@@ -690,10 +717,51 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
 
   useEffect(() => () => stopPolling(), []);
 
-  // Auto-scroll to bottom whenever messages update
+  // ── Chat auto-scroll ────────────────────────────────────────────────────────
+  // "Pinned" = keep the view at the bottom. Unpinned only when the user scrolls up.
+  const pinnedToBottomRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
+  const didInitialScrollRef = useRef(false);
+
+  function scrollChatToBottom(behavior: ScrollBehavior) {
+    pinnedToBottomRef.current = true;
+    messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
+  }
+
+  function handleChatScroll() {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom <= 120) pinnedToBottomRef.current = true;
+    // scrollTop only decreases when the user scrolls up (content growth / auto-scroll never do)
+    else if (el.scrollTop < lastScrollTopRef.current) pinnedToBottomRef.current = false;
+    lastScrollTopRef.current = el.scrollTop;
+    setShowScrollBtn(distFromBottom > 120);
+  }
+
+  // New messages: jump instantly on first load (no visible scroll through history), smooth after
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat?.messages]);
+    if (chatLoading || !chat?.messages.length) return;
+    if (!didInitialScrollRef.current) {
+      didInitialScrollRef.current = true;
+      scrollChatToBottom("auto");
+    } else if (pinnedToBottomRef.current) {
+      scrollChatToBottom("smooth");
+    }
+  }, [chat?.messages, chatLoading]);
+
+  // Content grows after render (images loading, thinking steps) — stay at the bottom if pinned
+  useEffect(() => {
+    if (chatLoading) return;
+    const container = chatContainerRef.current;
+    const content = container?.firstElementChild;
+    if (!container || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (pinnedToBottomRef.current) container.scrollTop = container.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [chatLoading]);
 
   // ── Fetch post ──────────────────────────────────────────────────────────────
 
@@ -752,7 +820,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     if (!workspaceId || !chatId) return;
     imageChatService(workspaceId)
       .getSettings(chatId)
-      .then(setImgSettings)
+      .then((s) => setImgSettings({ ...s, image_style: s.image_style ?? [] }))
       .catch(() => {
         // keep defaults on failure
       });
@@ -779,6 +847,16 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [modelMenuOpen]);
+
+  useEffect(() => {
+    if (!styleMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (styleMenuRef.current && !styleMenuRef.current.contains(e.target as Node))
+        setStyleMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [styleMenuOpen]);
 
   // Optimistic update — apply `next` locally, PATCH only the changed field, roll back on failure
   async function saveImgSettings(next: ImageChatSettings, patch: ImageChatSettingsPatch) {
@@ -815,6 +893,18 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     );
   }
 
+  function handleStyleChange(title: string) {
+    setStyleMenuOpen(false);
+    if (title === activeStyleTitle) return;
+    void saveImgSettings(
+      {
+        ...imgSettings,
+        image_style: imgSettings.image_style.map((s) => ({ ...s, is_active: s.title === title })),
+      },
+      { image_style: title }
+    );
+  }
+
   function handleRatioChange(ratio: string) {
     setRatioModalOpen(false);
     if (ratio === activeRatio?.ratio) return;
@@ -841,6 +931,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   async function sendPrompt(text: string, fromInput: boolean) {
     if (!text || isSending || isChatRunning || !chat) return;
     setIsSending(true);
+    pinnedToBottomRef.current = true; // always follow your own new message
     if (fromInput) setInput("");
     // Optimistically append the user message immediately
     setChat((prev) => {
@@ -1052,7 +1143,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             {showScrollBtn && (
               <div className="absolute left-0 right-0 top-2 z-10 flex justify-center pointer-events-none">
                 <button
-                  onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+                  onClick={() => scrollChatToBottom("smooth")}
                   className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors"
                 >
                   <LuArrowLeft className="h-3 w-3 rotate-[-90deg]" />
@@ -1063,12 +1154,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             <div
               ref={chatContainerRef}
               className="h-full overflow-y-auto px-4 py-4"
-              onScroll={() => {
-                const el = chatContainerRef.current;
-                if (!el) return;
-                const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-                setShowScrollBtn(distFromBottom > 120);
-              }}
+              onScroll={handleChatScroll}
             >
               {chatLoading ? (
                 <div className="flex items-center justify-center py-20">
@@ -1221,6 +1307,111 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                                   </span>
                                 </button>
                               ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Image style */}
+                    {imgSettings.image_style.length > 0 && (
+                      <div ref={styleMenuRef} className="relative">
+                        <button
+                          onClick={() => setStyleMenuOpen((v) => !v)}
+                          className={cn(
+                            "flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50",
+                            styleMenuOpen ? "border-violet-300 bg-violet-50" : "border-gray-300"
+                          )}
+                        >
+                          <LuPalette className="h-3.5 w-3.5 text-gray-500" />
+                          <span className="max-w-24 truncate">
+                            {activeStyleTitle === "None" ? "Style" : activeStyleTitle}
+                          </span>
+                          <LuChevronDown
+                            className={cn(
+                              "h-3 w-3 text-gray-400 transition-transform",
+                              styleMenuOpen && "rotate-180"
+                            )}
+                          />
+                        </button>
+
+                        {styleMenuOpen && (
+                          <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                            <div className="flex items-start justify-between border-b border-gray-100 px-4 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">Image style</p>
+                                <p className="text-xs text-gray-400">
+                                  Choose a visual style for your images
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setStyleMenuOpen(false)}
+                                className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                              >
+                                <LuX className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex max-h-80 flex-col gap-1 overflow-y-auto p-2">
+                              {sortedStyles.map((s) => {
+                                const isActive = s.title === activeStyleTitle;
+                                const isNone = s.title === "None";
+                                return (
+                                  <Fragment key={s.title}>
+                                    <button
+                                      onClick={() => handleStyleChange(s.title)}
+                                      className={cn(
+                                        "flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 text-left transition-colors",
+                                        isActive
+                                          ? "border-violet-200 bg-violet-50"
+                                          : "border-transparent hover:bg-gray-50"
+                                      )}
+                                    >
+                                      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
+                                        {s.image ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img
+                                            src={s.image}
+                                            alt={s.title}
+                                            className="h-full w-full object-cover"
+                                          />
+                                        ) : s.title === "None" ? (
+                                          <LuX className="h-4 w-4" />
+                                        ) : (
+                                          <LuPalette className="h-4 w-4" />
+                                        )}
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium text-gray-900">
+                                          {s.title}
+                                        </p>
+                                        <p className="truncate text-xs text-gray-400">
+                                          {s.description}
+                                        </p>
+                                      </div>
+                                      <span
+                                        className={cn(
+                                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                                          isActive
+                                            ? "border-violet-600 bg-violet-600 text-white"
+                                            : "border-gray-300"
+                                        )}
+                                      >
+                                        {isActive && <LuCheck className="h-3 w-3" />}
+                                      </span>
+                                    </button>
+                                    {/* Separate "no style" from the actual styles */}
+                                    {isNone && (
+                                      <div className="my-1 flex items-center gap-2 px-2.5">
+                                        <span className="h-px flex-1 bg-gray-200" />
+                                        <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                                          Styles
+                                        </span>
+                                        <span className="h-px flex-1 bg-gray-200" />
+                                      </div>
+                                    )}
+                                  </Fragment>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -1615,7 +1806,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
           onClick={() => setPreviewOpen(false)}
         >
           <div
-            className="relative mx-4 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative mx-4 max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -1628,7 +1819,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
             <img
               src={previewUrl}
               alt="Preview"
-              className="w-full aspect-video object-cover rounded-2xl"
+              className="block h-auto max-h-(--lightbox-image-max-h) w-auto max-w-full rounded-2xl"
             />
           </div>
         </div>

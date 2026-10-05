@@ -46,11 +46,19 @@ export type ImageModelOption = {
   image: string;
 };
 
+export type ImageStyleOption = {
+  is_active: boolean;
+  title: string; // "None" = no style applied
+  description: string;
+  image: string; // may be ""
+};
+
 // GET image-chats/settings/{chatId}/
 export type ImageChatSettings = {
   use_post_body: boolean;
   image_ratio: ImageRatioOption[];
   ai_model: ImageModelOption[];
+  image_style: ImageStyleOption[];
 };
 
 // PATCH image-chats/settings/{chatId}/ — send only the changed field
@@ -58,4 +66,5 @@ export type ImageChatSettingsPatch = Partial<{
   use_post_body: boolean;
   image_ratio: string; // ImageRatioOption.ratio
   ai_model: string; // ImageModelOption.model_name
+  image_style: string; // ImageStyleOption.title
 }>;
