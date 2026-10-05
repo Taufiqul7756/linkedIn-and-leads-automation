@@ -21,6 +21,7 @@ import {
   LuTrash2,
   LuAlignLeft,
   LuImage,
+  LuSparkles,
 } from "react-icons/lu";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -47,6 +48,8 @@ import type {
   Finding,
   BlockNode,
   SpanNode,
+  InterruptAnswers,
+  PendingInterrupt,
 } from "@/types/LinkedInAgent";
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -563,20 +566,38 @@ function GrillForm({
 function HeadlinesForm({
   headlines: initial,
   onSubmit,
+  onSuggestMore,
+  canGenerateMore,
+  generatingMore,
+  previousHeadlines,
   submitting,
 }: {
   headlines: string[];
   onSubmit: (headlines: string[]) => void;
+  onSuggestMore: (headlines: string[]) => void;
+  canGenerateMore: boolean;
+  // "Suggest more" run in flight — card stays visible, locked, with shimmer rows
+  generatingMore: boolean;
+  // List sent with the last "Suggest more" — lines not in it fade in as new
+  previousHeadlines: string[];
   submitting: boolean;
 }) {
-  const [items, setItems] = useState(() => initial.map((text, i) => ({ id: String(i), text })));
+  const [items, setItems] = useState(() =>
+    initial.map((text, i) => ({
+      id: String(i),
+      text,
+      isNew: previousHeadlines.length > 0 && !previousHeadlines.includes(text),
+    }))
+  );
+  const busy = submitting || generatingMore;
 
   const update = (id: string, text: string) =>
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, text } : item)));
 
   const remove = (id: string) => setItems((prev) => prev.filter((item) => item.id !== id));
 
-  const addCustom = () => setItems((prev) => [...prev, { id: String(Date.now()), text: "" }]);
+  const addCustom = () =>
+    setItems((prev) => [...prev, { id: String(Date.now()), text: "", isNew: false }]);
 
   const final = items.map((i) => i.text.trim()).filter(Boolean);
 
@@ -591,32 +612,63 @@ function HeadlinesForm({
 
         <div className="space-y-2">
           {items.map((item) => (
-            <div key={item.id} className="flex items-center gap-2">
+            <div
+              key={item.id}
+              className={cn("flex items-center gap-2", item.isNew && "animate-fade-in-up")}
+            >
               <input
                 type="text"
                 value={item.text}
                 onChange={(e) => update(item.id, e.target.value)}
+                disabled={generatingMore}
                 placeholder="Write a first line…"
-                className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 disabled:bg-gray-50 disabled:text-gray-500"
               />
               <button
                 onClick={() => remove(item.id)}
-                className="shrink-0 rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400"
+                disabled={generatingMore}
+                className="shrink-0 rounded-lg p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400 disabled:pointer-events-none disabled:opacity-40"
                 title="Remove"
               >
                 <LuX className="h-4 w-4" />
               </button>
             </div>
           ))}
+          {/* Placeholders where the new headlines will land */}
+          {generatingMore &&
+            [0, 1, 2].map((i) => (
+              <div key={`skeleton-${i}`} className="flex items-center gap-2">
+                <div className="h-10 min-w-0 flex-1 animate-pulse rounded-lg bg-gray-100" />
+                <div className="h-8 w-8 shrink-0" />
+              </div>
+            ))}
         </div>
 
-        <button
-          onClick={addCustom}
-          className="mt-3 flex items-center gap-1.5 text-sm text-blue-600 transition-colors hover:text-blue-700"
-        >
-          <LuPlus className="h-4 w-4" />
-          Add headline
-        </button>
+        <div className="mt-3 flex items-center gap-5">
+          <button
+            onClick={addCustom}
+            disabled={busy}
+            className="flex items-center gap-1.5 text-sm text-blue-600 transition-colors hover:text-blue-700 disabled:opacity-60"
+          >
+            <LuPlus className="h-4 w-4" />
+            Add concept/idea
+          </button>
+          {canGenerateMore && <span className="h-4 w-px bg-gray-200" />}
+          {canGenerateMore && (
+            <button
+              onClick={() => onSuggestMore(final)}
+              disabled={busy}
+              className="flex items-center gap-1.5 text-sm text-blue-600 transition-colors hover:text-blue-700 disabled:opacity-60"
+            >
+              {generatingMore ? (
+                <LuLoader className="h-4 w-4 animate-spin" />
+              ) : (
+                <LuSparkles className="h-4 w-4" />
+              )}
+              {generatingMore ? "Suggesting…" : "Suggest more concepts/ideas"}
+            </button>
+          )}
+        </div>
 
         <div className="mt-5 flex items-center justify-between">
           <p className="text-xs text-gray-400">
@@ -624,10 +676,10 @@ function HeadlinesForm({
           </p>
           <button
             onClick={() => onSubmit(final)}
-            disabled={submitting}
+            disabled={busy}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
           >
-            {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+            {submitting && !generatingMore && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
             Generate {final.length > 0 ? final.length : ""} draft{final.length !== 1 ? "s" : ""}
           </button>
         </div>
@@ -1062,6 +1114,15 @@ export default function AutomationView() {
   const [posts, setPosts] = useState<AgentPost[]>([]);
   const [sending, setSending] = useState(false);
   const [answering, setAnswering] = useState(false);
+  // "Suggest more headlines" run in flight — snapshot keeps the headlines card on screen
+  const [suggestMore, setSuggestMore] = useState<{
+    convId: string;
+    interruptId: string;
+    headlines: string[];
+    canGenerateMore: boolean;
+  } | null>(null);
+  // List sent with the last "Suggest more" — the next round fades in lines not in it
+  const [previousHeadlines, setPreviousHeadlines] = useState<string[]>([]);
   const [cancelling, setCancelling] = useState(false);
   const [history, setHistory] = useState<PaginatedConversations | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1544,23 +1605,40 @@ export default function AutomationView() {
   };
 
   // ── answer pending interrupt ──
+  // Returns true when the answer was accepted and the run started
   const handleAnswer = async (
-    answers: Record<string, string | string[]>,
+    answers: InterruptAnswers,
     skipRemaining?: boolean
-  ) => {
-    if (!conversation || !workspaceId) return;
+  ): Promise<boolean> => {
+    if (!conversation || !workspaceId) return false;
     const pi = conversation.pending_interrupt as { id?: string };
-    if (!pi?.id) return;
+    if (!pi?.id) return false;
     setAnswering(true);
     try {
       await svc().answerQuestion(conversation.id, pi.id, answers, skipRemaining);
       setConversation((prev) => (prev ? { ...prev, status: "running" } : prev));
       startPolling(conversation.id);
+      return true;
     } catch (err) {
       toast.error(extractErrorMessage(err));
+      return false;
     } finally {
       setAnswering(false);
     }
+  };
+
+  // Keep the headlines card on screen (locked + shimmer) while more headlines generate
+  const handleSuggestMore = async (headlines: string[], pi: PendingInterrupt) => {
+    if (!conversation) return;
+    setPreviousHeadlines(headlines);
+    setSuggestMore({
+      convId: conversation.id,
+      interruptId: pi.id,
+      headlines,
+      canGenerateMore: pi.can_generate_more === true,
+    });
+    const ok = await handleAnswer({ more_headlines: true, headlines });
+    if (!ok) setSuggestMore(null);
   };
 
   // ── ensure conversation exists (shared by attach handlers) ──
@@ -1784,16 +1862,36 @@ export default function AutomationView() {
 
   const pendingInterrupt =
     conversation && hasPendingInterrupt(conversation)
-      ? (conversation.pending_interrupt as {
-          id: string;
-          kind: "questions" | "headlines" | string;
-          questions?: Question[];
-          headlines?: string[];
-          can_skip?: boolean;
-        })
+      ? (conversation.pending_interrupt as PendingInterrupt)
       : null;
 
   const isHeadlineInterrupt = pendingInterrupt?.kind === "headlines";
+
+  // Drop the "suggest more" snapshot once the run ends (new headlines, failure, cancel…).
+  // Adjusted during render rather than in an effect — see react.dev "storing information from previous renders"
+  const conversationStatus = conversation?.status;
+  const [prevConversationStatus, setPrevConversationStatus] = useState(conversationStatus);
+  if (conversationStatus !== prevConversationStatus) {
+    setPrevConversationStatus(conversationStatus);
+    if (conversationStatus !== "running" && suggestMore) setSuggestMore(null);
+  }
+  const isSuggestingMore =
+    !!suggestMore && suggestMore.convId === conversation?.id && (isRunning || answering);
+
+  // Headlines card: the live interrupt, or the snapshot while "suggest more" is running
+  const headlinesCard = isSuggestingMore
+    ? {
+        id: suggestMore.interruptId,
+        headlines: suggestMore.headlines,
+        canGenerateMore: suggestMore.canGenerateMore,
+      }
+    : isAwaiting && isHeadlineInterrupt && pendingInterrupt
+      ? {
+          id: pendingInterrupt.id,
+          headlines: pendingInterrupt.headlines ?? [],
+          canGenerateMore: pendingInterrupt.can_generate_more === true,
+        }
+      : null;
 
   // safe questions array (filter out any undefined entries the API might return)
   const piQuestions = (pendingInterrupt?.questions ?? []).filter(
@@ -1874,7 +1972,7 @@ export default function AutomationView() {
             </div>
           )}
 
-          {/* Default media — AI img / Stock img checkbox */}
+          {/* Default media — AI Image / Stock Image checkbox */}
           {!settingsLoaded ? (
             <div className="h-7 w-48 animate-pulse rounded-lg bg-gray-200" />
           ) : (
@@ -1882,8 +1980,8 @@ export default function AutomationView() {
               <span className="text-gray-500">Default media</span>
               {(
                 [
-                  { label: "AI img", value: true },
-                  { label: "Stock img", value: false },
+                  { label: "AI Image", value: true },
+                  { label: "Stock Image", value: false },
                 ] as const
               ).map((opt) => {
                 const checked = opt.value === settings.use_ai_image;
@@ -2245,8 +2343,8 @@ export default function AutomationView() {
                   );
                 })}
 
-                {/* Awaiting input — headline round */}
-                {isAwaiting && isHeadlineInterrupt && pendingInterrupt && (
+                {/* Awaiting input — headline round (also stays up while "suggest more" runs) */}
+                {headlinesCard && (
                   <div className="mt-4 flex items-start gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white">
                       <Image
@@ -2259,9 +2357,17 @@ export default function AutomationView() {
                     </div>
                     <div className="flex-1">
                       <HeadlinesForm
-                        headlines={pendingInterrupt.headlines ?? []}
+                        // remount with the fresh list when a new headlines round arrives
+                        key={headlinesCard.id}
+                        headlines={headlinesCard.headlines}
+                        canGenerateMore={headlinesCard.canGenerateMore}
+                        generatingMore={isSuggestingMore}
+                        previousHeadlines={previousHeadlines}
                         submitting={answering}
-                        onSubmit={(headlines) => handleAnswer({ headlines })}
+                        onSubmit={(headlines) => void handleAnswer({ headlines })}
+                        onSuggestMore={(headlines) => {
+                          if (pendingInterrupt) void handleSuggestMore(headlines, pendingInterrupt);
+                        }}
                       />
                     </div>
                   </div>
@@ -2297,8 +2403,8 @@ export default function AutomationView() {
                     </div>
                   )}
 
-                {/* Running indicator */}
-                {isRunning && (
+                {/* Running indicator — the headlines card shows its own loading state */}
+                {isRunning && !isSuggestingMore && (
                   <div className="mt-4">
                     <ThinkingIndicator />
                   </div>

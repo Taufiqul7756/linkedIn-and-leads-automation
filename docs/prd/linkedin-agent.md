@@ -416,6 +416,8 @@ type BlockNode =
 - Answer with `{ interrupt_id, answers: { headlines: ["…", "…"] } }`
 - Each string in the approved list = one post's first line; `len(answers.headlines)` = post count
 - Max 10 headlines offered per round; skipped if `ignore_headline: true`
+- **Suggest more headlines** (button label: "Suggest more concepts/ideas"): next to "+ Add concept/idea" (`LuSparkles`), separated by a thin vertical divider, shown only when `pending_interrupt.can_generate_more === true`. Click → `answerQuestion` with `{ more_headlines: true, headlines: <current list on screen> }` (edits/deletions/custom lines included, blanks dropped) → conversation runs → new headlines interrupt arrives. `HeadlinesForm` is keyed by `pending_interrupt.id` so it remounts with the fresh list
+- **Seamless "suggest more"**: the card never disappears. On click, a snapshot `{ convId, interruptId, headlines, canGenerateMore }` keeps the card rendered while the conversation is `running`; the generic `ThinkingIndicator` (agent ping) is hidden for that run. Inside the card: button shows spinner + "Suggesting…", 3 pulsing skeleton rows appear under the list, inputs / remove / Add concept/idea / Generate drafts are disabled. When the new headlines interrupt arrives, the card remounts with the new list and lines not in the sent list fade in (`animate-fade-in-up`). Snapshot is cleared when status leaves `running` (new headlines, failure, cancel) or if the answer request fails. Reloading mid-run shows the normal running indicator once
 
 ### Updated Settings Shape
 
