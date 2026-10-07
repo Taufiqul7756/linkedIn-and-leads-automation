@@ -97,6 +97,16 @@ export interface AgentSettings {
   ignore_headline: boolean;
   ignore_grilling: boolean;
   ask_questions: boolean;
+  // Selected writer model — PATCH { writer_model: "<model_id>" } to change it
+  writer_model?: string;
+  // Read-only: available writer models grouped by provider (anthropic, deepseek, gemini, …)
+  ai_models?: Record<string, AgentModelOption[]>;
+}
+
+export interface AgentModelOption {
+  model_id: string;
+  label: string;
+  selected: boolean;
 }
 
 export interface SpanNode {

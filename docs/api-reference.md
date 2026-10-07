@@ -416,7 +416,16 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
   "use_knowledge": true,
   "use_ai_image": true,
   "ignore_headline": false,
-  "ignore_grilling": false
+  "ignore_grilling": false,
+  "writer_model": "gemini-2.5-pro",
+  "ai_models": {
+    "anthropic": [{ "model_id": "claude-opus-5", "label": "Claude Opus 5", "selected": false }],
+    "deepseek": [{ "model_id": "deepseek-v4-pro", "label": "DeepSeek V4 Pro", "selected": false }],
+    "gemini": [
+      { "model_id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "selected": true },
+      { "model_id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "selected": false }
+    ]
+  }
 }
 ```
 
@@ -431,8 +440,15 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
 | `use_ai_image` | `true` | Off → no image at all, not even stock |
 | `ignore_headline` | `false` | Skip headline round |
 | `ignore_grilling` | `false` | Skip clarifying questions |
+| `writer_model` | — | `model_id` of the model that writes drafts. Change with `PATCH { "writer_model": "claude-opus-5" }` |
+| `ai_models` | — | Read-only. Available writer models grouped by provider key; exactly one has `selected: true` |
 
 The prompt outranks the panel (prompt > panel > default).
+
+```ts
+type AgentModelOption = { model_id: string; label: string; selected: boolean };
+// AgentSettings += { writer_model?: string; ai_models?: Record<string, AgentModelOption[]> }
+```
 
 ---
 
