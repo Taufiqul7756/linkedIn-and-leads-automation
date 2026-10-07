@@ -416,7 +416,11 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
   "use_knowledge": true,
   "use_ai_image": true,
   "ignore_headline": false,
-  "ignore_grilling": false,
+  "ask_questions": true,
+  "use_post_length": false,
+  "post_length": "",
+  "use_target_audience": false,
+  "target_audience": "",
   "writer_model": "gemini-2.5-pro",
   "ai_models": {
     "anthropic": [{ "model_id": "claude-opus-5", "label": "Claude Opus 5", "selected": false }],
@@ -439,7 +443,12 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
 | `use_knowledge` | `true` | On = Agent pool + attachments. Off = attachments only |
 | `use_ai_image` | `true` | Off → no image at all, not even stock |
 | `ignore_headline` | `false` | Skip headline round |
-| `ignore_grilling` | `false` | Skip clarifying questions |
+| `ignore_grilling` | `false` | Skip clarifying questions. **No longer returned** by `GET` (optional in the type) |
+| `ask_questions` | `true` | Ask clarifying questions before writing |
+| `use_post_length` | `false` | On → drafts follow `post_length` |
+| `post_length` | `""` | Free text. Presets: `"100 words"` (Short) · `"200 words"` (Medium) · `"300 words"` (Long) · `""` (Let agent decide); anything else is a user-written custom length. No option field — the UI maps the string back to a pill or the custom box |
+| `use_target_audience` | `false` | On → drafts are written for `target_audience` |
+| `target_audience` | `""` | Free text, e.g. `"Startup founders and CTOs in SaaS"` |
 | `writer_model` | — | `model_id` of the model that writes drafts. Change with `PATCH { "writer_model": "claude-opus-5" }` |
 | `ai_models` | — | Read-only. Available writer models grouped by provider key; exactly one has `selected: true` |
 

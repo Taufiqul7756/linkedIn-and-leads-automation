@@ -10,6 +10,7 @@ import { agentService } from "@/service/agentService";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useMutationWithTokenRefresh } from "@/hooks/useMutationWithTokenRefresh";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
+import AudienceLengthSection from "./AudienceLengthSection";
 import type { LinkedInProfile, ProfileDocument, ProfileWebsite } from "@/types/Agent";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -508,7 +509,7 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
       </div>
 
       {/* ── Tone / Style accordion card ───────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-gray-200">
+      <div className="mb-4 rounded-xl border border-gray-200">
         {/* Header */}
         <div className="flex items-center justify-between rounded-t-xl bg-sidebar-bg px-4 py-3">
           <p className="text-sm font-semibold text-white">Tone / Style</p>
@@ -598,6 +599,9 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
         ) : null}
       </div>
 
+      {/* ── Audience & Length card (agent settings) ────────────────────── */}
+      <AudienceLengthSection workspaceId={workspaceId} />
+
       {/* Footer */}
       <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-4">
         <p className="text-sm text-gray-500">
@@ -605,7 +609,7 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
         </p>
         <button
           onClick={onClose}
-          className="rounded-xl bg-gray-900 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+          className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
         >
           Done
         </button>

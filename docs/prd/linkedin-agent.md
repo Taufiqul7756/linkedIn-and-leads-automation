@@ -446,7 +446,23 @@ Pill next to the settings gear in the composer bottom bar — same design as the
 - Menu opens upward: "AI model" header + ✕, then **provider tabs** (`MODEL_PROVIDER_LABELS`, unknown keys capitalized) — one tab per `ai_models` key; a violet dot marks the tab holding the selected model. Opens on that tab each time. Tab body lists that provider's models: label + `model_id` + round check; scrolls past `max-h-80`
 - Select → optimistic cache write → `PATCH agent/settings/ { writer_model }` → `invalidateQueries(["agent-settings", workspaceId])`. Error → cache reverted + toast
 - Disabled while the conversation is `running` / `awaiting_input` / generating more drafts. Hidden when `ai_models` is empty
-- Settings are now a React Query (`["agent-settings", workspaceId]`) — the composer toggles use the same optimistic write + invalidate
+- Settings are a React Query (`["agent-settings", workspaceId]`) via `useAgentSettings` — the composer toggles use the same optimistic write + invalidate
+
+### Audience & Post Length
+
+**Composer settings popover** — two toggles, same row style as "Use hashtags":
+- **Use target audience** → `PATCH { use_target_audience }`
+- **Use post length** → `PATCH { use_post_length }`
+
+**Knowledge base modal** — third card "Audience & Length" under Tone / Style (`AudienceLengthSection.tsx`):
+- **Target audience** — text input, auto-saves `PATCH { target_audience }` 600ms after typing stops, on blur, on Enter, and on modal close (pending value flushed). Shows "Saving…" → "Saved". Value is trimmed; unchanged values are not re-sent
+- **Post length** — pills: Short → `"100 words"` · Medium → `"200 words"` · Long → `"300 words"` · Let agent decide → `""`. Click saves immediately and clears the custom box
+- **Custom post length** — free-text input under the pills (e.g. "150 words"); sent as-is in `post_length` with the same autosave as target audience. Clearing it saves `""` (Let agent decide)
+- **Length tip** — blue info line under the custom box: LinkedIn allows up to 3,000 characters per post (about 450–550 words)
+- Selected state is derived on the frontend from the saved `post_length` string (no option field in the API): a preset value highlights its pill with the box empty; any other value shows in the custom box with no pill highlighted. While typing a custom value, no pill is highlighted
+- Fields stay editable when the matching toggle is off — a hint says to turn it on in composer settings
+
+**State** — composer and modal share `useAgentSettings(workspaceId)` (`src/hooks/useAgentSettings.ts`): React Query `["agent-settings", workspaceId]`, save = optimistic cache write → PATCH → invalidate; on error only the touched fields roll back + toast. Selections therefore survive closing the modal and page reload
 
 ### Updated `body_blocks` Format (Tiptap ProseMirror)
 

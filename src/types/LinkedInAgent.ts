@@ -95,8 +95,14 @@ export interface AgentSettings {
   use_knowledge: boolean;
   use_ai_image: boolean;
   ignore_headline: boolean;
-  ignore_grilling: boolean;
+  // No longer returned by GET settings/ — kept optional for older payloads
+  ignore_grilling?: boolean;
   ask_questions: boolean;
+  use_post_length: boolean;
+  // "100 words" | "200 words" | "300 words" | "" (let the agent decide)
+  post_length: string;
+  use_target_audience: boolean;
+  target_audience: string;
   // Selected writer model — PATCH { writer_model: "<model_id>" } to change it
   writer_model?: string;
   // Read-only: available writer models grouped by provider (anthropic, deepseek, gemini, …)
