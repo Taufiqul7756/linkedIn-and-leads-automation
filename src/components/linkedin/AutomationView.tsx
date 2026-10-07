@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import {
   LuPlus,
   LuHistory,
@@ -22,6 +23,7 @@ import {
   LuAlignLeft,
   LuImage,
   LuSparkles,
+  LuCpu,
 } from "react-icons/lu";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -53,6 +55,30 @@ import type {
 } from "@/types/LinkedInAgent";
 
 // ─── constants ────────────────────────────────────────────────────────────────
+
+// Shown until GET agent/settings/ resolves
+const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+  post_count: 5,
+  use_hashtags: true,
+  use_emoji: false,
+  use_knowledge: true,
+  use_ai_image: true,
+  ignore_headline: false,
+  ignore_grilling: false,
+  ask_questions: true,
+};
+
+// Display names for ai_models provider keys — unknown keys are capitalized
+const MODEL_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  deepseek: "DeepSeek",
+  gemini: "Gemini",
+  openai: "OpenAI",
+};
+
+function providerLabel(provider: string) {
+  return MODEL_PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
+}
 
 // const PROMPT_SUGGESTIONS = [
 //   { text: "Give me 5 drafts for LinkedIn", tag: null },
@@ -1204,19 +1230,10 @@ export default function AutomationView() {
   const [placeholderVisible, setPlaceholderVisible] = useState(true);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Settings
-  const [settings, setSettings] = useState<AgentSettings>({
-    post_count: 5,
-    use_hashtags: true,
-    use_emoji: false,
-    use_knowledge: true,
-    use_ai_image: true,
-    ignore_headline: false,
-    ignore_grilling: false,
-    ask_questions: true,
-  });
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  // Settings — served from the ["agent-settings", workspaceId] query (see below)
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelTab, setModelTab] = useState<string | null>(null);
 
   // refs
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1227,6 +1244,7 @@ export default function AutomationView() {
   const hasScrolledToBottomRef = useRef(false);
   const promptRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1242,6 +1260,14 @@ export default function AutomationView() {
 
   const svc = useCallback(() => linkedinAgentService(workspaceId), [workspaceId]);
   const queryClient = useQueryClient();
+
+  const settingsQueryKey = ["agent-settings", workspaceId];
+  const { data: settingsData, isFetched: settingsLoaded } = useQueryWithTokenRefresh(
+    settingsQueryKey,
+    () => svc().getSettings(),
+    { enabled: !!workspaceId }
+  );
+  const settings = settingsData ?? DEFAULT_AGENT_SETTINGS;
 
   // ── approve / reject draft posts ──
   const handleApprovePost = useCallback(
@@ -1550,19 +1576,17 @@ export default function AutomationView() {
     (conversation?.pending_interrupt as { id?: string } | null)?.id,
   ]);
 
-  // ── load settings once ──
-  useEffect(() => {
-    if (!workspaceId || settingsLoaded) return;
-    svc()
-      .getSettings()
-      .then((s) => {
-        setSettings(s);
-        setSettingsLoaded(true);
-      })
-      .catch(() => setSettingsLoaded(true));
-  }, [workspaceId, settingsLoaded, svc]);
-
   // ── click-outside handlers ──
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const h = (e: MouseEvent) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node))
+        setModelMenuOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [modelMenuOpen]);
+
   useEffect(() => {
     if (!promptOpen) return;
     const h = (e: MouseEvent) => {
@@ -1901,19 +1925,52 @@ export default function AutomationView() {
   };
 
   // ── save settings ──
-  const handleSettingChange = async (key: keyof AgentSettings, value: boolean | number) => {
-    const next = { ...settings, [key]: value };
-    setSettings(next);
+  // Optimistic cache write → PATCH → invalidate so the GET is the source of truth
+  const saveSettings = async (patch: Partial<AgentSettings>, optimistic: AgentSettings) => {
+    const previous = settingsData;
+    queryClient.setQueryData(settingsQueryKey, optimistic);
     setSettingsSaving(true);
     try {
-      await svc().patchSettings({ [key]: value });
+      await svc().patchSettings(patch);
     } catch {
-      // revert
-      setSettings(settings);
+      queryClient.setQueryData(settingsQueryKey, previous);
       toast.error("Failed to save settings.");
     } finally {
       setSettingsSaving(false);
+      queryClient.invalidateQueries({ queryKey: settingsQueryKey });
     }
+  };
+
+  const handleSettingChange = (key: keyof AgentSettings, value: boolean | number) =>
+    saveSettings({ [key]: value }, { ...settings, [key]: value });
+
+  // ── writer model ──
+  const modelGroups = Object.entries(settings.ai_models ?? {}).filter(
+    ([, models]) => models.length > 0
+  );
+  const allModels = modelGroups.flatMap(([, models]) => models);
+  const activeModel =
+    allModels.find((m) => m.model_id === settings.writer_model) ??
+    allModels.find((m) => m.selected);
+  const activeModelProvider = modelGroups.find(([, models]) =>
+    models.some((m) => m.model_id === activeModel?.model_id)
+  )?.[0];
+  // null = follow the selected model's provider (or the first tab)
+  const currentModelTab = modelTab ?? activeModelProvider ?? modelGroups[0]?.[0];
+
+  const handleModelChange = (modelId: string) => {
+    setModelMenuOpen(false);
+    if (modelId === activeModel?.model_id) return;
+    const aiModels = Object.fromEntries(
+      modelGroups.map(([provider, models]) => [
+        provider,
+        models.map((m) => ({ ...m, selected: m.model_id === modelId })),
+      ])
+    );
+    saveSettings(
+      { writer_model: modelId },
+      { ...settings, writer_model: modelId, ai_models: aiModels }
+    );
   };
 
   // ── derived state ──
@@ -2753,6 +2810,125 @@ export default function AutomationView() {
                           </div>
                         )}
                       </div>
+
+                      {/* Writer model — same picker as the image chat */}
+                      {allModels.length > 0 && (
+                        <div ref={modelMenuRef} className="relative">
+                          <button
+                            onClick={() => {
+                              // Reopen on the selected model's provider tab
+                              setModelTab(null);
+                              setModelMenuOpen((v) => !v);
+                            }}
+                            disabled={isRunning || isAwaiting || isGeneratingMoreDrafts}
+                            className={cn(
+                              "flex h-8 items-center gap-1.5 rounded-lg border pr-2 pl-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-50",
+                              modelMenuOpen ? "border-violet-300 bg-violet-50" : "border-gray-300"
+                            )}
+                          >
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-gray-400">
+                              <LuCpu className="h-3 w-3" />
+                            </span>
+                            <span className="max-w-28 truncate">
+                              {activeModel?.label ?? "Model"}
+                            </span>
+                            <LuChevronDown
+                              className={cn(
+                                "h-3 w-3 text-gray-400 transition-transform",
+                                modelMenuOpen && "rotate-180"
+                              )}
+                            />
+                          </button>
+
+                          {modelMenuOpen && (
+                            <div className="absolute bottom-full right-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                              <div className="flex items-start justify-between px-4 pt-3 pb-2">
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-900">AI model</p>
+                                  <p className="text-xs text-gray-400">
+                                    Choose the model that writes your drafts
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => setModelMenuOpen(false)}
+                                  className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                                >
+                                  <LuX className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              {/* Provider tabs */}
+                              <div className="flex gap-1 overflow-x-auto border-b border-gray-100 px-3">
+                                {modelGroups.map(([provider]) => {
+                                  const isTab = provider === currentModelTab;
+                                  return (
+                                    <button
+                                      key={provider}
+                                      onClick={() => setModelTab(provider)}
+                                      className={cn(
+                                        "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-2 text-xs font-medium transition-colors",
+                                        isTab
+                                          ? "border-violet-600 text-violet-700"
+                                          : "border-transparent text-gray-500 hover:text-gray-700"
+                                      )}
+                                    >
+                                      {providerLabel(provider)}
+                                      {/* Dot marks the tab holding the selected model */}
+                                      {provider === activeModelProvider && (
+                                        <span className="h-1.5 w-1.5 rounded-full bg-violet-600" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex max-h-80 flex-col gap-1 overflow-y-auto p-2">
+                                {modelGroups
+                                  .filter(([provider]) => provider === currentModelTab)
+                                  .map(([provider, models]) => (
+                                    <div key={provider} className="flex flex-col gap-1">
+                                      {models.map((m) => {
+                                        const isActive = m.model_id === activeModel?.model_id;
+                                        return (
+                                          <button
+                                            key={m.model_id}
+                                            onClick={() => handleModelChange(m.model_id)}
+                                            className={cn(
+                                              "flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 text-left transition-colors",
+                                              isActive
+                                                ? "border-violet-200 bg-violet-50"
+                                                : "border-transparent hover:bg-gray-50"
+                                            )}
+                                          >
+                                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
+                                              <LuCpu className="h-4 w-4" />
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                              <p className="truncate text-sm font-medium text-gray-900">
+                                                {m.label}
+                                              </p>
+                                              <p className="truncate text-xs text-gray-400">
+                                                {m.model_id}
+                                              </p>
+                                            </div>
+                                            <span
+                                              className={cn(
+                                                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                                                isActive
+                                                  ? "border-violet-600 bg-violet-600 text-white"
+                                                  : "border-gray-300"
+                                              )}
+                                            >
+                                              {isActive && <LuCheck className="h-3 w-3" />}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Settings */}
                       <div ref={settingsRef} className="relative">

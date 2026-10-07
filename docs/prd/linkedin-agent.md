@@ -438,6 +438,16 @@ interface AgentSettings {
 - `use_ai_image: false` → `image_url: ""`, `image_status: "none"` — do not show image placeholder
 - `use_hashtags: true` → hashtags in BOTH `hashtags` array AND last line of `body`/`body_blocks` — do NOT append array under body again
 
+### Writer Model Picker
+
+Pill next to the settings gear in the composer bottom bar — same design as the image-chat model picker (`LuCpu` fallback avatar, violet active state; the API sends no model images).
+
+- Source: `GET agent/settings/` → `ai_models` (grouped by provider: `anthropic`, `deepseek`, `gemini`, …) + `writer_model`. Active model = `writer_model`, falling back to the item with `selected: true`
+- Menu opens upward: "AI model" header + ✕, then **provider tabs** (`MODEL_PROVIDER_LABELS`, unknown keys capitalized) — one tab per `ai_models` key; a violet dot marks the tab holding the selected model. Opens on that tab each time. Tab body lists that provider's models: label + `model_id` + round check; scrolls past `max-h-80`
+- Select → optimistic cache write → `PATCH agent/settings/ { writer_model }` → `invalidateQueries(["agent-settings", workspaceId])`. Error → cache reverted + toast
+- Disabled while the conversation is `running` / `awaiting_input` / generating more drafts. Hidden when `ai_models` is empty
+- Settings are now a React Query (`["agent-settings", workspaceId]`) — the composer toggles use the same optimistic write + invalidate
+
 ### Updated `body_blocks` Format (Tiptap ProseMirror)
 
 `body_blocks` is now a **Tiptap ProseMirror document** (not the old custom array):
