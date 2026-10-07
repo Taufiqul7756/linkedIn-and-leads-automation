@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
+import { useAgentSettings } from "@/hooks/useAgentSettings";
 import {
   LuPlus,
   LuHistory,
@@ -55,18 +55,6 @@ import type {
 } from "@/types/LinkedInAgent";
 
 // ─── constants ────────────────────────────────────────────────────────────────
-
-// Shown until GET agent/settings/ resolves
-const DEFAULT_AGENT_SETTINGS: AgentSettings = {
-  post_count: 5,
-  use_hashtags: true,
-  use_emoji: false,
-  use_knowledge: true,
-  use_ai_image: true,
-  ignore_headline: false,
-  ignore_grilling: false,
-  ask_questions: true,
-};
 
 // Display names for ai_models provider keys — unknown keys are capitalized
 const MODEL_PROVIDER_LABELS: Record<string, string> = {
@@ -1231,7 +1219,6 @@ export default function AutomationView() {
   const [isFocused, setIsFocused] = useState(false);
 
   // Settings — served from the ["agent-settings", workspaceId] query (see below)
-  const [settingsSaving, setSettingsSaving] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelTab, setModelTab] = useState<string | null>(null);
 
@@ -1261,13 +1248,12 @@ export default function AutomationView() {
   const svc = useCallback(() => linkedinAgentService(workspaceId), [workspaceId]);
   const queryClient = useQueryClient();
 
-  const settingsQueryKey = ["agent-settings", workspaceId];
-  const { data: settingsData, isFetched: settingsLoaded } = useQueryWithTokenRefresh(
-    settingsQueryKey,
-    () => svc().getSettings(),
-    { enabled: !!workspaceId }
-  );
-  const settings = settingsData ?? DEFAULT_AGENT_SETTINGS;
+  const {
+    settings,
+    settingsLoaded,
+    saving: settingsSaving,
+    saveSettings,
+  } = useAgentSettings(workspaceId);
 
   // ── approve / reject draft posts ──
   const handleApprovePost = useCallback(
@@ -1925,24 +1911,8 @@ export default function AutomationView() {
   };
 
   // ── save settings ──
-  // Optimistic cache write → PATCH → invalidate so the GET is the source of truth
-  const saveSettings = async (patch: Partial<AgentSettings>, optimistic: AgentSettings) => {
-    const previous = settingsData;
-    queryClient.setQueryData(settingsQueryKey, optimistic);
-    setSettingsSaving(true);
-    try {
-      await svc().patchSettings(patch);
-    } catch {
-      queryClient.setQueryData(settingsQueryKey, previous);
-      toast.error("Failed to save settings.");
-    } finally {
-      setSettingsSaving(false);
-      queryClient.invalidateQueries({ queryKey: settingsQueryKey });
-    }
-  };
-
   const handleSettingChange = (key: keyof AgentSettings, value: boolean | number) =>
-    saveSettings({ [key]: value }, { ...settings, [key]: value });
+    saveSettings({ [key]: value });
 
   // ── writer model ──
   const modelGroups = Object.entries(settings.ai_models ?? {}).filter(
@@ -1967,10 +1937,7 @@ export default function AutomationView() {
         models.map((m) => ({ ...m, selected: m.model_id === modelId })),
       ])
     );
-    saveSettings(
-      { writer_model: modelId },
-      { ...settings, writer_model: modelId, ai_models: aiModels }
-    );
+    saveSettings({ writer_model: modelId }, { ai_models: aiModels });
   };
 
   // ── derived state ──
@@ -3003,6 +2970,34 @@ export default function AutomationView() {
                                 <Toggle
                                   checked={settings.use_hashtags}
                                   onChange={(v) => handleSettingChange("use_hashtags", v)}
+                                />
+                              </div>
+                              <div className="flex items-start justify-between gap-3 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">
+                                    Use target audience
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    Write for the audience set in Knowledge base
+                                  </p>
+                                </div>
+                                <Toggle
+                                  checked={settings.use_target_audience}
+                                  onChange={(v) => handleSettingChange("use_target_audience", v)}
+                                />
+                              </div>
+                              <div className="flex items-start justify-between gap-3 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">
+                                    Use post length
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    Match the length set in Knowledge base
+                                  </p>
+                                </div>
+                                <Toggle
+                                  checked={settings.use_post_length}
+                                  onChange={(v) => handleSettingChange("use_post_length", v)}
                                 />
                               </div>
                               <div className="flex items-start justify-between gap-3 py-3">
