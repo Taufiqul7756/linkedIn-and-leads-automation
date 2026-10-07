@@ -894,6 +894,11 @@ function DraftsSection({
   rejectingIds,
   selectedPostId,
   onSelectPost,
+  onGenerateMore,
+  generatingMore = false,
+  generateMoreDisabled = false,
+  skeletonCount = 0,
+  previousPostIds = [],
 }: {
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
@@ -905,8 +910,23 @@ function DraftsSection({
   rejectingIds: Set<string>;
   selectedPostId?: string | null;
   onSelectPost?: (id: string | null) => void;
+  onGenerateMore?: () => void;
+  // "Generate more drafts" run in flight for this message — cards locked, skeletons appended
+  generatingMore?: boolean;
+  generateMoreDisabled?: boolean;
+  skeletonCount?: number;
+  // Post ids before the last "Generate more" — cards not in it fade in as new
+  previousPostIds?: string[];
 }) {
   const draftPosts = posts.filter((p) => p.status === "draft");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Bring the skeletons into view — they land at the end of the horizontal carousel
+  useEffect(() => {
+    if (!generatingMore || !scrollRef.current) return;
+    const el = scrollRef.current;
+    el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+  }, [generatingMore]);
 
   return (
     <div className="mt-2">
@@ -937,34 +957,62 @@ function DraftsSection({
       </div>
 
       {/* Horizontal scroll — pt-4 gives room for the floating ✓/× buttons */}
-      <div className="flex gap-3 overflow-x-auto pt-4 pb-2">
+      <div ref={scrollRef} className="flex gap-3 overflow-x-auto pt-4 pb-2">
         {posts.map((post) => (
-          <DraftCard
+          <div
             key={post.id}
-            post={post}
-            onEdit={onEdit}
-            onEditTime={onEditTime}
-            onApprove={onApprove}
-            onReject={onReject}
-            isApproving={approvingIds.has(post.id)}
-            isRejecting={rejectingIds.has(post.id)}
-            isSelected={selectedPostId === post.id}
-            onSelect={onSelectPost}
-          />
+            className={cn(
+              "shrink-0",
+              generatingMore && "pointer-events-none",
+              previousPostIds.length > 0 &&
+                !previousPostIds.includes(post.id) &&
+                "animate-fade-in-up"
+            )}
+          >
+            <DraftCard
+              post={post}
+              onEdit={onEdit}
+              onEditTime={onEditTime}
+              onApprove={onApprove}
+              onReject={onReject}
+              isApproving={approvingIds.has(post.id)}
+              isRejecting={rejectingIds.has(post.id)}
+              isSelected={selectedPostId === post.id}
+              onSelect={onSelectPost}
+            />
+          </div>
         ))}
+        {/* Placeholders where the new drafts will land */}
+        {generatingMore &&
+          Array.from({ length: skeletonCount }, (_, i) => (
+            <div
+              key={`skeleton-${i}`}
+              className="flex h-72 w-96 shrink-0 flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4"
+            >
+              <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
+              <div className="h-3 w-1/3 animate-pulse rounded bg-gray-100" />
+              <div className="h-24 animate-pulse rounded-xl bg-gray-100" />
+              <div className="h-3 animate-pulse rounded bg-gray-100" />
+              <div className="h-3 w-5/6 animate-pulse rounded bg-gray-100" />
+            </div>
+          ))}
       </div>
 
       {/* Generate more */}
-      <button
-        disabled
-        className="mt-3 flex items-center gap-1.5 text-sm text-gray-400 cursor-not-allowed"
-      >
-        <LuPlus className="h-4 w-4" />
-        Generate more drafts
-        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-400">
-          Coming soon
-        </span>
-      </button>
+      {onGenerateMore && (
+        <button
+          onClick={onGenerateMore}
+          disabled={generatingMore || generateMoreDisabled}
+          className="mt-3 flex items-center gap-1.5 text-sm text-blue-600 transition-colors hover:text-blue-700 disabled:opacity-60"
+        >
+          {generatingMore ? (
+            <LuLoader className="h-4 w-4 animate-spin" />
+          ) : (
+            <LuSparkles className="h-4 w-4" />
+          )}
+          {generatingMore ? "Generating…" : "Generate more drafts"}
+        </button>
+      )}
     </div>
   );
 }
@@ -1123,6 +1171,13 @@ export default function AutomationView() {
   } | null>(null);
   // List sent with the last "Suggest more" — the next round fades in lines not in it
   const [previousHeadlines, setPreviousHeadlines] = useState<string[]>([]);
+  // "Generate more drafts" run in flight — kept until the new posts are fetched (no blink)
+  const [moreDrafts, setMoreDrafts] = useState<{ convId: string; messageId: string } | null>(null);
+  // Post ids a message had before the last "Generate more" — new cards fade in
+  const [moreDraftsBaseline, setMoreDraftsBaseline] = useState<{
+    messageId: string;
+    postIds: string[];
+  } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [history, setHistory] = useState<PaginatedConversations | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1348,10 +1403,11 @@ export default function AutomationView() {
       if (conv.attachments?.some((a) => a.status === "pending")) return; // keep polling for attachments
       stopPolling();
       refreshHistory();
-      if (conv.status === "completed") {
-        if (conv.artifacts.post_ids.length > 0) {
-          fetchPosts(conv.artifacts.post_ids);
-        }
+      if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
+        // Skeletons stay until the new cards are in state, then swap in place
+        fetchPosts(conv.artifacts.post_ids).finally(() => setMoreDrafts(null));
+      } else {
+        setMoreDrafts(null);
       }
     },
     [stopPolling, fetchPosts, refreshHistory]
@@ -1641,6 +1697,23 @@ export default function AutomationView() {
     if (!ok) setSuggestMore(null);
   };
 
+  // ── generate more drafts for one posts message — new posts append to that same message ──
+  const handleGenerateMoreDrafts = async (messageId: string, currentPostIds: string[]) => {
+    if (!conversation) return;
+    const convId = conversation.id;
+    setMoreDraftsBaseline({ messageId, postIds: currentPostIds });
+    setMoreDrafts({ convId, messageId });
+    setSelectedDraftId(null);
+    try {
+      await svc().generateMoreDrafts(convId, messageId);
+      setConversation((prev) => (prev ? { ...prev, status: "running" } : prev));
+      startPolling(convId);
+    } catch (err) {
+      setMoreDrafts(null);
+      toast.error(extractErrorMessage(err));
+    }
+  };
+
   // ── ensure conversation exists (shared by attach handlers) ──
   const ensureConversation = async (): Promise<string | null> => {
     if (!workspaceId) return null;
@@ -1852,8 +1925,26 @@ export default function AutomationView() {
   const hasPendingAttachments =
     conversation?.attachments?.some((a) => a.status === "pending") ?? false;
   const isDraft = conversation?.status === "draft";
+
+  // Drop the "generate more drafts" flag when switching conversations mid-run
+  const conversationId = conversation?.id;
+  const [prevConversationId, setPrevConversationId] = useState(conversationId);
+  if (conversationId !== prevConversationId) {
+    setPrevConversationId(conversationId);
+    if (moreDrafts && moreDrafts.convId !== conversationId) setMoreDrafts(null);
+    setMoreDraftsBaseline(null);
+  }
+  const isGeneratingMoreDrafts = !!moreDrafts && moreDrafts.convId === conversationId;
+  // Generate more is allowed only from an idle conversation (same gate as sending)
+  const canGenerateMoreDrafts =
+    !isGeneratingMoreDrafts &&
+    !sending &&
+    !hasPendingAttachments &&
+    (isCompleted || isFailed || conversation?.status === "cancelled");
+
   const canSend =
     !sending &&
+    !isGeneratingMoreDrafts &&
     !isRunning &&
     !isAwaiting &&
     !hasPendingAttachments &&
@@ -2272,6 +2363,25 @@ export default function AutomationView() {
                               onSelectPost={
                                 conversation?.has_multiple_post ? setSelectedDraftId : undefined
                               }
+                              onGenerateMore={
+                                conversation?.has_multiple_post
+                                  ? () =>
+                                      handleGenerateMoreDrafts(
+                                        msg.id,
+                                        msgPosts.map((p) => p.id)
+                                      )
+                                  : undefined
+                              }
+                              generatingMore={
+                                isGeneratingMoreDrafts && moreDrafts?.messageId === msg.id
+                              }
+                              generateMoreDisabled={!canGenerateMoreDrafts}
+                              skeletonCount={settings.post_count}
+                              previousPostIds={
+                                moreDraftsBaseline?.messageId === msg.id
+                                  ? moreDraftsBaseline.postIds
+                                  : undefined
+                              }
                             />
                           )}
                         </div>
@@ -2404,7 +2514,7 @@ export default function AutomationView() {
                   )}
 
                 {/* Running indicator — the headlines card shows its own loading state */}
-                {isRunning && !isSuggestingMore && (
+                {isRunning && !isSuggestingMore && !isGeneratingMoreDrafts && (
                   <div className="mt-4">
                     <ThinkingIndicator />
                   </div>
@@ -2469,14 +2579,18 @@ export default function AutomationView() {
                 <div className="rounded-2xl border border-gray-200 bg-white shadow-md">
                   {/* Textarea + cycling placeholder */}
                   <div className="relative px-4 pt-3 pb-1">
-                    {!message && !isFocused && !isRunning && !isAwaiting && (
-                      <div
-                        className="pointer-events-none absolute inset-x-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 transition-opacity duration-300"
-                        style={{ opacity: placeholderVisible ? 1 : 0 }}
-                      >
-                        {CYCLING_PLACEHOLDERS[placeholderIdx]}
-                      </div>
-                    )}
+                    {!message &&
+                      !isFocused &&
+                      !isRunning &&
+                      !isAwaiting &&
+                      !isGeneratingMoreDrafts && (
+                        <div
+                          className="pointer-events-none absolute inset-x-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 transition-opacity duration-300"
+                          style={{ opacity: placeholderVisible ? 1 : 0 }}
+                        >
+                          {CYCLING_PLACEHOLDERS[placeholderIdx]}
+                        </div>
+                      )}
                     <textarea
                       ref={textareaRef}
                       value={message}
@@ -2496,7 +2610,7 @@ export default function AutomationView() {
                             ? "Agent is working…"
                             : ""
                       }
-                      disabled={isRunning || isAwaiting}
+                      disabled={isRunning || isAwaiting || isGeneratingMoreDrafts}
                       rows={2}
                       className="w-full resize-none break-all bg-transparent text-sm text-gray-700 placeholder-gray-400 focus:outline-none disabled:opacity-50"
                     />

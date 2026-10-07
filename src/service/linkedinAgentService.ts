@@ -57,6 +57,13 @@ export const linkedinAgentService = (workspaceId: string) => ({
       { text, ...(postId ? { post: postId } : {}) }
     ),
 
+  // More drafts for an existing posts message — new post ids are appended to that message
+  generateMoreDrafts: (id: string, messageId: string) =>
+    axiosPost<{ run_id: string }>(
+      `/workspaces/${workspaceId}/agent/conversations/${id}/messages/`,
+      { more_drafts: true, message_id: messageId }
+    ),
+
   answerQuestion: (
     id: string,
     interruptId: string,

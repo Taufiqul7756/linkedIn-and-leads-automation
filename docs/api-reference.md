@@ -174,6 +174,13 @@ To target a specific draft:
 
 `text` is required, non-blank, max **4000** characters. `post` is optional — UUID of the specific `AgentPost` to edit.
 
+To generate more drafts for an existing `kind: "posts"` message (no `text`, flow is not restarted):
+```json
+{ "more_drafts": true, "message_id": "b2c1e7a4-…" }
+```
+
+`message_id` is the `id` of the `posts` message the button sits under. The new post ids are appended to **that same message's** `payload.post_ids` (and to `artifacts.post_ids`) — no new message is created. Returns the same `202` + `run_id`; poll as usual.
+
 `202`:
 ```json
 { "run_id": "0f1c0f4e-6a2e-4b31-9f0a-2b0a5f2e5c11" }
