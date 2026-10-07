@@ -515,6 +515,27 @@ Users can select a specific draft in the agent composer to direct the next promp
 
 ---
 
+### Generate More Drafts
+
+"Generate more drafts" link under every `kind="posts"` DraftsSection — adds drafts to that same message without restarting the flow.
+
+**API:** `POST conversations/{id}/messages/ { "more_drafts": true, "message_id": "<posts message id>" }` → `202`, then the normal poll. Backend appends the new post ids to the **same** message's `payload.post_ids`.
+
+**UI (mirrors "Suggest more concepts/ideas"):**
+- Blue text link with `LuSparkles`; while running → `LuLoader` spinner + "Generating…"
+- Shown only when `conversation.has_multiple_post` (hidden in single-post edit-with-agent conversations)
+- Enabled only when the conversation is idle (`completed` / `failed` / `cancelled`), no send in flight, no pending attachments
+- On click: existing cards stay in place, locked (`pointer-events-none`); `settings.post_count` skeleton cards append to the end of the carousel, which smooth-scrolls to show them
+- No `ThinkingIndicator` / agent ping during this run — the skeletons are the only loading signal
+- Composer (textarea, Send) disabled for the whole run; Cancel still available
+- Selected draft (targeted prompting) is cleared on click
+
+**State (`AutomationView`):**
+- `moreDrafts: { convId, messageId } | null` — set on click; cleared only after `fetchPosts` resolves on completion, so skeletons swap straight to real cards (no blink). Also cleared on failure/cancel, on request error (toast), and when switching conversations
+- `moreDraftsBaseline: { messageId, postIds }` — post ids before the click; cards not in it get `animate-fade-in-up`
+
+---
+
 ### Edit-with-Agent: Conversation Resume via `conversation_id`
 
 `AgentPost` now carries a `conversation_id: string | null` field set by the backend once a post is linked to a conversation.
