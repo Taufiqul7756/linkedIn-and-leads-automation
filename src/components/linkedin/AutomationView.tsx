@@ -508,8 +508,14 @@ function GrillForm({
     }
     return init;
   });
+  // Per-question toggle — off = send "" for that question on Next (input kept for re-enabling)
+  const [skipped, setSkipped] = useState<Record<string, boolean>>({});
 
   if (questions.length === 0) return null;
+
+  const answersForNext = Object.fromEntries(
+    Object.entries(answers).map(([id, v]) => [id, skipped[id] ? "" : v])
+  );
 
   // full-width: text kind, allow_free_text (two stacked inputs), or last in an odd count
   const pairs: Question[][] = [];
@@ -536,25 +542,49 @@ function GrillForm({
               key={ri}
               className={cn("grid gap-4", row.length === 2 ? "grid-cols-2" : "grid-cols-1")}
             >
-              {row.map((q) => (
-                <div key={q.id}>
-                  <label className="mb-1.5 block text-xs font-semibold text-blue-600">
-                    {q.question}
-                  </label>
-                  <QuestionField
-                    question={q}
-                    value={answers[q.id] ?? ""}
-                    onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
-                  />
-                </div>
-              ))}
+              {row.map((q) => {
+                const isOn = !skipped[q.id];
+                return (
+                  <div key={q.id}>
+                    <div className="mb-1.5 flex items-start justify-between gap-3">
+                      <label
+                        className={cn(
+                          "block text-xs font-semibold transition-colors",
+                          isOn ? "text-blue-600" : "text-gray-400"
+                        )}
+                      >
+                        {q.question}
+                        {!isOn && <span className="ml-1.5 font-medium">· Skipped</span>}
+                      </label>
+                      <span title={isOn ? "Skip this question" : "Answer this question"}>
+                        <Toggle
+                          small
+                          checked={isOn}
+                          onChange={(v) => setSkipped((prev) => ({ ...prev, [q.id]: !v }))}
+                        />
+                      </span>
+                    </div>
+                    {/* fieldset disables every control inside a skipped question */}
+                    <fieldset
+                      disabled={!isOn}
+                      className={cn("min-w-0 transition-opacity", !isOn && "opacity-50")}
+                    >
+                      <QuestionField
+                        question={q}
+                        value={answers[q.id] ?? ""}
+                        onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+                      />
+                    </fieldset>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
 
         <div className="mt-5 flex items-center gap-3">
           <button
-            onClick={() => onSubmit(answers)}
+            onClick={() => onSubmit(answersForNext)}
             disabled={submitting}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
           >
