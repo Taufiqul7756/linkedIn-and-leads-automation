@@ -324,6 +324,14 @@ Optional — include `post` to target a specific draft:
 
 > Max **2 rounds** of questions per conversation. After the cap, agent uses each question's `default` and writes.
 
+### Per-question skip toggle (`GrillForm`)
+
+- Every question has a small toggle to the right of its label — **on** by default
+- Toggle off → label greys out with "· Skipped", the field (select / free-text / number / text) is disabled via a wrapping `<fieldset>`; the typed value is kept locally so toggling back on restores it
+- **Next** → every question is still sent under its id; skipped ones send `""`:
+  `{ interrupt_id, answers: { "clarifier_0": "…", "clarifier_1": "", "clarifier_2": "…" } }`
+- **Skip questioning** is unchanged — still `answers: { skip_remaining: true }` (toggles have no effect; the backend handles it)
+
 ### body_blocks (JSON string — must `JSON.parse`)
 
 ```ts
