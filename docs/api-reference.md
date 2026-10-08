@@ -35,7 +35,7 @@ One prompt box, one conversation. The user types what they want, attaches what t
 > * One new `409` on `messages/`: a source is still being read.
 > * The `count` question is gone from the question catalogue — the panel
 >   answers it. So is the `grounding` question, unless the panel's
->   `use_knowledge` is off.
+>   `use_knowledge` is off. *(Later replaced by per-source `knowledge` switches — see Knowledge switches.)*
 > * **Hashtags are in the post body now.** With `use_hashtags` on, `body` and
 >   `body_blocks` end with the tag line (`#saas #pricing`) as well as carrying
 >   the tags in the `hashtags` array. Stop appending the array under the body
@@ -471,7 +471,6 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
   "post_count": 5,
   "use_hashtags": true,
   "use_emoji": false,
-  "use_knowledge": true,
   "use_ai_image": true,
   "ignore_headline": false,
   "ask_questions": true,
@@ -487,7 +486,11 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
       { "model_id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "selected": true },
       { "model_id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "selected": false }
     ]
-  }
+  },
+  "knowledge": [
+    { "id": "6f1c2b9e-…", "kind": "pdf", "label": "Campaign Knowledge", "name": "q4-campaign.pdf", "status": "ready", "enabled": true },
+    { "id": "a03d77c1-…", "kind": "website", "label": "", "name": "https://acme.com", "status": "crawling", "enabled": false }
+  ]
 }
 ```
 
@@ -498,7 +501,7 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
 | `post_count` | `5` | How many posts a turn writes |
 | `use_hashtags` | `true` | Tags in `hashtags` array and last line of body |
 | `use_emoji` | `false` | Emoji in the body |
-| `use_knowledge` | `true` | On = Agent pool + attachments. Off = attachments only |
+| ~~`use_knowledge`~~ | — | **Removed** (Story #3999). Sending it is ignored — use `knowledge` switches |
 | `use_ai_image` | `true` | Off → no image at all, not even stock |
 | `ignore_headline` | `false` | Skip headline round |
 | `ignore_grilling` | `false` | Skip clarifying questions. **No longer returned** by `GET` (optional in the type) |
@@ -509,13 +512,55 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
 | `target_audience` | `""` | Free text, e.g. `"Startup founders and CTOs in SaaS"` |
 | `writer_model` | — | `model_id` of the model that writes drafts. Change with `PATCH { "writer_model": "claude-opus-5" }` |
 | `ai_models` | — | Read-only. Available writer models grouped by provider key; exactly one has `selected: true` |
+| `knowledge` | `[]` | One switch per **knowledge** source (oldest first). See [Knowledge switches](#knowledge-switches) |
 
 The prompt outranks the panel (prompt > panel > default).
 
 ```ts
 type AgentModelOption = { model_id: string; label: string; selected: boolean };
-// AgentSettings += { writer_model?: string; ai_models?: Record<string, AgentModelOption[]> }
+// AgentSettings += { writer_model?: string; ai_models?: Record<string, AgentModelOption[]>; knowledge?: KnowledgeSwitch[] }
 ```
+
+### Knowledge switches
+
+Agent Mode only (Story #3999). Each knowledge source has its own **label** and **on/off switch**; a chat uses only the sources that are on.
+
+```ts
+type KnowledgeKind = "pdf" | "website" | "linkedin";
+interface KnowledgeSwitch {
+  id: string;        // same id as the source's own route
+  kind: KnowledgeKind; // send back with the id when flipping
+  label: string;     // note for the agent; "" = none
+  name: string;      // file name, URL or profile URL
+  status: string;    // "ready" | "failed" | "pending" | "extracting" | "crawling" | "fetching"
+  enabled: boolean;
+}
+```
+
+- Only `ready` sources are used. Tone / style references are **never** listed. Empty pool → `[]`.
+- **Flip**: `PATCH settings/` with only the changed switches — `{ "knowledge": [{ "kind": "website", "id": "a03d…", "enabled": true }] }`. Combinable with other settings; response = full settings body. Saved **on the source** (persists for later chats). `PATCH { "enabled": false }` on the source's own route does the same.
+- **All off** → posts written without knowledge (old `use_knowledge: false`). **No sources** → same as before. Attachments (`+` in the prompt box) are not listed and always used for their chat.
+- A prompt sentence ("don't use my knowledge base") still wins for that message, but can't switch a source back on.
+- `is_default` no longer limits knowledge — switches decide. It still picks the tone/style reference.
+
+**`label` = the source's note for the agent** (optional free text, max 200 chars, e.g. "Use this for article making" — confirmed with backend; the UI shows it as a note under the source name, not as the name). All create / list / detail / PATCH responses now carry `label` and `enabled` (`true` on new uploads):
+
+| Source | Request | Field |
+|---|---|---|
+| PDF | `POST linkedin/agent/documents/` (multipart) | `label` beside `file` |
+| Website | `POST linkedin/agent/websites/` | `{ "url": "acme.com", "label": "Company website" }` |
+| LinkedIn profile | `POST linkedin/profiles/` | `{ "profile_url": "…", "label": "My LinkedIn" }` |
+
+Edit the note: `PATCH` the same detail route with `{ "label": "…" }`. The UI sends no note for LinkedIn profiles.
+
+**Refusals** — nothing is saved on a `400` (including other fields in the same PATCH):
+
+| Request | Status | Body |
+|---|---|---|
+| Source not a knowledge source of this workspace (other workspace, tone/style, deleted) | `400` | `{"knowledge": ["No pdf knowledge source <id> in this workspace."]}` |
+| Unknown `kind` | `400` | `{"knowledge": [{"kind": ["\"video\" is not a valid choice."]}]}` |
+| `label` over 200 chars | `400` | `{"label": ["Ensure this field has no more than 200 characters."]}` |
+| Foreign / inactive workspace | `404` | unchanged |
 
 ---
 

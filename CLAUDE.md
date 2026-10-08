@@ -160,6 +160,10 @@ Use `src/components/ui/Modal.tsx` for all modals. It handles backdrop, ESC key, 
 - Pass `null` as the selected item when closed; guard with `if (!item) return null` inside the modal
 - Use `key={item?.id ?? "no-item"}` on modals that hold local state — remounts with fresh state when item changes (avoids `useEffect` sync)
 
+## Hover Guide (ⓘ)
+
+For multi-line help next to a title use `src/components/ui/HoverGuide.tsx` (ⓘ icon → amber popover on hover) instead of a coloured tip line under the header. Pass `onDark` on dark card headers (`bg-sidebar-bg`). Single-line hints keep using `Tooltip`.
+
 ## Dropdown Pattern (click-outside)
 
 For custom dropdowns (not `<select>`), use `useRef` + `useEffect` to close on outside click:

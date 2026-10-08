@@ -23,6 +23,8 @@ Token-based auth. `Authorization: Token <key>` header on every API request. Toke
 | **Marketing Plan** | AI-generated content strategy with title, angle, pillars, and sample hooks; created in batches of 3 via `POST /content/plans/` |
 | **Plan Batch** | Group of 3 Marketing Plans produced from a single generation call; identified by a shared `batch` UUID |
 | **Follow-up Plan** | A new batch of 3 plans that continues an existing plan's strategy; created via `POST /content/plans/{id}/follow-up/` |
+| **Knowledge Switch** | Per-source on/off for Agent Mode knowledge (PDF, website, LinkedIn profile), shown in Composer settings and saved on the source. Only sources switched on are used; all off = no knowledge. Replaces the old single `use_knowledge` toggle |
+| **Source Note** | Optional free text (max 200 chars) telling the agent how to use a knowledge link or PDF, e.g. "Use this for article making". Stored in the backend `label` field; not a display name. LinkedIn profiles don't take one |
 | **Knowledge Base** | Agent-level websites and documents used to generate on-brand posts. Workspace-scoped, managed via `agent/websites/` and `agent/documents/` |
 | **Post Version** | Numbered snapshot (v1, v2, …) of a post's content, saved on every content change. Holds content only — status and schedule time always come from the live post. `current_version` on a post = the version it matches now |
 | **Latest Card** | For a post, the last agent chat card whose `payload.versions[postId]` equals the post's `current_version`. Only it can approve / edit / select; older cards show "Old version · vN" + "Use this version" |

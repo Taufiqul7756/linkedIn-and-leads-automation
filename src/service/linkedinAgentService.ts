@@ -5,6 +5,7 @@ import type {
   Conversation,
   PaginatedConversations,
   AgentSettings,
+  AgentSettingsPatch,
   AgentPost,
   PaginatedAgentPosts,
   InterruptAnswers,
@@ -112,7 +113,7 @@ export const linkedinAgentService = (workspaceId: string) => ({
 
   getSettings: () => axiosGet<AgentSettings>(`/workspaces/${workspaceId}/agent/settings/`),
 
-  patchSettings: (data: Partial<AgentSettings>) =>
+  patchSettings: (data: AgentSettingsPatch) =>
     axiosPatch<AgentSettings>(`/workspaces/${workspaceId}/agent/settings/`, data),
 
   getPostVersion: (postId: string, version: number) =>

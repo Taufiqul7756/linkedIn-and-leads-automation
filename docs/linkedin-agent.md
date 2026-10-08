@@ -202,11 +202,11 @@ Optional — include `post` to target a specific draft:
 ```json
 {
   "use_emoji": false,
-  "use_knowledge": true,
   "use_ai_image": false,
   "make_longer": false
 }
 ```
+> Outdated example — current shape under **Updated Settings Shape**; `use_knowledge` was removed in favour of per-source `knowledge` switches (see **Knowledge Notes & Switches**).
 - PATCH is partial — send only what changed
 - These are defaults; the prompt outranks them for a specific generation
 
@@ -439,7 +439,7 @@ interface AgentSettings {
   post_count: number;       // 1–20, default 5
   use_hashtags: boolean;    // default true — tags in body AND hashtags array
   use_emoji: boolean;       // default false
-  use_knowledge: boolean;   // default true
+  // use_knowledge — REMOVED (Story #3999), replaced by per-source `knowledge` switches
   use_ai_image: boolean;    // default true — false = NO image, not even stock photo
   ignore_headline: boolean; // default false — true = skip headline round
   ignore_grilling: boolean; // default false — true = skip clarifying questions
@@ -625,6 +625,47 @@ Feature PRD: `docs/prd/post-version-history.md` · API: `docs/api-reference.md` 
 - Non-current rows: **Use this version** (same restore; hidden for published posts); modal closes on success
 
 **Edit modal save** → also refetches the conversation so the backend's "You edited post N in post management." card appears.
+
+---
+
+### Knowledge Notes & Switches
+
+Feature PRD: `docs/prd/knowledge-switches.md` · API: `docs/api-reference.md` → Knowledge switches. Agent Mode only (Story #3999).
+
+> **Backend field `label` = the source's note for the agent** — free text telling the agent how to use that link / file (e.g. "Use this for article making"). It is **not** a display name: the source's name (file name / URL) always stays the title, the note is shown under it.
+
+**Composer settings → Knowledge** (`KnowledgeSwitches` in `AutomationView.tsx`) — replaces the removed **Use knowledge base** toggle (`use_knowledge` is no longer sent):
+- **Accordion** (`SettingsAccordion`, collapsed by default): header "Knowledge" + summary "`n` of `total` on" (or "None") + chevron; click expands the list.
+- Lists `settings.knowledge` (oldest first): kind icon (`SourceIcon` tile — PDF / website / LinkedIn), `name` as the title, "Note: …" line under it when `label` is set, **Processing** badge while not `ready`/`failed`, **Failed** badge, and a small `Toggle`. Scrolls past `max-h-48`.
+- Flip → `setKnowledgeEnabled(item, enabled)` in `useAgentSettings`: optimistic update of **that item only** → `PATCH settings/ { knowledge: [{ kind, id, enabled }] }` → invalidate. Error → item rolls back + toast (`knowledge[0]` field error, else `detail`).
+- `useAgentSettings` polls settings every 3s while any knowledge item is still processing.
+- Empty pool → "No knowledge yet — **Add in Knowledge base**" (closes the panel, opens `KnowledgeBaseModal`).
+- All off → drafts written without knowledge. Attachments are not listed (always used for their chat).
+- **Tone / Style accordion** (`ToneSources`) under Knowledge, same accordion style, summary = count (or "None"). Read-only list of tone/style references (websites + PDFs with `purpose` `tone`/`style`): `SourceIcon` tile, URL / file name, **Default** badge when `is_default`, Processing / Failed status. No switches (the API has none for tone). Fetched with the modal's query keys `["agent-documents"|"agent-websites", workspaceId]` while composer settings are open, so both stay in sync. Empty → "Nothing added yet — Add in Knowledge base".
+
+**Knowledge base modal** (`KnowledgeBaseModal.tsx`, Knowledge card only — Tone/Style unchanged). Kept deliberately low on text (team feedback: too much text for a first-time user) — explanations live in ⓘ hover guides:
+- **Icons**: `SourceIcon` (`src/components/linkedin/SourceIcon.tsx`) — vector icons on a rounded tile (no image files), glyph = 60% of the tile; 20px in composer, 32–36px in the modal: website = `LuGlobe` on sky tile, PDF = `LuFileText` on red tile, LinkedIn = `FaLinkedinIn` white on LinkedIn-blue tile (`bg-linkedin`, token `--linkedin` in `globals.css`). Any `linkedin.com` URL (e.g. a LinkedIn post in Additional knowledge or Tone / Style) gets the LinkedIn tile via the `url` prop; LinkedIn profile rows use it too. DOCX / TXT keep the text badge.
+- **ⓘ hover guides** (`src/components/ui/HoverGuide.tsx` — `LuInfo` icon: white/70 on dark card headers (`onDark`), blue in sections; amber popover on hover). **No coloured tip lines under any card header** — each card's tip lives in an ⓘ after its title:
+  - after the **Knowledge** card title (`KnowledgeGuide`) — replaces the old blue tip line: "Add your LinkedIn profile, then any websites, posts or documents — so the agent knows your brand, products, and story."
+  - after the **Tone / Style** card title (`ToneGuide`) — replaces the violet tip line: "Add writing samples — blog posts, LinkedIn posts, or documents — so the agent matches your voice and style."
+  - after the **Audience & Length** card title (`AudienceLengthSection.tsx`) — replaces the green tip line: "Tell the agent who you're writing for and how long your posts should be."
+  - after the **Additional knowledge** title (`AdditionalKnowledgeGuide`): what to add, how to write the note (examples), PDF flow, switches live in Composer settings → Knowledge.
+- The card has two stacked parts (`SubsectionHeader` — title + optional ⓘ only; no counts, no hint lines — the total count stays on the Knowledge card header). Tabs were considered and rejected: Your LinkedIn profile is step 1 and must stay visible.
+  - **Your LinkedIn profile** — URL input (placeholder `linkedin.com/in/username`) + Add → `handleAddProfile` → `createProfile(url)` with **no note**. The input shows **only while no profile exists**; once added, just the profile row (username, profile URL, summary, status, delete). Deleting it brings the input back. A non-profile URL → toast "Enter a LinkedIn profile URL (linkedin.com/in/…)".
+  - **Additional knowledge** — websites, LinkedIn posts, other links, PDFs. Lists website + PDF rows below the upload controls, separated by extra space + a divider (`mt-5 border-t`).
+- **Note for the agent (optional)** (`NoteInput` — single-line input, Enter = submit, `maxLength 200`, `n/200` counter) in Additional knowledge. Styled as part of its source: indented with a `LuCornerDownRight` ↳ connector, blue-tinted field (`bg-blue-50/60`, white on focus), fades in (`animate-fade-in-up`):
+  - **Link**: one bordered box — URL field (placeholder "Website, LinkedIn post or article URL"), note field ↳ under it **appears once something is typed** in the URL (placeholder "How should the agent use this link? (optional)"); **Add link** (bottom right) is hidden until something is typed, then fades in.
+  - **URL validation** (`isValidUrl`): http(s) only, scheme optional (`acme.com` ok), hostname must be a real domain (`x.tld`, TLD ≥ 2 letters), no spaces — rejects `hello`, `localhost`, IPs, `ftp://`, `javascript:`. Add link is disabled while invalid. The red border + "Enter a valid link, e.g. acme.com" shows only after blur or an Add / Enter attempt (not while typing); cleared after a successful add. Tone/Style URL uses the same check (toast on invalid). Enter in either field adds. Sent as `label`. A LinkedIn profile URL here → toast "Add LinkedIn profiles under Your LinkedIn profile." (not added).
+  - **PDF**: full-width **Upload PDF** button (under the link box) → staged card with the file name (✕ to remove), the ↳ note field (placeholder "How should the agent use this PDF? (optional)"), and **Cancel / Upload**. Upload sends `label`.
+  - Cleared after a successful add / upload. Tone/Style uploads still upload immediately with no note.
+- **Clickable sources** (`SourceLink`, opens in a new tab, `noopener noreferrer`, underline on hover): website URL, LinkedIn profile URL, and PDF file name (links to `doc.file`; plain text if missing) — Knowledge and Tone/Style rows. Scheme-less URLs (`acme.com`) get `https://` (`toHref`).
+- Website / PDF rows: name stays the title; `EditableNote` under it — "Note: …" with ✏️, or **Add note for the agent** when empty → inline single-line input (Enter / ✓ save, Esc / ✕ cancel) → `PATCH { label }` on the source route (`patchAgentWebsite` / `patchAgentDocument`).
+- **Upload** buttons (Knowledge "Upload PDF" + Tone/Style "Upload a document") are a purple dashed field (`border-2 border-dashed border-purple-300 bg-purple-50`, purple icon/text) so they stand out.
+- **Upload / processing feedback** — `.animate-sweep` (`globals.css`, `@keyframes sweep`, colour token `--processing-sweep`) runs a light purple band left → right across the element:
+  - staged PDF card while `uploadingKnowledgeDoc`; Tone/Style upload button while `uploadingToneDoc` (label → "Uploading…")
+  - website / PDF rows (`SiteRow` / `DocRow`, both sections) while `isProcessing(status)` (not `ready` / `failed` / `error`) — row tinted purple + purple spinner beside the **Processing** badge. Lists poll every 3s, so the sweep and spinner stop when the source turns Ready.
+- `400 { label: [...] }` → toast with the field message.
+- Add / note edit / delete invalidate `["agent-settings", workspaceId]` so the composer list stays in sync.
 
 ---
 

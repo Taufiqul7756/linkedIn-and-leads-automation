@@ -43,6 +43,9 @@ import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
 import VersionHistoryModal from "./VersionHistoryModal";
+import SourceIcon from "./SourceIcon";
+import { agentService } from "@/service/agentService";
+import type { ProfileDocument, ProfileWebsite } from "@/types/Agent";
 import type {
   Attachment,
   Conversation,
@@ -57,6 +60,7 @@ import type {
   InterruptAnswers,
   PendingInterrupt,
   PostVersion,
+  KnowledgeSwitch,
 } from "@/types/LinkedInAgent";
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -390,6 +394,172 @@ function Toggle({
         )}
       />
     </button>
+  );
+}
+
+// Composer settings — collapsible group (Knowledge, Tone / Style). Collapsed by default.
+function SettingsAccordion({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="py-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 py-2 text-left"
+      >
+        <span className="text-sm font-medium text-gray-800">{title}</span>
+        <span className="flex shrink-0 items-center gap-1.5 text-xs text-gray-400">
+          {summary}
+          <LuChevronDown
+            className={cn("h-4 w-4 transition-transform duration-200", open && "rotate-180")}
+          />
+        </span>
+      </button>
+      {open && <div className="pb-2">{children}</div>}
+    </div>
+  );
+}
+
+function SourceStatus({ status }: { status: string }) {
+  if (status === "failed" || status === "error")
+    return (
+      <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-red-500">
+        Failed
+      </span>
+    );
+  if (status !== "ready")
+    return (
+      <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+        Processing
+      </span>
+    );
+  return null;
+}
+
+function EmptySources({ onOpenKnowledgeBase }: { onOpenKnowledgeBase: () => void }) {
+  return (
+    <p className="text-xs text-gray-500">
+      Nothing added yet —{" "}
+      <button
+        onClick={onOpenKnowledgeBase}
+        className="font-medium text-blue-600 hover:text-blue-700"
+      >
+        Add in Knowledge base
+      </button>
+    </p>
+  );
+}
+
+// Composer settings → one switch per knowledge source (tone/style references are never listed)
+function KnowledgeSwitches({
+  items,
+  onToggle,
+  onOpenKnowledgeBase,
+}: {
+  items: KnowledgeSwitch[];
+  onToggle: (item: KnowledgeSwitch, enabled: boolean) => void;
+  onOpenKnowledgeBase: () => void;
+}) {
+  const onCount = items.filter((i) => i.enabled).length;
+  return (
+    <SettingsAccordion
+      title="Knowledge"
+      summary={items.length ? `${onCount} of ${items.length} on` : "None"}
+    >
+      <p className="mb-2 text-xs text-gray-400">
+        Only sources switched on are used. All off = no knowledge
+      </p>
+      {items.length === 0 ? (
+        <EmptySources onOpenKnowledgeBase={onOpenKnowledgeBase} />
+      ) : (
+        <div className="max-h-48 space-y-1 overflow-y-auto">
+          {items.map((item) => (
+            <div
+              key={`${item.kind}:${item.id}`}
+              className="flex items-center gap-2 rounded-lg px-1 py-1.5"
+            >
+              <SourceIcon kind={item.kind} url={item.name} className="h-5 w-5" />
+              {/* `label` is the user's note for the agent — shown under the source name */}
+              <div
+                className="min-w-0 flex-1"
+                title={item.label ? `${item.name}\nNote: ${item.label}` : item.name}
+              >
+                <p className="truncate text-xs text-gray-700">{item.name}</p>
+                {item.label && (
+                  <p className="truncate text-[11px] text-gray-400">Note: {item.label}</p>
+                )}
+              </div>
+              <SourceStatus status={item.status} />
+              <Toggle small checked={item.enabled} onChange={(v) => onToggle(item, v)} />
+            </div>
+          ))}
+        </div>
+      )}
+    </SettingsAccordion>
+  );
+}
+
+interface ToneSource {
+  id: string;
+  kind: "pdf" | "website";
+  name: string;
+  status: string;
+  isDefault: boolean;
+}
+
+// Composer settings → tone / style references (read-only — no per-source switch in the API)
+function ToneSources({
+  items,
+  loading,
+  onOpenKnowledgeBase,
+}: {
+  items: ToneSource[];
+  loading: boolean;
+  onOpenKnowledgeBase: () => void;
+}) {
+  return (
+    <SettingsAccordion title="Tone / Style" summary={items.length ? `${items.length}` : "None"}>
+      <p className="mb-2 text-xs text-gray-400">
+        Writing samples the agent matches your voice to. Manage them in Knowledge base
+      </p>
+      {loading ? (
+        <p className="flex items-center gap-2 text-xs text-gray-400">
+          <LuLoader className="h-3.5 w-3.5 animate-spin" />
+          Loading…
+        </p>
+      ) : items.length === 0 ? (
+        <EmptySources onOpenKnowledgeBase={onOpenKnowledgeBase} />
+      ) : (
+        <div className="max-h-48 space-y-1 overflow-y-auto">
+          {items.map((item) => (
+            <div
+              key={`${item.kind}:${item.id}`}
+              className="flex items-center gap-2 rounded-lg px-1 py-1.5"
+            >
+              <SourceIcon kind={item.kind} url={item.name} className="h-5 w-5" />
+              <p className="min-w-0 flex-1 truncate text-xs text-gray-700" title={item.name}>
+                {item.name}
+              </p>
+              {item.isDefault && (
+                <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+                  Default
+                </span>
+              )}
+              <SourceStatus status={item.status} />
+            </div>
+          ))}
+        </div>
+      )}
+    </SettingsAccordion>
   );
 }
 
@@ -1447,7 +1617,42 @@ export default function AutomationView() {
     settingsLoaded,
     saving: settingsSaving,
     saveSettings,
+    setKnowledgeEnabled,
   } = useAgentSettings(workspaceId);
+
+  // Tone / Style references for the composer settings accordion — shares the
+  // Knowledge base modal's query keys so both stay in sync
+  const { data: toneDocsData, isLoading: toneDocsLoading } = useQueryWithTokenRefresh(
+    ["agent-documents", workspaceId],
+    () => agentService(workspaceId).getAgentDocuments(),
+    { enabled: !!workspaceId && settingsOpen }
+  );
+  const { data: toneSitesData, isLoading: toneSitesLoading } = useQueryWithTokenRefresh(
+    ["agent-websites", workspaceId],
+    () => agentService(workspaceId).getAgentWebsites(),
+    { enabled: !!workspaceId && settingsOpen }
+  );
+  const isToneSource = (purpose: string) => purpose === "tone" || purpose === "style";
+  const toneSources = [
+    ...((toneSitesData as { results?: ProfileWebsite[] } | undefined)?.results ?? [])
+      .filter((w) => isToneSource(w.purpose))
+      .map((w) => ({
+        id: w.id,
+        kind: "website" as const,
+        name: w.url,
+        status: w.status,
+        isDefault: w.is_default,
+      })),
+    ...((toneDocsData as { results?: ProfileDocument[] } | undefined)?.results ?? [])
+      .filter((d) => isToneSource(d.purpose))
+      .map((d) => ({
+        id: d.id,
+        kind: "pdf" as const,
+        name: d.filename,
+        status: d.status,
+        isDefault: d.is_default,
+      })),
+  ];
 
   // ── approve draft posts ──
   const handleApprovePost = useCallback(
@@ -3239,20 +3444,22 @@ export default function AutomationView() {
                                   onChange={(v) => handleSettingChange("use_post_length", v)}
                                 />
                               </div>
-                              <div className="flex items-start justify-between gap-3 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-800">
-                                    Use knowledge base
-                                  </p>
-                                  <p className="text-xs text-gray-400">
-                                    Ground drafts in your connected sources
-                                  </p>
-                                </div>
-                                <Toggle
-                                  checked={settings.use_knowledge}
-                                  onChange={(v) => handleSettingChange("use_knowledge", v)}
-                                />
-                              </div>
+                              <KnowledgeSwitches
+                                items={settings.knowledge ?? []}
+                                onToggle={setKnowledgeEnabled}
+                                onOpenKnowledgeBase={() => {
+                                  setSettingsOpen(false);
+                                  setKnowledgeOpen(true);
+                                }}
+                              />
+                              <ToneSources
+                                items={toneSources}
+                                loading={toneDocsLoading || toneSitesLoading}
+                                onOpenKnowledgeBase={() => {
+                                  setSettingsOpen(false);
+                                  setKnowledgeOpen(true);
+                                }}
+                              />
                             </div>
                           </div>
                         )}

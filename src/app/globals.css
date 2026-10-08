@@ -37,6 +37,30 @@
   animation: shimmer-card 1.6s ease-in-out infinite;
 }
 
+/* Left → right light sweep over a row/card while it uploads or processes */
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.animate-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--processing-sweep), transparent);
+  animation: sweep 1.4s ease-in-out infinite;
+}
+
 /* ── Design tokens — change fonts and colors here ── */
 :root {
   --background: #ffffff;
@@ -53,6 +77,10 @@
   --brand: #590cc2;
   --brand-dark: #47099b;
   --brand-light: #6447fc;
+  /* LinkedIn brand blue — LinkedIn source icon tiles */
+  --linkedin: #0a66c2;
+  /* Knowledge upload / processing sweep highlight */
+  --processing-sweep: rgba(147, 51, 234, 0.18);
   /* Image sizing — images keep their natural aspect ratio, capped by these */
   --chat-image-max-h: 32rem;
   --lightbox-image-max-h: 85vh;
@@ -72,6 +100,7 @@
   --color-brand: var(--brand);
   --color-brand-dark: var(--brand-dark);
   --color-brand-light: var(--brand-light);
+  --color-linkedin: var(--linkedin);
   --font-sans: var(--font-inter);
   --font-mono: ui-monospace, monospace;
 }

@@ -1,4 +1,4 @@
-import { get, patch, postRaw, del } from "@/lib/api";
+import { get, patch, patchRaw, postRaw, del } from "@/lib/api";
 import {
   LinkedInProfile,
   MarketingPlan,
@@ -11,10 +11,14 @@ export const agentService = (workspaceId: string) => ({
   // Phase A — LinkedIn Profile
   getProfiles: () =>
     get<{ results: LinkedInProfile[] }>(`/workspaces/${workspaceId}/linkedin/profiles/`),
-  createProfile: (url: string) =>
+  createProfile: (url: string, label?: string) =>
     postRaw<LinkedInProfile>(`/workspaces/${workspaceId}/linkedin/profiles/`, {
       profile_url: url,
+      ...(label ? { label } : {}),
     }),
+  // Rename — label "" falls back to the profile URL in the UI
+  patchProfile: (id: string, data: { label?: string; enabled?: boolean }) =>
+    patchRaw<LinkedInProfile>(`/workspaces/${workspaceId}/linkedin/profiles/${id}/`, data),
   getProfile: (id: string) =>
     get<LinkedInProfile>(`/workspaces/${workspaceId}/linkedin/profiles/${id}/`),
   refetchProfile: (id: string) =>
@@ -24,13 +28,19 @@ export const agentService = (workspaceId: string) => ({
   // Agent — Documents
   getAgentDocuments: () =>
     get<{ results: ProfileDocument[] }>(`/workspaces/${workspaceId}/linkedin/agent/documents/`),
-  uploadAgentDocument: (file: File, purpose = "knowledge", is_default = false) => {
+  uploadAgentDocument: (file: File, purpose = "knowledge", is_default = false, label?: string) => {
     const form = new FormData();
     form.append("file", file);
     form.append("purpose", purpose);
     form.append("is_default", String(is_default));
+    if (label) form.append("label", label);
     return postRaw<ProfileDocument>(`/workspaces/${workspaceId}/linkedin/agent/documents/`, form);
   },
+  patchAgentDocument: (docId: string, data: { label?: string; enabled?: boolean }) =>
+    patchRaw<ProfileDocument>(
+      `/workspaces/${workspaceId}/linkedin/agent/documents/${docId}/`,
+      data
+    ),
   deleteAgentDocument: (docId: string) =>
     del<void>(`/workspaces/${workspaceId}/linkedin/agent/documents/${docId}/`),
   reextractAgentDocument: (docId: string) =>
@@ -41,12 +51,15 @@ export const agentService = (workspaceId: string) => ({
   // Agent — Websites
   getAgentWebsites: () =>
     get<{ results: ProfileWebsite[] }>(`/workspaces/${workspaceId}/linkedin/agent/websites/`),
-  addAgentWebsite: (url: string, purpose = "knowledge", is_default = false) =>
+  addAgentWebsite: (url: string, purpose = "knowledge", is_default = false, label?: string) =>
     postRaw<ProfileWebsite>(`/workspaces/${workspaceId}/linkedin/agent/websites/`, {
       url,
       purpose,
       is_default,
+      ...(label ? { label } : {}),
     }),
+  patchAgentWebsite: (id: string, data: { label?: string; enabled?: boolean }) =>
+    patchRaw<ProfileWebsite>(`/workspaces/${workspaceId}/linkedin/agent/websites/${id}/`, data),
   getAgentWebsite: (id: string) =>
     get<ProfileWebsite>(`/workspaces/${workspaceId}/linkedin/agent/websites/${id}/`),
   deleteAgentWebsite: (id: string) =>
