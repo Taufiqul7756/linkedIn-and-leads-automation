@@ -24,6 +24,9 @@ export type LinkedInProfile = {
   knowledge_items?: { text: string; topic: string; source: string }[];
   posts_count?: number;
   error: string;
+  // Knowledge switches — note for the agent (`label`, "" = none) and on/off for the composer
+  label?: string;
+  enabled?: boolean;
   created_at: string;
 };
 
@@ -39,6 +42,8 @@ export type ProfileDocument = {
   guide: string;
   facets: string;
   error: string;
+  label?: string;
+  enabled?: boolean;
   created_at: string;
 };
 
@@ -52,6 +57,8 @@ export type ProfileWebsite = {
   summary: string;
   facets: string;
   error: string;
+  label?: string;
+  enabled?: boolean;
   created_at: string;
 };
 

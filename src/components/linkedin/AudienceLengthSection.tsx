@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LuCheck, LuInfo, LuLoader } from "react-icons/lu";
 import { cn } from "@/utils/cn";
+import HoverGuide from "@/components/ui/HoverGuide";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import type { AgentSettings } from "@/types/LinkedInAgent";
 
@@ -165,13 +166,16 @@ function AudienceLengthCard({
     <div className="mb-6 rounded-xl border border-gray-200">
       {/* Header */}
       <div className="flex items-center justify-between rounded-t-xl bg-sidebar-bg px-4 py-3">
-        <p className="text-sm font-semibold text-white">Audience & Length</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-semibold text-white">Audience & Length</p>
+          <HoverGuide onDark>
+            <span className="block font-semibold">What is Audience & Length?</span>
+            <span className="mt-1.5 block">
+              Tell the agent who you&apos;re writing for and how long your posts should be.
+            </span>
+          </HoverGuide>
+        </div>
       </div>
-
-      {/* Tip */}
-      <p className="border-b border-gray-100 bg-emerald-50/50 px-4 py-2.5 text-xs text-emerald-600">
-        Tell the agent who you&apos;re writing for and how long your posts should be.
-      </p>
 
       <div className="space-y-5 p-4">
         {/* Target audience */}

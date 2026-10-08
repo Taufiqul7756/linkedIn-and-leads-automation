@@ -92,11 +92,14 @@ export interface AgentSettings {
   post_count: number;
   use_hashtags: boolean;
   use_emoji: boolean;
-  use_knowledge: boolean;
   use_ai_image: boolean;
   ignore_headline: boolean;
   // No longer returned by GET settings/ — kept optional for older payloads
   ignore_grilling?: boolean;
+  // Per-source knowledge switches (replaces the removed use_knowledge) — oldest first
+  knowledge?: KnowledgeSwitch[];
+  // Tone / style switches (story #4025) — never overlaps with `knowledge`
+  tone_and_style?: VoiceSwitch[];
   ask_questions: boolean;
   use_post_length: boolean;
   // "100 words" | "200 words" | "300 words" | "" (let the agent decide)
@@ -108,6 +111,37 @@ export interface AgentSettings {
   // Read-only: available writer models grouped by provider (anthropic, deepseek, gemini, …)
   ai_models?: Record<string, AgentModelOption[]>;
 }
+
+export type KnowledgeKind = "pdf" | "website" | "linkedin";
+
+// One knowledge source in GET settings/ → knowledge[]. Tone/style references are never listed.
+export interface KnowledgeSwitch {
+  id: string;
+  kind: KnowledgeKind;
+  label: string; // note for the agent ("Use this for article making"); "" = none
+  name: string; // file name, URL or profile URL
+  // "ready" | "failed" | in progress: "pending" | "extracting" | "crawling" | "fetching"
+  status: string;
+  enabled: boolean;
+}
+
+// PATCH settings/ body — knowledge carries only the switches that changed
+// One tone / style source in GET settings/ → tone_and_style[]. Several can be on at once.
+export interface VoiceSwitch {
+  id: string;
+  kind: "pdf" | "website";
+  purpose?: "tone" | "style"; // in the spec, not sent by the backend yet
+  label: string; // note for the agent; "" = none
+  name: string; // file name or URL
+  // "ready" | "failed" | in progress: "pending" | "extracting" | "crawling"
+  status: string;
+  enabled: boolean;
+}
+
+export type AgentSettingsPatch = Omit<Partial<AgentSettings>, "knowledge" | "tone_and_style"> & {
+  knowledge?: Pick<KnowledgeSwitch, "kind" | "id" | "enabled">[];
+  tone_and_style?: Pick<VoiceSwitch, "kind" | "id" | "enabled">[];
+};
 
 export interface AgentModelOption {
   model_id: string;
