@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import {
   LuPlus,
@@ -38,7 +40,6 @@ import Modal from "@/components/ui/Modal";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
-import RejectConfirmModal from "@/components/linkedin-autopilot/RejectConfirmModal";
 import type {
   Attachment,
   Conversation,
@@ -52,6 +53,7 @@ import type {
   SpanNode,
   InterruptAnswers,
   PendingInterrupt,
+  PostVersion,
 } from "@/types/LinkedInAgent";
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -738,21 +740,29 @@ function DraftCard({
   onEdit,
   onEditTime,
   onApprove,
-  onReject,
   isApproving,
-  isRejecting,
   isSelected,
   onSelect,
+  readOnly = false,
+  oldVersion,
+  onRestore,
+  isRestoring = false,
+  restoreDisabled = false,
 }: {
   post: AgentPost;
   onEdit: (post: AgentPost) => void;
   onEditTime: (post: AgentPost) => void;
   onApprove: (id: string) => void;
-  onReject: (id: string) => void;
   isApproving: boolean;
-  isRejecting: boolean;
   isSelected?: boolean;
   onSelect?: (id: string | null) => void;
+  // Not the latest card for this post — no approve / edit / select (they'd change the LIVE post)
+  readOnly?: boolean;
+  // Version shown on a read-only card — renders the "Old version · vN" badge
+  oldVersion?: number;
+  onRestore?: () => void;
+  isRestoring?: boolean;
+  restoreDisabled?: boolean;
 }) {
   const router = useRouter();
   const isVideoActive = post.media_type === "video";
@@ -761,6 +771,7 @@ function DraftCard({
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
 
   const isDraft = post.status === "draft";
+  const canAct = !readOnly;
 
   const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
     approved: { label: "Approved", cls: "bg-green-100 text-green-700" },
@@ -775,7 +786,7 @@ function DraftCard({
     // Outer wrapper: overflow-visible so floating buttons protrude above top border
     <div className="group relative h-72 w-96 shrink-0">
       {/* Checkbox — top-left, hover or selected; shown for any non-published card */}
-      {onSelect && post.status !== "published" && (
+      {canAct && onSelect && post.status !== "published" && (
         <button
           onClick={() => onSelect(isSelected ? null : post.id)}
           className={cn(
@@ -789,35 +800,21 @@ function DraftCard({
           {isSelected && <LuCheck className="h-3 w-3 text-white" />}
         </button>
       )}
-      {/* Floating area — approve/reject buttons for drafts, status pill for everything else */}
+      {/* Floating area — approve button for drafts */}
       <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
-        {isDraft && (
-          <>
-            <button
-              onClick={() => onApprove(post.id)}
-              disabled={isApproving || isRejecting}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500 disabled:opacity-50"
-              title="Approve"
-            >
-              {isApproving ? (
-                <LuLoader className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <LuCheck className="h-3.5 w-3.5" />
-              )}
-            </button>
-            <button
-              onClick={() => onReject(post.id)}
-              disabled={isApproving || isRejecting}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400 disabled:opacity-50"
-              title="Delete"
-            >
-              {isRejecting ? (
-                <LuLoader className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <LuX className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </>
+        {canAct && isDraft && (
+          <button
+            onClick={() => onApprove(post.id)}
+            disabled={isApproving}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-green-400 hover:bg-green-50 hover:text-green-500 disabled:opacity-50"
+            title="Approve"
+          >
+            {isApproving ? (
+              <LuLoader className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <LuCheck className="h-3.5 w-3.5" />
+            )}
+          </button>
         )}
       </div>
 
@@ -827,7 +824,7 @@ function DraftCard({
           "flex h-full flex-col overflow-hidden rounded-2xl border bg-white p-4",
           isSelected
             ? "border-blue-400 ring-1 ring-blue-300"
-            : isDraft
+            : isDraft || readOnly
               ? "border-gray-200"
               : "border-green-200"
         )}
@@ -841,15 +838,24 @@ function DraftCard({
           ) : (
             <span />
           )}
-          <span
-            className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", badge.cls)}
-          >
-            {badge.label}
-          </span>
+          {oldVersion != null ? (
+            <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-500">
+              Old version · v{oldVersion}
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                badge.cls
+              )}
+            >
+              {badge.label}
+            </span>
+          )}
         </div>
 
-        {/* Scheduled time */}
-        {dateStr && (
+        {/* Scheduled time — live post's time, so hidden on old versions */}
+        {canAct && dateStr && (
           <div className="mb-2 flex shrink-0 items-center gap-1 text-xs text-gray-400">
             <LuClock className="h-3 w-3 shrink-0" />
             <span>{dateStr}</span>
@@ -893,8 +899,26 @@ function DraftCard({
           )}
         </div>
 
+        {/* Old version — the only action is restoring it (not allowed once published) */}
+        {readOnly && onRestore && post.status !== "published" && (
+          <div className="absolute bottom-3 right-3">
+            <button
+              onClick={onRestore}
+              disabled={isRestoring || restoreDisabled}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRestoring ? (
+                <LuLoader className="h-3 w-3 animate-spin" />
+              ) : (
+                <LuHistory className="h-3 w-3" />
+              )}
+              Use this version
+            </button>
+          </div>
+        )}
+
         {/* Hover action buttons — bottom center, hidden for published posts */}
-        {post.status !== "published" && (
+        {canAct && post.status !== "published" && (
           <div className="absolute bottom-3 right-3 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
             <button
               onClick={() => onEdit(post)}
@@ -926,18 +950,142 @@ function DraftCard({
   );
 }
 
+function DraftCardSkeleton() {
+  return (
+    <div className="flex h-72 w-96 shrink-0 flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
+      <div className="h-3 w-1/3 animate-pulse rounded bg-gray-100" />
+      <div className="h-24 animate-pulse rounded-xl bg-gray-100" />
+      <div className="h-3 animate-pulse rounded bg-gray-100" />
+      <div className="h-3 w-5/6 animate-pulse rounded bg-gray-100" />
+    </div>
+  );
+}
+
+// Content comes from the version; status / schedule time always from the live post (base)
+function applyVersion(base: AgentPost | undefined, v: PostVersion): AgentPost {
+  const content = snapshotToAgentPost({
+    post_id: v.post,
+    headline: v.headline,
+    body: v.body,
+    body_blocks: v.body_blocks,
+    hashtags: v.hashtags,
+    cta: v.cta,
+    image_url: v.image_url,
+    image_status: v.image_status,
+    video_url: v.video_url,
+    media_type: v.media_type,
+  });
+  if (!base) return content;
+  return {
+    ...base,
+    headline: content.headline,
+    body: content.body,
+    body_blocks: content.body_blocks,
+    hashtags: content.hashtags,
+    cta: content.cta,
+    image_url: content.image_url,
+    image_status: content.image_status,
+    video_url: content.video_url,
+    media_type: content.media_type,
+  };
+}
+
+// Renders one post on a chat card at the version that card recorded (payload.versions).
+// Cards without a version (pre-versioning chats) render the live post, as before.
+function VersionedDraftCard({
+  workspaceId,
+  postId,
+  version,
+  basePost,
+  isLatest,
+  onRestore,
+  ...cardProps
+}: {
+  workspaceId: string;
+  postId: string;
+  version: number | undefined;
+  // Live post (or its snapshot fallback before posts load) — source of status + time
+  basePost: AgentPost | undefined;
+  isLatest: boolean;
+  onRestore: (postId: string, version: number) => void;
+  onEdit: (post: AgentPost) => void;
+  onEditTime: (post: AgentPost) => void;
+  onApprove: (id: string) => void;
+  isApproving: boolean;
+  isRestoring: boolean;
+  restoreDisabled: boolean;
+  isSelected?: boolean;
+  onSelect?: (id: string | null) => void;
+}) {
+  const { data: ver, error } = useQueryWithTokenRefresh<PostVersion>(
+    ["post-version", workspaceId, postId, version],
+    () => linkedinAgentService(workspaceId).getPostVersion(postId, version!),
+    {
+      enabled: !!workspaceId && version != null,
+      // A version never changes, except its picture filling in while image_status is "pending"
+      staleTime: Infinity,
+      retry: (count, err) => !isNotFound(err) && count < 2,
+      refetchInterval: (q) => (q.state.data?.image_status === "pending" ? 3000 : false),
+    }
+  );
+
+  if (version != null && isNotFound(error)) {
+    return (
+      <div className="flex h-72 w-96 shrink-0 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white p-4 text-sm text-gray-400">
+        This post was deleted.
+      </div>
+    );
+  }
+
+  let post: AgentPost | undefined;
+  if (version == null) post = basePost;
+  else if (ver) post = applyVersion(basePost, ver);
+  else if (error) post = basePost; // version fetch failed for another reason — show live content
+  if (!post) return <DraftCardSkeleton />;
+
+  return (
+    <DraftCard
+      post={post}
+      {...cardProps}
+      readOnly={!isLatest}
+      oldVersion={!isLatest ? version : undefined}
+      onRestore={!isLatest && version != null ? () => onRestore(postId, version) : undefined}
+    />
+  );
+}
+
+function isNotFound(err: unknown): boolean {
+  return axios.isAxiosError(err) && err.response?.status === 404;
+}
+
+// For each post: the message id of its LATEST card = the last agent card whose
+// payload.versions[postId] === post.current_version. Falls back to the last agent card showing
+// the post (pre-versioning chats, or before the live post has loaded).
+function getLatestCardByPost(
+  messages: Conversation["messages"],
+  posts: AgentPost[]
+): Record<string, string> {
+  const lastMatching: Record<string, string> = {};
+  const lastAny: Record<string, string> = {};
+  for (const msg of messages) {
+    if (msg.role !== "agent" || (msg.kind !== "posts" && msg.kind !== "edit")) continue;
+    const ids = (msg.payload.post_ids as string[] | undefined) ?? [];
+    const versions = msg.payload.versions as Record<string, number> | undefined;
+    for (const id of ids) {
+      lastAny[id] = msg.id;
+      const current = posts.find((p) => p.id === id)?.current_version;
+      if (versions?.[id] != null && versions[id] === current) lastMatching[id] = msg.id;
+    }
+  }
+  return { ...lastAny, ...lastMatching };
+}
+
 // Draft cards section
 function DraftsSection({
   posts,
-  onEdit,
-  onEditTime,
+  renderCard,
   onViewAll,
-  onApprove,
-  onReject,
-  approvingIds,
-  rejectingIds,
-  selectedPostId,
-  onSelectPost,
   onGenerateMore,
   generatingMore = false,
   generateMoreDisabled = false,
@@ -945,15 +1093,9 @@ function DraftsSection({
   previousPostIds = [],
 }: {
   posts: AgentPost[];
-  onEdit: (post: AgentPost) => void;
-  onEditTime: (post: AgentPost) => void;
+  // Renders one post at this message's version (see VersionedDraftCard)
+  renderCard: (post: AgentPost) => React.ReactNode;
   onViewAll: (posts: AgentPost[]) => void;
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
-  approvingIds: Set<string>;
-  rejectingIds: Set<string>;
-  selectedPostId?: string | null;
-  onSelectPost?: (id: string | null) => void;
   onGenerateMore?: () => void;
   // "Generate more drafts" run in flight for this message — cards locked, skeletons appended
   generatingMore?: boolean;
@@ -1000,7 +1142,7 @@ function DraftsSection({
         </div>
       </div>
 
-      {/* Horizontal scroll — pt-4 gives room for the floating ✓/× buttons */}
+      {/* Horizontal scroll — pt-4 gives room for the floating ✓ button */}
       <div ref={scrollRef} className="flex gap-3 overflow-x-auto pt-4 pb-2">
         {posts.map((post) => (
           <div
@@ -1013,32 +1155,13 @@ function DraftsSection({
                 "animate-fade-in-up"
             )}
           >
-            <DraftCard
-              post={post}
-              onEdit={onEdit}
-              onEditTime={onEditTime}
-              onApprove={onApprove}
-              onReject={onReject}
-              isApproving={approvingIds.has(post.id)}
-              isRejecting={rejectingIds.has(post.id)}
-              isSelected={selectedPostId === post.id}
-              onSelect={onSelectPost}
-            />
+            {renderCard(post)}
           </div>
         ))}
         {/* Placeholders where the new drafts will land */}
         {generatingMore &&
           Array.from({ length: skeletonCount }, (_, i) => (
-            <div
-              key={`skeleton-${i}`}
-              className="flex h-72 w-96 shrink-0 flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4"
-            >
-              <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
-              <div className="h-3 w-1/3 animate-pulse rounded bg-gray-100" />
-              <div className="h-24 animate-pulse rounded-xl bg-gray-100" />
-              <div className="h-3 animate-pulse rounded bg-gray-100" />
-              <div className="h-3 w-5/6 animate-pulse rounded bg-gray-100" />
-            </div>
+            <DraftCardSkeleton key={`skeleton-${i}`} />
           ))}
       </div>
 
@@ -1226,7 +1349,6 @@ export default function AutomationView() {
   const [history, setHistory] = useState<PaginatedConversations | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [editPost, setEditPost] = useState<AgentPost | null>(null);
-  const [rejectConfirmPost, setRejectConfirmPost] = useState<AgentPost | null>(null);
   const [timeEditPost, setTimeEditPost] = useState<AgentPost | null>(null);
   const [timeEditDraft, setTimeEditDraft] = useState("");
   const [savingTimeEdit, setSavingTimeEdit] = useState(false);
@@ -1235,7 +1357,8 @@ export default function AutomationView() {
   const [viewAllPosts, setViewAllPosts] = useState<AgentPost[]>([]);
   const [restoringConv, setRestoringConv] = useState(true);
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
-  const [rejectingIds, setRejectingIds] = useState<Set<string>>(new Set());
+  // `${postId}:${version}` of the "Use this version" request in flight
+  const [restoringKey, setRestoringKey] = useState<string | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [deleteConvConfirm, setDeleteConvConfirm] = useState<{
     id: string;
@@ -1285,7 +1408,7 @@ export default function AutomationView() {
     saveSettings,
   } = useAgentSettings(workspaceId);
 
-  // ── approve / reject draft posts ──
+  // ── approve draft posts ──
   const handleApprovePost = useCallback(
     async (id: string) => {
       setApprovingIds((prev) => new Set(prev).add(id));
@@ -1313,28 +1436,6 @@ export default function AutomationView() {
         }
       } finally {
         setApprovingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-    },
-    [workspaceId, queryClient]
-  );
-
-  const handleRejectPost = useCallback(
-    async (id: string) => {
-      setRejectingIds((prev) => new Set(prev).add(id));
-      try {
-        await postsService(workspaceId).rejectPost(id);
-        setPosts((prev) => prev.filter((p) => p.id !== id));
-        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
-        queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
-        toast.success("Post deleted.");
-      } catch (err) {
-        toast.error(extractErrorMessage(err) || "Failed to delete post.");
-      } finally {
-        setRejectingIds((prev) => {
           const next = new Set(prev);
           next.delete(id);
           return next;
@@ -1396,6 +1497,43 @@ export default function AutomationView() {
       }
     },
     [svc]
+  );
+
+  // ── "Use this version" on an old card — restores as a NEW version + appends its chat card ──
+  const handleRestoreVersion = useCallback(
+    async (postId: string, version: number) => {
+      if (!conversation) return;
+      const convId = conversation.id;
+      setRestoringKey(`${postId}:${version}`);
+      try {
+        const res = await svc().restoreVersion(convId, postId, version);
+        queryClient.setQueryData(
+          ["post-version", workspaceId, postId, res.version.number],
+          res.version
+        );
+        // message is null when that version was already current — nothing to append
+        if (res.message) {
+          const msg = res.message;
+          setConversation((prev) =>
+            prev && prev.id === convId ? { ...prev, messages: [...prev.messages, msg] } : prev
+          );
+        }
+        // current_version moved on (and an approved/scheduled post is back to draft)
+        await fetchPosts(conversation.artifacts.post_ids);
+        queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
+      } catch (err) {
+        // 400 { post: ["…"] } is a field error; everything else carries "detail"
+        const data = axios.isAxiosError(err)
+          ? (err.response?.data as { post?: string[] } | undefined)
+          : undefined;
+        toast.error(data?.post?.[0] ?? (extractErrorMessage(err) || "Failed to restore version."));
+      } finally {
+        setRestoringKey(null);
+      }
+    },
+    [conversation, svc, queryClient, workspaceId, fetchPosts]
   );
 
   // ── image generation polling ──
@@ -1519,7 +1657,7 @@ export default function AutomationView() {
             refreshHistory();
             if (conv.status === "running") startPolling(conv.id);
             // Always fetch the edited post so its live status is in state
-            // (approve/reject updates posts state; cards read from it, not the frozen snapshot)
+            // (approve updates posts state; cards read from it, not the frozen snapshot)
             fetchPosts(conv.artifacts.post_ids.length > 0 ? conv.artifacts.post_ids : [editPostId]);
           } catch {
             /* ignore */
@@ -1975,6 +2113,37 @@ export default function AutomationView() {
   const isAwaiting = conversation?.status === "awaiting_input";
   const isCompleted = conversation?.status === "completed";
   const isFailed = conversation?.status === "failed";
+
+  // Post versioning — only the latest card per post gets approve / edit / select
+  const latestCardByPost = getLatestCardByPost(conversation?.messages ?? [], posts);
+  const renderPostCard = (
+    msgId: string,
+    postId: string,
+    versions: Record<string, number> | undefined,
+    basePost: AgentPost | undefined
+  ) => {
+    const version = versions?.[postId];
+    const isLatest = latestCardByPost[postId] === msgId;
+    return (
+      <VersionedDraftCard
+        key={postId}
+        workspaceId={workspaceId}
+        postId={postId}
+        version={version}
+        basePost={basePost}
+        isLatest={isLatest}
+        onRestore={handleRestoreVersion}
+        isRestoring={restoringKey === `${postId}:${version}`}
+        restoreDisabled={isRunning || restoringKey !== null}
+        onEdit={setEditPost}
+        onEditTime={openTimeEdit}
+        onApprove={handleApprovePost}
+        isApproving={approvingIds.has(postId)}
+        isSelected={isLatest && selectedDraftId === postId}
+        onSelect={conversation?.has_multiple_post ? setSelectedDraftId : undefined}
+      />
+    );
+  };
   const isTerminal = conversation?.status === "cancelled" || conversation?.status === "archived";
   const hasPendingAttachments =
     conversation?.attachments?.some((a) => a.status === "pending") ?? false;
@@ -2315,12 +2484,23 @@ export default function AutomationView() {
                   // Agent messages — edit turn
                   if (msg.kind === "edit") {
                     const field = msg.payload.field as "text" | "image" | undefined;
+                    const editVersions = msg.payload.versions as Record<string, number> | undefined;
+                    // Legacy cards carried an `after` snapshot; versioned cards only carry ids
                     const afterRaw = msg.payload.after as PostSnapshot | PostSnapshot[] | undefined;
                     const afterSnapshots = afterRaw
                       ? Array.isArray(afterRaw)
                         ? afterRaw
                         : [afterRaw]
                       : [];
+                    const editPostIds =
+                      (msg.payload.post_ids as string[] | undefined) ??
+                      afterSnapshots.map((s) => s.post_id);
+                    const editCards = editPostIds.filter(
+                      (id) =>
+                        editVersions?.[id] != null ||
+                        posts.some((p) => p.id === id) ||
+                        afterSnapshots.some((s) => s.post_id === id)
+                    );
                     return (
                       <div key={msg.id} className="mt-4 flex items-start gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-600">
@@ -2336,31 +2516,15 @@ export default function AutomationView() {
                               {msg.text}
                             </div>
                           )}
-                          {afterSnapshots.length > 0 && (
+                          {editCards.length > 0 && (
                             <div className="flex gap-3 pt-4">
-                              {afterSnapshots.map((snap) => {
-                                // Prefer live post from state so status updates after approve/reject
-                                const displayPost =
-                                  posts.find((p) => p.id === snap.post_id) ??
-                                  snapshotToAgentPost(snap);
-                                return (
-                                  <DraftCard
-                                    key={snap.post_id}
-                                    post={displayPost}
-                                    onEdit={setEditPost}
-                                    onEditTime={openTimeEdit}
-                                    onApprove={handleApprovePost}
-                                    onReject={() => setRejectConfirmPost(displayPost)}
-                                    isApproving={approvingIds.has(snap.post_id)}
-                                    isRejecting={rejectingIds.has(snap.post_id)}
-                                    isSelected={selectedDraftId === snap.post_id}
-                                    onSelect={
-                                      conversation?.has_multiple_post
-                                        ? setSelectedDraftId
-                                        : undefined
-                                    }
-                                  />
-                                );
+                              {editCards.map((id) => {
+                                // Live post drives status + time; legacy snapshot until it loads
+                                const snap = afterSnapshots.find((s) => s.post_id === id);
+                                const basePost =
+                                  posts.find((p) => p.id === id) ??
+                                  (snap ? snapshotToAgentPost(snap) : undefined);
+                                return renderPostCard(msg.id, id, editVersions, basePost);
                               })}
                             </div>
                           )}
@@ -2398,25 +2562,18 @@ export default function AutomationView() {
                           {msgPosts.length > 0 && (
                             <DraftsSection
                               posts={msgPosts}
-                              onEdit={setEditPost}
-                              onEditTime={openTimeEdit}
+                              renderCard={(p) =>
+                                renderPostCard(
+                                  msg.id,
+                                  p.id,
+                                  msg.payload.versions as Record<string, number> | undefined,
+                                  p
+                                )
+                              }
                               onViewAll={(p) => {
                                 setViewAllPosts(p);
                                 setViewAllOpen(true);
                               }}
-                              onApprove={handleApprovePost}
-                              onReject={(id) => {
-                                const p = msgPosts.find((x) => x.id === id);
-                                if (p) setRejectConfirmPost(p);
-                              }}
-                              approvingIds={approvingIds}
-                              rejectingIds={rejectingIds}
-                              selectedPostId={
-                                conversation?.has_multiple_post ? selectedDraftId : undefined
-                              }
-                              onSelectPost={
-                                conversation?.has_multiple_post ? setSelectedDraftId : undefined
-                              }
                               onGenerateMore={
                                 conversation?.has_multiple_post
                                   ? () =>
@@ -3205,20 +3362,6 @@ export default function AutomationView() {
 
       <KnowledgeBaseModal isOpen={knowledgeOpen} onClose={() => setKnowledgeOpen(false)} />
 
-      {/* Delete confirmation modal */}
-      <RejectConfirmModal
-        isOpen={rejectConfirmPost !== null}
-        onClose={() => setRejectConfirmPost(null)}
-        postExcerpt={rejectConfirmPost?.body?.split("\n")[0] ?? ""}
-        isConfirming={rejectConfirmPost ? rejectingIds.has(rejectConfirmPost.id) : false}
-        onConfirm={() => {
-          if (rejectConfirmPost) {
-            handleRejectPost(rejectConfirmPost.id);
-            setRejectConfirmPost(null);
-          }
-        }}
-      />
-
       {/* Time edit modal */}
       <Modal
         isOpen={timeEditPost !== null}
@@ -3283,6 +3426,14 @@ export default function AutomationView() {
           if (conversation?.artifacts.post_ids.length) {
             fetchPosts(conversation.artifacts.post_ids);
           }
+          // The save created a new version — backend appended its "You edited post N" card
+          if (conversation) {
+            const convId = conversation.id;
+            svc()
+              .getConversation(convId)
+              .then((c) => setConversation((prev) => (prev?.id === convId ? c : prev)))
+              .catch(() => {});
+          }
           setEditPost(null);
         }}
       />
@@ -3298,13 +3449,6 @@ export default function AutomationView() {
         onApprove={(id) => {
           setViewAllOpen(false);
           handleApprovePost(id);
-        }}
-        onReject={(id) => {
-          const p = viewAllPosts.find((x) => x.id === id);
-          if (p) {
-            setViewAllOpen(false);
-            setRejectConfirmPost(p);
-          }
         }}
       />
     </div>

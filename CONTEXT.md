@@ -24,6 +24,9 @@ Token-based auth. `Authorization: Token <key>` header on every API request. Toke
 | **Plan Batch** | Group of 3 Marketing Plans produced from a single generation call; identified by a shared `batch` UUID |
 | **Follow-up Plan** | A new batch of 3 plans that continues an existing plan's strategy; created via `POST /content/plans/{id}/follow-up/` |
 | **Knowledge Base** | Agent-level websites and documents used to generate on-brand posts. Workspace-scoped, managed via `agent/websites/` and `agent/documents/` |
+| **Post Version** | Numbered snapshot (v1, v2, …) of a post's content, saved on every content change. Holds content only — status and schedule time always come from the live post. `current_version` on a post = the version it matches now |
+| **Latest Card** | For a post, the last agent chat card whose `payload.versions[postId]` equals the post's `current_version`. Only it can approve / edit / select; older cards show "Old version · vN" + "Use this version" |
+| **Restore ("Use this version")** | Brings an old version back as a **new** version number; approved/scheduled posts return to Draft |
 | **Image Chat** | One-per-post AI conversation for generating and editing a post's image. Accessed at `/linkedin/edit-image/[postId]` |
 | **Image Settings** | Per-chat settings for Image Chat (`image-chats/settings/{chatId}/`): Use post body toggle, **AI Model** (e.g. Nano Banana) and **Image Ratio** / media size (e.g. Landscape Size 1200 X 628, 16:9). One active option each |
 | **Run Agent** | Bulk action that triggers the agentic swarm for selected leads |

@@ -494,7 +494,8 @@ Pill next to the settings gear in the composer bottom bar — same design as the
 - **No "Edit with agent" button** on agent composer cards (only on Review & Approval cards)
 - Time row: `LuPencil` icon → opens a **dedicated time-edit modal** (`<Modal width="sm">`) with a `datetime-local` input; saves via `patchPostRaw` (`PATCH posts/{id}/ { suggested_publish_at }`)
   - **Past date validation**: if backend returns `400 { suggested_publish_at: [...] }`, modal stays open and shows an inline red error under the input — no toast. Error clears when the user edits the input.
-- Delete (reject) flow: clicking the `LuX` floating button sets `rejectConfirmPost` state → `RejectConfirmModal` confirmation before calling `onReject`
+- **No delete button** on chat cards — removed ahead of post version history (delete stays in post management)
+- **Versioned rendering**: chat cards render through `VersionedDraftCard` at `payload.versions[postId]`; only the latest card per post is interactive, older ones show "Old version · vN" + "Use this version". Full spec: `docs/prd/post-version-history.md`
 - `LuCheck` floating button (top-right, `-translate-y-1/2`): approves post via `approvePost` (uses `postRaw` — throws on error); no confirmation required
   - **Past date on approve**: if backend returns `400 { suggested_publish_at: [...] }` → toast shows the error + Edit Suggested Publish Time modal auto-opens for that post pre-filled with its current `suggested_publish_at`
 
@@ -525,8 +526,8 @@ Renders a paginated grid of draft post cards for human review. Used in both agen
 `AllDraftsModal` (`src/components/linkedin/AllDraftsModal.tsx`) — shows all drafts across conversations:
 
 - `MiniCard` now matches `DraftCard` design exactly: `h-72 w-full`, `group` class, same media/body/time rendering
-- Floating **approve** (`LuCheck`) and **reject** (`LuX`) buttons top-right, `-translate-y-1/2` — only shown for `status === "draft"`
-- Reject → `onReject` is intercepted at `AutomationView` level → sets `rejectConfirmPost` → `RejectConfirmModal` shown
+- Floating **approve** (`LuCheck`) button top-right, `-translate-y-1/2` — only shown for `status === "draft"`
+- **No delete button** (delete stays in post management)
 - Hover buttons bottom-right: **Edit text** · **Edit image** — both call `onEdit(post)`
 
 ### Draft Card Selection for Targeted Prompting

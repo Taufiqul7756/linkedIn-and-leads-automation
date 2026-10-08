@@ -163,7 +163,40 @@ export interface AgentPost {
   linkedin_urn: string;
   conversation_id: string | null;
   single_post_conversation_id: string | null;
+  // Version number the post's content matches right now — see PostVersion
+  current_version?: number;
   created_at: string;
+}
+
+// One saved snapshot of a post's CONTENT (no status / schedule time — read those from the live post).
+// GET posts/{postId}/versions/{n}/ — immutable except image_status filling in while "pending".
+export interface PostVersion {
+  id: string;
+  post: string;
+  number: number;
+  source: string;
+  note: string;
+  restored_from: number | null;
+  conversation_id: string | null;
+  headline: string;
+  body: string;
+  body_blocks: object | string;
+  hashtags: string[];
+  cta: string;
+  image_url: string;
+  image_status: string;
+  image_origin: string;
+  video_url: string;
+  media: string;
+  media_type: string;
+  is_current: boolean;
+  created_at: string;
+}
+
+// POST agent/conversations/{id}/restore/ — message is null when that version was already current
+export interface RestoreVersionResponse {
+  version: PostVersion;
+  message: Message | null;
 }
 
 export interface PaginatedAgentPosts {
