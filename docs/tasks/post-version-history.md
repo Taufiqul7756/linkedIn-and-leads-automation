@@ -2,6 +2,7 @@
 
 PRD: `docs/prd/post-version-history.md`
 
+- [x] Master doc `docs/linkedin-agent.md` updated (Post Version History section)
 - [x] Remove delete button from all chat cards (`DraftCard`, `AllDraftsModal`)
 - [x] Types: `current_version` on `AgentPost`; `PostVersion`; `RestoreVersionResponse`
 - [x] Service: `getPostVersion`, `restoreVersion` (`linkedinAgentService`)
@@ -15,4 +16,6 @@ PRD: `docs/prd/post-version-history.md`
 - [ ] QA: generate 2 → edit 1 in chat → old card shows "Old version · v1"; restore v1 → new card is latest
 - [ ] QA: edit in post management → "You edited post N…" card appears and is latest
 - [ ] QA: old pre-versioning chat still renders
-- [ ] Optional: version history list / restore from post page
+- [x] Version history modal from a history icon after the card badge (`VersionHistoryModal`)
+- [ ] QA: history icon → list newest first, restore from list closes modal and adds chat card
+- [ ] Optional: restore from post page

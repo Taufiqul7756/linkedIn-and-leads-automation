@@ -193,6 +193,14 @@ export interface PostVersion {
   created_at: string;
 }
 
+// GET posts/{postId}/versions/ — newest first
+export interface PaginatedPostVersions {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: PostVersion[];
+}
+
 // POST agent/conversations/{id}/restore/ — message is null when that version was already current
 export interface RestoreVersionResponse {
   version: PostVersion;

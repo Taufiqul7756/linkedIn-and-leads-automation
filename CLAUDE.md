@@ -44,13 +44,18 @@ src/
 
 ```
 docs/
+├── api-reference.md            # Backend API spec (all domains)
+├── linkedin-agent.md           # MASTER doc — full, current LinkedIn behaviour (all features)
+├── leads-agent.md              # MASTER doc — full, current Leads behaviour
 ├── designs/
 │   └── screenshots/[feature]/  # Reference screenshots for each feature
-├── prd/                        # One PRD markdown file per feature
+├── prd/                        # One PRD per feature/task (e.g. post-version-history.md)
 └── tasks/                      # One task tracking file per feature
 ```
 
 Always create `docs/prd/<feature>.md` and `docs/tasks/<feature>.md` before building a new feature.
+
+**Master docs rule:** `docs/linkedin-agent.md` (and `docs/leads-agent.md` for Leads) is the single source of truth for how the domain works today. After **every** feature, task, or bug fix in that domain, update the master doc in the same session — a per-feature PRD in `docs/prd/` never replaces it. Describe the shipped behaviour there in full (not just a link to the PRD).
 
 ## API Layer Rules
 
@@ -293,16 +298,22 @@ After every feature change or bug fix, update the relevant docs **in the same se
 
 | What changed | Where to update |
 | --- | --- |
-| LinkedIn Agent feature (UI logic, state, components) | `docs/prd/linkedin-agent.md` |
-| Leads feature (UI logic, state, components) | `docs/prd/leads-agent.md` |
+| **Any** LinkedIn feature, task, or bug fix (UI logic, state, components) | `docs/linkedin-agent.md` — **always** |
+| **Any** Leads feature, task, or bug fix | `docs/leads-agent.md` — **always** |
+| A new feature/task being built | `docs/prd/<feature>.md` + `docs/tasks/<feature>.md` (in addition to the master doc) |
 | API shape changed (new field, new endpoint, new error, renamed param) | `docs/api-reference.md` |
 | New route, new domain term, or status change | `CONTEXT.md` |
 | Cross-session pattern or architectural decision | `CLAUDE.md` + `memory/MEMORY.md` |
 
+**End-of-task checklist** — before reporting any task done, check all three and update whichever apply:
+1. LinkedIn-related? → `docs/linkedin-agent.md`
+2. Leads-related? → `docs/leads-agent.md`
+3. Any API change (field, endpoint, error, param)? → `docs/api-reference.md`
+
 Rules:
 - If an API field is added or removed, update the TypeScript type block **and** the JSON example in `docs/api-reference.md`
 - If a PRD section says "pending" and the feature ships, remove the pending note and replace with the implemented behaviour
-- If only the frontend implementation changed (no API shape change), only the PRD needs updating — not `api-reference.md`
+- If only the frontend implementation changed (no API shape change), only the master doc (+ feature PRD if one exists) needs updating — not `api-reference.md`
 
 ## Do Not
 

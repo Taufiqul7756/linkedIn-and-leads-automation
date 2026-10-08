@@ -26,6 +26,8 @@ import {
   LuImage,
   LuSparkles,
   LuCpu,
+  LuUndo2,
+  LuBookOpen,
 } from "react-icons/lu";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -40,6 +42,7 @@ import Modal from "@/components/ui/Modal";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
+import VersionHistoryModal from "./VersionHistoryModal";
 import type {
   Attachment,
   Conversation,
@@ -748,6 +751,8 @@ function DraftCard({
   onRestore,
   isRestoring = false,
   restoreDisabled = false,
+  onShowHistory,
+  onReadMore,
 }: {
   post: AgentPost;
   onEdit: (post: AgentPost) => void;
@@ -763,6 +768,10 @@ function DraftCard({
   onRestore?: () => void;
   isRestoring?: boolean;
   restoreDisabled?: boolean;
+  // Opens this post's version history list
+  onShowHistory?: () => void;
+  // Old cards only — opens the full post in a modal
+  onReadMore?: () => void;
 }) {
   const router = useRouter();
   const isVideoActive = post.media_type === "video";
@@ -838,20 +847,31 @@ function DraftCard({
           ) : (
             <span />
           )}
-          {oldVersion != null ? (
-            <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-500">
-              Old version · v{oldVersion}
-            </span>
-          ) : (
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                badge.cls
-              )}
-            >
-              {badge.label}
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-1">
+            {oldVersion != null ? (
+              <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-500">
+                Old version · v{oldVersion}
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                  badge.cls
+                )}
+              >
+                {badge.label}
+              </span>
+            )}
+            {onShowHistory && (
+              <button
+                onClick={onShowHistory}
+                className="flex h-5 w-5 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-blue-600"
+                title="Version history"
+              >
+                <LuHistory className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Scheduled time — live post's time, so hidden on old versions */}
@@ -899,21 +919,32 @@ function DraftCard({
           )}
         </div>
 
-        {/* Old version — the only action is restoring it (not allowed once published) */}
-        {readOnly && onRestore && post.status !== "published" && (
-          <div className="absolute bottom-3 right-3">
-            <button
-              onClick={onRestore}
-              disabled={isRestoring || restoreDisabled}
-              className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isRestoring ? (
-                <LuLoader className="h-3 w-3 animate-spin" />
-              ) : (
-                <LuHistory className="h-3 w-3" />
-              )}
-              Use this version
-            </button>
+        {/* Old version — read the full post, or restore it (not allowed once published) */}
+        {readOnly && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
+            {onReadMore && (
+              <button
+                onClick={onReadMore}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              >
+                <LuBookOpen className="h-3 w-3" />
+                Read more
+              </button>
+            )}
+            {onRestore && post.status !== "published" && (
+              <button
+                onClick={onRestore}
+                disabled={isRestoring || restoreDisabled}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isRestoring ? (
+                  <LuLoader className="h-3 w-3 animate-spin" />
+                ) : (
+                  <LuUndo2 className="h-3 w-3" />
+                )}
+                Use this version
+              </button>
+            )}
           </div>
         )}
 
@@ -1000,6 +1031,8 @@ function VersionedDraftCard({
   basePost,
   isLatest,
   onRestore,
+  onShowHistory,
+  onReadMore,
   ...cardProps
 }: {
   workspaceId: string;
@@ -1009,6 +1042,8 @@ function VersionedDraftCard({
   basePost: AgentPost | undefined;
   isLatest: boolean;
   onRestore: (postId: string, version: number) => void;
+  onShowHistory: (postId: string) => void;
+  onReadMore: (post: AgentPost, version: number | undefined) => void;
   onEdit: (post: AgentPost) => void;
   onEditTime: (post: AgentPost) => void;
   onApprove: (id: string) => void;
@@ -1051,6 +1086,8 @@ function VersionedDraftCard({
       readOnly={!isLatest}
       oldVersion={!isLatest ? version : undefined}
       onRestore={!isLatest && version != null ? () => onRestore(postId, version) : undefined}
+      onShowHistory={() => onShowHistory(postId)}
+      onReadMore={!isLatest ? () => onReadMore(post, version) : undefined}
     />
   );
 }
@@ -1359,6 +1396,10 @@ export default function AutomationView() {
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
   // `${postId}:${version}` of the "Use this version" request in flight
   const [restoringKey, setRestoringKey] = useState<string | null>(null);
+  // Post whose version history modal is open
+  const [versionsPostId, setVersionsPostId] = useState<string | null>(null);
+  // Old-version card opened in the "Read more" modal
+  const [readMore, setReadMore] = useState<{ post: AgentPost; version?: number } | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [deleteConvConfirm, setDeleteConvConfirm] = useState<{
     id: string;
@@ -1501,8 +1542,8 @@ export default function AutomationView() {
 
   // ── "Use this version" on an old card — restores as a NEW version + appends its chat card ──
   const handleRestoreVersion = useCallback(
-    async (postId: string, version: number) => {
-      if (!conversation) return;
+    async (postId: string, version: number): Promise<boolean> => {
+      if (!conversation) return false;
       const convId = conversation.id;
       setRestoringKey(`${postId}:${version}`);
       try {
@@ -1523,12 +1564,15 @@ export default function AutomationView() {
         queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
         queryClient.invalidateQueries({ queryKey: ["post-stats", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: ["post-versions", workspaceId, postId] });
+        return true;
       } catch (err) {
         // 400 { post: ["…"] } is a field error; everything else carries "detail"
         const data = axios.isAxiosError(err)
           ? (err.response?.data as { post?: string[] } | undefined)
           : undefined;
         toast.error(data?.post?.[0] ?? (extractErrorMessage(err) || "Failed to restore version."));
+        return false;
       } finally {
         setRestoringKey(null);
       }
@@ -2114,6 +2158,12 @@ export default function AutomationView() {
   const isCompleted = conversation?.status === "completed";
   const isFailed = conversation?.status === "failed";
 
+  // "Post 2" = artifacts.post_ids[1] — the numbering the user sees in agent messages
+  const postLabel = (id: string | null | undefined) => {
+    const idx = id ? (conversation?.artifacts.post_ids.indexOf(id) ?? -1) : -1;
+    return idx >= 0 ? `Post ${idx + 1}` : "Post";
+  };
+
   // Post versioning — only the latest card per post gets approve / edit / select
   const latestCardByPost = getLatestCardByPost(conversation?.messages ?? [], posts);
   const renderPostCard = (
@@ -2133,6 +2183,8 @@ export default function AutomationView() {
         basePost={basePost}
         isLatest={isLatest}
         onRestore={handleRestoreVersion}
+        onShowHistory={setVersionsPostId}
+        onReadMore={(post, v) => setReadMore({ post, version: v })}
         isRestoring={restoringKey === `${postId}:${version}`}
         restoreDisabled={isRunning || restoringKey !== null}
         onEdit={setEditPost}
@@ -3436,6 +3488,77 @@ export default function AutomationView() {
           }
           setEditPost(null);
         }}
+      />
+
+      {/* Read more — full content of an old-version card */}
+      <Modal
+        isOpen={readMore !== null}
+        onClose={() => setReadMore(null)}
+        title={
+          readMore?.version != null
+            ? `${postLabel(readMore.post.id)} · Old version v${readMore.version}`
+            : postLabel(readMore?.post.id)
+        }
+        width="2xl"
+      >
+        {readMore && (
+          <div>
+            {readMore.post.headline && (
+              <p className="mb-3 text-base font-semibold leading-snug text-gray-900">
+                {readMore.post.headline}
+              </p>
+            )}
+            {readMore.post.media_type === "video"
+              ? readMore.post.video_url && (
+                  <video
+                    src={readMore.post.video_url}
+                    controls
+                    className="mb-4 max-h-80 w-full rounded-xl bg-black"
+                  />
+                )
+              : readMore.post.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={readMore.post.image_url}
+                    alt=""
+                    className="mb-4 max-h-80 w-full rounded-xl object-contain"
+                  />
+                )}
+            <div className="text-sm leading-relaxed text-gray-700">
+              {renderBlocks(readMore.post.body_blocks, readMore.post.body)}
+            </div>
+            {readMore.version != null && readMore.post.status !== "published" && (
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={async () => {
+                    const ok = await handleRestoreVersion(readMore.post.id, readMore.version!);
+                    if (ok) setReadMore(null);
+                  }}
+                  disabled={isRunning || restoringKey !== null}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {restoringKey === `${readMore.post.id}:${readMore.version}` ? (
+                    <LuLoader className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LuUndo2 className="h-4 w-4" />
+                  )}
+                  Use this version
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <VersionHistoryModal
+        key={versionsPostId ?? "no-post"}
+        workspaceId={workspaceId}
+        postId={versionsPostId}
+        postLabel={postLabel(versionsPostId)}
+        isPublished={posts.find((p) => p.id === versionsPostId)?.status === "published"}
+        restoreDisabled={isRunning || restoringKey !== null}
+        onRestore={handleRestoreVersion}
+        onClose={() => setVersionsPostId(null)}
       />
 
       <AllDraftsModal

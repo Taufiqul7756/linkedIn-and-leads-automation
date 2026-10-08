@@ -422,7 +422,7 @@ interface PostVersion {
 
 - `404` = no such version **or** the post was deleted → "This post was deleted."
 - `image_status: "pending"` → poll this version every 3s until `ready` / `failed`. Otherwise immutable — cache by `postId + n`.
-- History list (newest first, paginated): `GET content/posts/{postId}/versions/` → `{count, next, previous, results: PostVersion[]}`.
+- History list (newest first, paginated, `?page=`): `GET content/posts/{postId}/versions/` → `PaginatedPostVersions` `{count, next, previous, results: PostVersion[]}`. Shown in the chat via `VersionHistoryModal`.
 
 ### Latest card per post
 
