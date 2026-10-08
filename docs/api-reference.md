@@ -65,6 +65,7 @@ Also available:
 | `POST` | `conversations/{id}/cancel/` | Stop button. Idempotent, returns the conversation |
 | `DELETE` | `conversations/{id}/` | `204`. Gone, including transcript and attachments |
 | `GET`/`PATCH` | `settings/` | The composer's panel |
+| `POST` | `conversations/{id}/restore/` | "Use this version" — see [Post versions](#post-versions) |
 
 ---
 
@@ -248,8 +249,8 @@ The whole conversation, every time. Transcript included.
 | `kind` | Written by | `payload` |
 |---|---|---|
 | `text` | user's message; agent's refusals and explanations | `{}` — or, on an answer the user submitted, `{"interrupt_id": "…", "answers": {…}}` |
-| `posts` | the turn that wrote drafts | `{"post_ids": ["…"]}` |
-| `edit` | an edit turn | `{"post_ids": ["…"], "field": "text" \| "image"}` |
+| `posts` | the turn that wrote drafts | `{"post_ids": ["…"], "versions": {"<postId>": 1}}` |
+| `edit` | an edit turn, or a change made outside the chat (`source` set) | `{"post_ids": ["…"], "versions": {"<postId>": 2}, "field": "text" \| "image", "changed": ["body"], "changes": {"<postId>": ["body"]}, "source"?: "editor" \| "regenerate" \| "restore" \| "image_chat", "restored_from"?: {"<postId>": 1}}` |
 | `error` | the stale-run sweep | `{}` |
 
 ### `artifacts.post_ids`
@@ -390,6 +391,63 @@ At most **2 rounds** of questions per conversation. At the cap, agent takes each
 | Lifecycle conflict | `409` | `{"detail": "…"}` |
 | Source that could not be read | — | Not an HTTP error. `attachments[].status` is `failed` with `error` |
 | Vendor failure mid-turn | — | Not an HTTP error. `status` becomes `failed` and an agent message says so |
+
+---
+
+## Post versions
+
+Every content change to a post saves a numbered **version** (v1, v2, …). A version holds **content only** (headline, body, body_blocks, hashtags, cta, image, video, media) — **never status or schedule time; read those from the live post**.
+
+Creates a version: generate (v1), chat edit, `PATCH posts/{id}/`, image/video upload, generate image, regenerate, Image Chat "Add to post", restore (a **new** number). Approve / schedule / time change → **no** version, no chat card. Quick saves by the same user within 2 min update one version.
+
+**`current_version`** on every post (`GET posts/`, `GET posts/{id}/`) = the version the post matches now.
+
+**`payload.versions`** on every chat card that shows posts = `{postId: n}` — the version that card showed. Old cards (pre-versioning) have no `versions` → render the live post. The legacy `edit` payload `after` snapshot is **no longer sent**.
+
+### `GET content/posts/{postId}/versions/{n}/`
+
+```ts
+interface PostVersion {
+  id: string; post: string; number: number;
+  source: string;            // "agent_chat" | "editor" | "regenerate" | "restore" | "image_chat" | …
+  note: string;              // e.g. "add emojis"
+  restored_from: number | null;
+  conversation_id: string | null;
+  headline: string; body: string; body_blocks: object; hashtags: string[]; cta: string;
+  image_url: string; image_status: string; image_origin: string;
+  video_url: string; media: string; media_type: string;
+  is_current: boolean; created_at: string;
+}
+```
+
+- `404` = no such version **or** the post was deleted → "This post was deleted."
+- `image_status: "pending"` → poll this version every 3s until `ready` / `failed`. Otherwise immutable — cache by `postId + n`.
+- History list (newest first, paginated, `?page=`): `GET content/posts/{postId}/versions/` → `PaginatedPostVersions` `{count, next, previous, results: PostVersion[]}`. Shown in the chat via `VersionHistoryModal`.
+
+### Latest card per post
+
+The **latest** card for a post = the **last** agent message where `payload.versions[postId] === post.current_version` (old chats: the last agent card showing the post). Latest → status badge, Approve, Edit, select. Older → "Old version · vN" + **only** "Use this version" (none for published posts). No delete on chat cards.
+
+### `POST agent/conversations/{id}/restore/`
+
+Body `{"post": "<postId>", "version": 1}` → `200` instantly (no agent turn):
+
+```json
+{
+  "version": { "number": 4, "source": "restore", "note": "Restored from version 1", "restored_from": 1, "...": "full version" },
+  "message": {
+    "id": "uuid", "role": "agent", "kind": "edit", "text": "Restored post 1 to version 1.",
+    "payload": { "source": "restore", "post_ids": ["A"], "versions": {"A": 4}, "restored_from": {"A": 1}, "changed": ["body"], "changes": {"A": ["body"]} },
+    "created_at": "…"
+  }
+}
+```
+
+After 200: append `message` (null if that version was already current), refetch the post. An approved/scheduled post goes back to **draft**. Disable while the conversation is `running`.
+
+Errors: `400 {"post": ["That post is not one of this conversation's drafts."]}` · `400 {"detail": "A published post cannot be changed."}` · `404` · `409 {"detail": "This conversation is already working on something…"}` · `409 {"detail": "This conversation has been archived…"}`
+
+Outside the chat: `POST content/posts/{postId}/versions/{n}/restore/` (no body) → `{version, post}`; every chat holding the post gets a "restored outside this chat" card. Same 400/404, no 409.
 
 ---
 

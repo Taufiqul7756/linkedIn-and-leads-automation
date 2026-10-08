@@ -8,6 +8,9 @@ import type {
   AgentPost,
   PaginatedAgentPosts,
   InterruptAnswers,
+  PostVersion,
+  PaginatedPostVersions,
+  RestoreVersionResponse,
 } from "@/types/LinkedInAgent";
 import { Config } from "@/config/config";
 
@@ -111,6 +114,24 @@ export const linkedinAgentService = (workspaceId: string) => ({
 
   patchSettings: (data: Partial<AgentSettings>) =>
     axiosPatch<AgentSettings>(`/workspaces/${workspaceId}/agent/settings/`, data),
+
+  getPostVersion: (postId: string, version: number) =>
+    axiosGet<PostVersion>(
+      `/workspaces/${workspaceId}/content/posts/${postId}/versions/${version}/`
+    ),
+
+  // Version history for one post — newest first, paginated
+  getPostVersions: (postId: string, page = 1) =>
+    axiosGet<PaginatedPostVersions>(
+      `/workspaces/${workspaceId}/content/posts/${postId}/versions/?page=${page}`
+    ),
+
+  // "Use this version" from the chat — instant, no agent turn; returns the new version + chat card
+  restoreVersion: (convId: string, postId: string, version: number) =>
+    axiosPost<RestoreVersionResponse>(
+      `/workspaces/${workspaceId}/agent/conversations/${convId}/restore/`,
+      { post: postId, version }
+    ),
 
   getAgentPost: (id: string) =>
     axiosGet<AgentPost>(`/workspaces/${workspaceId}/content/posts/${id}/`),

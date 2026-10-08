@@ -44,7 +44,10 @@ All requests require `Authorization: Token <key>`. A workspace the user does not
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/workspaces/{id}/content/posts/` | Use `?state=agent` to get agent drafts |
-| `GET` | `/workspaces/{id}/content/posts/{postId}/` | Single post — used to check `conversation_id` before edit-with-agent |
+| `GET` | `/workspaces/{id}/content/posts/{postId}/` | Single post — used to check `conversation_id` before edit-with-agent. Has `current_version` |
+| `GET` | `/workspaces/{id}/content/posts/{postId}/versions/` | Version history, newest first, `?page=` |
+| `GET` | `/workspaces/{id}/content/posts/{postId}/versions/{n}/` | One version (content only) — renders a chat card |
+| `POST` | `conversations/{id}/restore/` | `{ post, version }` — "Use this version", instant, returns `{ version, message }` |
 
 ---
 
@@ -286,8 +289,8 @@ Optional — include `post` to target a specific draft:
 | `kind` | `role` | `payload` |
 |---|---|---|
 | `text` | user / agent | `{}` or `{ interrupt_id, answers }` on an answer message |
-| `posts` | agent | `{ post_ids: string[] }` |
-| `edit` | agent | `{ post_ids: string[], field: "text" \| "image" }` |
+| `posts` | agent | `{ post_ids: string[], versions: { [postId]: n } }` |
+| `edit` | agent | `{ post_ids, versions, field: "text" \| "image", changed, changes, source?, restored_from? }` — `source` set when the change came from outside the chat (`editor` / `regenerate` / `restore` / `image_chat`). No `after` snapshot any more |
 | `error` | agent | `{}` |
 
 > A user's answer is a `user/text` message with **empty `text`** — render from `payload.answers`, not from `text`.
@@ -494,7 +497,8 @@ Pill next to the settings gear in the composer bottom bar — same design as the
 - **No "Edit with agent" button** on agent composer cards (only on Review & Approval cards)
 - Time row: `LuPencil` icon → opens a **dedicated time-edit modal** (`<Modal width="sm">`) with a `datetime-local` input; saves via `patchPostRaw` (`PATCH posts/{id}/ { suggested_publish_at }`)
   - **Past date validation**: if backend returns `400 { suggested_publish_at: [...] }`, modal stays open and shows an inline red error under the input — no toast. Error clears when the user edits the input.
-- Delete (reject) flow: clicking the `LuX` floating button sets `rejectConfirmPost` state → `RejectConfirmModal` confirmation before calling `onReject`
+- **No delete button** on any chat card (delete stays in post management)
+- **History icon** (`LuHistory`) right after the status / "Old version" badge on every card → opens the Version History modal (see Post Version History below)
 - `LuCheck` floating button (top-right, `-translate-y-1/2`): approves post via `approvePost` (uses `postRaw` — throws on error); no confirmation required
   - **Past date on approve**: if backend returns `400 { suggested_publish_at: [...] }` → toast shows the error + Edit Suggested Publish Time modal auto-opens for that post pre-filled with its current `suggested_publish_at`
 
@@ -525,8 +529,8 @@ Renders a paginated grid of draft post cards for human review. Used in both agen
 `AllDraftsModal` (`src/components/linkedin/AllDraftsModal.tsx`) — shows all drafts across conversations:
 
 - `MiniCard` now matches `DraftCard` design exactly: `h-72 w-full`, `group` class, same media/body/time rendering
-- Floating **approve** (`LuCheck`) and **reject** (`LuX`) buttons top-right, `-translate-y-1/2` — only shown for `status === "draft"`
-- Reject → `onReject` is intercepted at `AutomationView` level → sets `rejectConfirmPost` → `RejectConfirmModal` shown
+- Floating **approve** (`LuCheck`) button top-right, `-translate-y-1/2` — only shown for `status === "draft"`
+- **No delete button** (delete stays in post management)
 - Hover buttons bottom-right: **Edit text** · **Edit image** — both call `onEdit(post)`
 
 ### Draft Card Selection for Targeted Prompting
@@ -585,6 +589,42 @@ Users can select a specific draft in the agent composer to direct the next promp
 This prevents a new conversation from being created every time the user clicks Edit with agent on the same post.
 
 **Fix: Strict Mode double-invocation guard** — `restoredForWorkspaceRef = useRef<string|null>(null)` prevents the restore effect from firing twice in React Strict Mode (dev), which previously created two conversations simultaneously.
+
+---
+
+### Post Version History
+
+Feature PRD: `docs/prd/post-version-history.md` · API: `docs/api-reference.md` → Post versions.
+
+**Why**: a post is one row, so every edit overwrote it and every chat card showed the latest text. The backend now saves a numbered version (v1, v2…) on every content change; each chat card records the version it showed in `payload.versions`.
+
+**What creates a version** (backend): generate (v1), chat edit, PATCH from post management or the card's Edit, image/video upload, generate image, regenerate, Image Chat "Add to post", restore (new number). Approve / schedule / time change → no version, no chat card.
+
+**Rendering** (`AutomationView.tsx`):
+- `VersionedDraftCard` wraps `DraftCard`. For each post on a card: `n = msg.payload.versions?.[postId]`; if set, fetch `GET posts/{id}/versions/{n}/` (query key `["post-version", workspaceId, postId, n]`, `staleTime: Infinity`, refetch every 3s while `image_status === "pending"`); else render the live post (pre-versioning chats).
+- `applyVersion(livePost, version)` — content (headline, body, body_blocks, hashtags, cta, image, video, media_type) from the version; **status + schedule time from the live post**.
+- Version `404` → "This post was deleted." placeholder. Loading → `DraftCardSkeleton`.
+- `kind: "posts"` cards go through `DraftsSection` with a `renderCard(post)` callback; `kind: "edit"` cards render `payload.post_ids` (legacy `after` snapshots only as a fallback).
+
+**Latest card rule** — `getLatestCardByPost(messages, posts)`: per post, the last agent card where `versions[postId] === post.current_version`; fallback the last agent card showing that post. Decided per post (one card can hold a latest post and an old one).
+- **Latest**: status badge, Approve ✓, Edit text / image / time, selectable (selection ring only on the latest card).
+- **Old**: "Old version · vN" badge (gray), no approve/edit/select/time row. Buttons bottom-right: **Read more** + **Use this version** (restore hidden for published posts).
+
+**Read more** — `Modal width="2xl"`, title "Post N · Old version vK": headline, image/video, full `body_blocks` render, and a "Use this version" button (closes on successful restore).
+
+**Use this version** — `handleRestoreVersion(postId, n)` → `POST conversations/{id}/restore/`:
+- appends `res.message` (null when already current → nothing), seeds the new version into the query cache, refetches live posts, invalidates `["posts",…]`, `["post-stats",…]`, `["post-versions", workspaceId, postId]`; returns `true` on success
+- disabled while the conversation is `running` or another restore is in flight (`restoringKey = "postId:n"`)
+- errors → toast: `post[0]` field error, else `detail`
+- approved/scheduled posts return to draft (backend)
+
+**Version History modal** — `src/components/linkedin/VersionHistoryModal.tsx`, opened from the history icon on any card (`versionsPostId` state, `key={postId}`):
+- `Modal width="3xl"`, title "Version history · Post N"; `GET posts/{id}/versions/?page=` (key `["post-versions", workspaceId, postId, page]`), Prev/Next when `previous`/`next` exist
+- Row: `vN` chip, blue **Current** tag on `is_current`, source label (Generated / Edited in chat / Edited in post management / Regenerated / Restored from vK / Image updated), date, `Prompt: "…"` from `note` (not on restores), image thumb, 3-line body preview
+- **Show full post / Show less** toggles each row independently — several rows can stay open to compare versions
+- Non-current rows: **Use this version** (same restore; hidden for published posts); modal closes on success
+
+**Edit modal save** → also refetches the conversation so the backend's "You edited post N in post management." card appears.
 
 ---
 

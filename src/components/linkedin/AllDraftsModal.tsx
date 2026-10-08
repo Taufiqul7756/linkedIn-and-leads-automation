@@ -145,12 +145,10 @@ function MiniCard({
   post,
   onEdit,
   onApprove,
-  onReject,
 }: {
   post: AgentPost;
   onEdit: (p: AgentPost) => void;
   onApprove: (id: string) => void;
-  onReject: (id: string) => void;
 }) {
   const dateStr = formatSuggestedDate(post.suggested_publish_at);
   const isVideoActive = post.media_type === "video";
@@ -170,7 +168,7 @@ function MiniCard({
 
   return (
     <div className="group relative h-72 w-full">
-      {/* Floating approve / reject — top right, half outside */}
+      {/* Floating approve — top right, half outside */}
       {isDraft && (
         <div className="absolute right-3 top-0 z-10 flex -translate-y-1/2 items-center gap-1.5">
           <button
@@ -179,13 +177,6 @@ function MiniCard({
             title="Approve"
           >
             <LuCheck className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => onReject(post.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-400"
-            title="Delete"
-          >
-            <LuX className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
@@ -290,17 +281,9 @@ interface Props {
   posts: AgentPost[];
   onEdit: (post: AgentPost) => void;
   onApprove: (id: string) => void;
-  onReject: (id: string) => void;
 }
 
-export default function AllDraftsModal({
-  isOpen,
-  onClose,
-  posts,
-  onEdit,
-  onApprove,
-  onReject,
-}: Props) {
+export default function AllDraftsModal({ isOpen, onClose, posts, onEdit, onApprove }: Props) {
   const [page, setPage] = useState(1);
 
   // reset to page 1 when closed
@@ -350,13 +333,7 @@ export default function AllDraftsModal({
           ) : (
             <div className="grid grid-cols-1 gap-x-4 gap-y-6 pt-4 sm:grid-cols-2 lg:grid-cols-3">
               {pagedPosts.map((post) => (
-                <MiniCard
-                  key={post.id}
-                  post={post}
-                  onEdit={onEdit}
-                  onApprove={onApprove}
-                  onReject={onReject}
-                />
+                <MiniCard key={post.id} post={post} onEdit={onEdit} onApprove={onApprove} />
               ))}
             </div>
           )}
