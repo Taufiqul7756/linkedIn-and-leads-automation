@@ -162,7 +162,7 @@ Use `src/components/ui/Modal.tsx` for all modals. It handles backdrop, ESC key, 
 
 ## Hover Guide (ⓘ)
 
-For multi-line help next to a title use `src/components/ui/HoverGuide.tsx` (ⓘ icon → amber popover on hover) instead of a coloured tip line under the header. Pass `onDark` on dark card headers (`bg-sidebar-bg`). Single-line hints keep using `Tooltip`.
+For multi-line help next to a title use `src/components/ui/HoverGuide.tsx` (ⓘ icon → amber popover on hover) instead of a coloured tip line under the header. Pass `onDark` on dark card headers (`bg-sidebar-bg`); `position` (`"bottom"` default / `"top"`); `width` (default `w-80`) when anchored to the icon. In narrow panels use `anchor="parent"` — the popover spans the nearest `relative` ancestor edge to edge so it can't overflow the side (e.g. Composer settings accordions: `anchor="parent" position="top"`). Single-line hints keep using `Tooltip`.
 
 ## Dropdown Pattern (click-outside)
 

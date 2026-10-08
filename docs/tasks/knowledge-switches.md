@@ -8,7 +8,7 @@ PRD: `docs/prd/knowledge-switches.md`
 - [x] KnowledgeBaseModal: split Knowledge card into Your LinkedIn profile (no note) + Additional knowledge
 - [x] Source icons (`SourceIcon` vector tiles: website / PDF / LinkedIn) in Knowledge base modal + composer
 - [x] Composer settings: Knowledge accordion + read-only Tone / Style accordion
-- [x] Less text (team feedback): blue tip → 💡 guide on Knowledge title, no subsection hints, short placeholders, "Upload PDF", single-line note input, Your LinkedIn profile input hidden once a profile exists
+- [x] Less text (team feedback): blue tip → ⓘ hover guide on Knowledge title, no subsection hints, short placeholders, "Upload PDF", single-line note input, Your LinkedIn profile input hidden once a profile exists
 - [x] KnowledgeBaseModal: note field always visible under the Additional knowledge URL + staged PDF card with note
 - [x] KnowledgeBaseModal: "Note: …" line under website / PDF rows + inline note edit
 - [x] KnowledgeBaseModal: invalidate agent-settings after add / note edit / delete

@@ -490,6 +490,10 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
   "knowledge": [
     { "id": "6f1c2b9e-…", "kind": "pdf", "label": "Campaign Knowledge", "name": "q4-campaign.pdf", "status": "ready", "enabled": true },
     { "id": "a03d77c1-…", "kind": "website", "label": "", "name": "https://acme.com", "status": "crawling", "enabled": false }
+  ],
+  "tone_and_style": [
+    { "id": "6f1c2b9e-…", "kind": "pdf", "label": "My CEO voice", "name": "ceo-posts.pdf", "status": "ready", "enabled": true },
+    { "id": "a03d77c1-…", "kind": "website", "label": "Company blog", "name": "https://acme.com/blog/launch", "status": "ready", "enabled": true }
   ]
 }
 ```
@@ -513,12 +517,13 @@ Posts come from `GET content/posts/?state=agent`. Two fields carry the text:
 | `writer_model` | — | `model_id` of the model that writes drafts. Change with `PATCH { "writer_model": "claude-opus-5" }` |
 | `ai_models` | — | Read-only. Available writer models grouped by provider key; exactly one has `selected: true` |
 | `knowledge` | `[]` | One switch per **knowledge** source (oldest first). See [Knowledge switches](#knowledge-switches) |
+| `tone_and_style` | `[]` | One switch per **tone / style** source (oldest first). Backend field is `tone_and_style` (the spec md called it `voice`). See [Tone / style switches](#tone--style-switches) |
 
 The prompt outranks the panel (prompt > panel > default).
 
 ```ts
 type AgentModelOption = { model_id: string; label: string; selected: boolean };
-// AgentSettings += { writer_model?: string; ai_models?: Record<string, AgentModelOption[]>; knowledge?: KnowledgeSwitch[] }
+// AgentSettings += { writer_model?: string; ai_models?: Record<string, AgentModelOption[]>; knowledge?: KnowledgeSwitch[]; tone_and_style?: VoiceSwitch[] }
 ```
 
 ### Knowledge switches
@@ -541,7 +546,7 @@ interface KnowledgeSwitch {
 - **Flip**: `PATCH settings/` with only the changed switches — `{ "knowledge": [{ "kind": "website", "id": "a03d…", "enabled": true }] }`. Combinable with other settings; response = full settings body. Saved **on the source** (persists for later chats). `PATCH { "enabled": false }` on the source's own route does the same.
 - **All off** → posts written without knowledge (old `use_knowledge: false`). **No sources** → same as before. Attachments (`+` in the prompt box) are not listed and always used for their chat.
 - A prompt sentence ("don't use my knowledge base") still wins for that message, but can't switch a source back on.
-- `is_default` no longer limits knowledge — switches decide. It still picks the tone/style reference.
+- `is_default` no longer limits knowledge — switches decide. (It no longer picks the tone/style reference either — see [Tone / style switches](#tone--style-switches).)
 
 **`label` = the source's note for the agent** (optional free text, max 200 chars, e.g. "Use this for article making" — confirmed with backend; the UI shows it as a note under the source name, not as the name). All create / list / detail / PATCH responses now carry `label` and `enabled` (`true` on new uploads):
 
@@ -559,6 +564,41 @@ Edit the note: `PATCH` the same detail route with `{ "label": "…" }`. The UI s
 |---|---|---|
 | Source not a knowledge source of this workspace (other workspace, tone/style, deleted) | `400` | `{"knowledge": ["No pdf knowledge source <id> in this workspace."]}` |
 | Unknown `kind` | `400` | `{"knowledge": [{"kind": ["\"video\" is not a valid choice."]}]}` |
+| `label` over 200 chars | `400` | `{"label": ["Ensure this field has no more than 200 characters."]}` |
+| Foreign / inactive workspace | `404` | unchanged |
+
+### Tone / style switches
+
+Agent Mode only (Story #4025). Same model as knowledge: each tone / style source has its own **label** (UI: note for the agent) and **on/off switch**. **Several can be on at once.**
+
+```ts
+interface VoiceSwitch {
+  id: string;                    // same id as the source's own route
+  kind: "pdf" | "website";       // send back with the id when flipping
+  purpose?: "tone" | "style";  // in the spec; not sent by the backend today
+  label: string;                 // note for the agent; "" = none
+  name: string;                  // file name or URL
+  status: string;                // "ready" | "failed" | "pending" | "extracting" | "crawling"
+  enabled: boolean;
+}
+```
+
+- Listed in `GET settings/` → **`tone_and_style`** (oldest first; the spec md said `voice`, the live API sends `tone_and_style` — confirmed from a real response). Only tone/style sources — a source is never in both `knowledge` and `tone_and_style`. Empty pool → `[]`. Only `ready` sources are used.
+- **Upload**: same routes with `purpose: "tone" | "style"` + optional `label` (max 200) — PDF `POST linkedin/agent/documents/` (multipart `file`, `purpose`, `label`); URL `POST linkedin/agent/websites/` `{ "url", "purpose", "label" }`. New uploads start **on**; others unchanged. Edit the note: `PATCH` the detail route with `{ "label": "…" }`.
+- **Flip**: `PATCH settings/` with only the changed switches — `{ "tone_and_style": [{ "kind": "pdf", "id": "c9e0…", "enabled": true }] }` (key assumed to match the GET field — **to confirm with backend**). Combinable with `knowledge` and other settings; response = full settings body. Saved **on the source**. `PATCH { "enabled": false }` on the source's own route does the same.
+- **What the switches do**: one on → that voice; several on → one blended voice (wording / greetings / sign-offs from **tone**, structure from **style**); all off → default voice; no sources → as before. Sources on share ~8,000 characters equally.
+- A voice link pasted in the message still wins for that message. While any source is on, the "what tone?" question isn't asked; suggested length comes from the newest source that is on and states one.
+- Applies to new posts and **Regenerate**; chat edits never read a voice source.
+- `is_default` on tone/style **no longer picks** the voice. Workspaces with several sources kept only the one in use switched on.
+- `knowledge` / `tone_and_style` items carry **no file URL** for PDFs (`name` is just the file name), so the composer can link websites / LinkedIn but not PDFs. Adding a `url` per item would let PDFs open too.
+
+**Refusals** — nothing is saved on a `400`:
+
+| Request | Status | Body |
+|---|---|---|
+| Not a tone/style source of this workspace (other workspace, knowledge source, deleted) | `400` | `{"tone_and_style": ["No pdf tone or style source <id> in this workspace."]}` (spec: `voice`) |
+| Unknown `kind` (including `linkedin`) | `400` | `{"tone_and_style": [{"kind": ["\"linkedin\" is not a valid choice."]}]}` (spec: `voice`) |
+| Tone/style source sent in `knowledge` | `400` | `{"knowledge": ["No pdf knowledge source <id> in this workspace."]}` |
 | `label` over 200 chars | `400` | `{"label": ["Ensure this field has no more than 200 characters."]}` |
 | Foreign / inactive workspace | `404` | unchanged |
 

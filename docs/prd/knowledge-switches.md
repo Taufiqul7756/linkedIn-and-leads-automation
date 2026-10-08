@@ -18,7 +18,7 @@ Knowledge sources were all-or-nothing: one `use_knowledge` toggle turned the who
 - **Link** (website, LinkedIn post, any non-profile URL): a "Note for the agent (optional)" field (max 200 chars, counter) is always visible under the URL row → sent as `label` to `websites/`. A profile URL pasted here → toast "Add LinkedIn profiles under Your LinkedIn profile."
 - **LinkedIn profile**: added in Your LinkedIn profile, no note.
 - **PDF**: the picked file is staged in a card (file name, ✕, note field, Cancel / Upload) instead of uploading immediately → `label` sent with the multipart upload.
-- Cleared after a successful add / upload. Tone / Style card unchanged (no note, immediate upload).
+- Cleared after a successful add / upload. Tone / Style got the same form + note later — see `tone-style-switches.md`.
 - `400 { label: [...] }` → toast with the field error.
 
 ### Edit note

@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { linkedinAgentService } from "@/service/linkedinAgentService";
 import { extractErrorMessage } from "@/utils/extractErrorMessage";
-import type { AgentSettings, KnowledgeSwitch } from "@/types/LinkedInAgent";
+import type { AgentSettings, KnowledgeSwitch, VoiceSwitch } from "@/types/LinkedInAgent";
 
 // Shown until GET agent/settings/ resolves
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
@@ -37,9 +37,11 @@ export function useAgentSettings(workspaceId: string, enabled = true) {
     () => linkedinAgentService(workspaceId).getSettings(),
     {
       enabled: !!workspaceId && enabled,
-      // Keep knowledge switch statuses fresh while a source is still extracting / crawling
+      // Keep knowledge / voice switch statuses fresh while a source is still extracting / crawling
       refetchInterval: (q) =>
-        q.state.data?.knowledge?.some((k) => k.status !== "ready" && k.status !== "failed")
+        [...(q.state.data?.knowledge ?? []), ...(q.state.data?.tone_and_style ?? [])].some(
+          (s) => s.status !== "ready" && s.status !== "failed"
+        )
           ? 3000
           : false,
     }
@@ -81,40 +83,57 @@ export function useAgentSettings(workspaceId: string, enabled = true) {
     [queryClient, workspaceId]
   );
 
-  // Flip one knowledge source's switch — the PATCH carries only that switch; the cache
-  // updates only that item (so concurrent flips on other sources are never overwritten)
-  const setKnowledgeEnabled = useCallback(
-    async (item: KnowledgeSwitch, enabled: boolean) => {
+  // Flip one source's switch in `knowledge` or `tone_and_style` — the PATCH carries only that switch;
+  // the cache updates only that item (so concurrent flips on other sources are never overwritten)
+  const flipSwitch = useCallback(
+    async (
+      list: "knowledge" | "tone_and_style",
+      item: { id: string; kind: string },
+      enabled: boolean
+    ): Promise<boolean> => {
       const key = agentSettingsQueryKey(workspaceId);
       await queryClient.cancelQueries({ queryKey: key });
       const setItem = (value: boolean) =>
-        queryClient.setQueryData<AgentSettings>(key, (old) =>
-          old
+        queryClient.setQueryData<AgentSettings>(key, (old) => {
+          if (!old) return old;
+          const match = (s: { id: string; kind: string }) =>
+            s.id === item.id && s.kind === item.kind;
+          return list === "knowledge"
             ? {
                 ...old,
-                knowledge: (old.knowledge ?? []).map((k) =>
-                  k.id === item.id && k.kind === item.kind ? { ...k, enabled: value } : k
+                knowledge: (old.knowledge ?? []).map((s) =>
+                  match(s) ? { ...s, enabled: value } : s
                 ),
               }
-            : old
-        );
+            : {
+                ...old,
+                tone_and_style: (old.tone_and_style ?? []).map((s) =>
+                  match(s) ? { ...s, enabled: value } : s
+                ),
+              };
+        });
       setItem(enabled);
       setSaving(true);
       try {
-        await linkedinAgentService(workspaceId).patchSettings({
-          knowledge: [{ kind: item.kind, id: item.id, enabled }],
-        });
+        await linkedinAgentService(workspaceId).patchSettings(
+          list === "knowledge"
+            ? { knowledge: [{ kind: item.kind as KnowledgeSwitch["kind"], id: item.id, enabled }] }
+            : { tone_and_style: [{ kind: item.kind as VoiceSwitch["kind"], id: item.id, enabled }] }
+        );
         return true;
       } catch (err) {
         setItem(!enabled);
-        // 400 { knowledge: ["No pdf knowledge source … in this workspace."] }
+        // 400 { knowledge | tone_and_style: ["No pdf … source … in this workspace."] }
         const first = axios.isAxiosError(err)
-          ? (err.response?.data as { knowledge?: unknown[] } | undefined)?.knowledge?.[0]
+          ? (err.response?.data as Record<string, unknown[] | undefined> | undefined)?.[list]?.[0]
           : undefined;
         toast.error(
           typeof first === "string"
             ? first
-            : extractErrorMessage(err) || "Failed to update knowledge source."
+            : extractErrorMessage(err) ||
+                (list === "knowledge"
+                  ? "Failed to update knowledge source."
+                  : "Failed to update tone / style source.")
         );
         return false;
       } finally {
@@ -125,12 +144,23 @@ export function useAgentSettings(workspaceId: string, enabled = true) {
     [queryClient, workspaceId]
   );
 
+  const setKnowledgeEnabled = useCallback(
+    (item: KnowledgeSwitch, enabled: boolean) => flipSwitch("knowledge", item, enabled),
+    [flipSwitch]
+  );
+  // Tone / style — several can be on at once
+  const setVoiceEnabled = useCallback(
+    (item: VoiceSwitch, enabled: boolean) => flipSwitch("tone_and_style", item, enabled),
+    [flipSwitch]
+  );
+
   return {
     settings,
     settingsLoaded: isFetched,
     saving,
     saveSettings,
     setKnowledgeEnabled,
+    setVoiceEnabled,
     queryKey,
   };
 }

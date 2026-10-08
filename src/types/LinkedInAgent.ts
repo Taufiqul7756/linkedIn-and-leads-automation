@@ -98,6 +98,8 @@ export interface AgentSettings {
   ignore_grilling?: boolean;
   // Per-source knowledge switches (replaces the removed use_knowledge) — oldest first
   knowledge?: KnowledgeSwitch[];
+  // Tone / style switches (story #4025) — never overlaps with `knowledge`
+  tone_and_style?: VoiceSwitch[];
   ask_questions: boolean;
   use_post_length: boolean;
   // "100 words" | "200 words" | "300 words" | "" (let the agent decide)
@@ -124,8 +126,21 @@ export interface KnowledgeSwitch {
 }
 
 // PATCH settings/ body — knowledge carries only the switches that changed
-export type AgentSettingsPatch = Omit<Partial<AgentSettings>, "knowledge"> & {
+// One tone / style source in GET settings/ → tone_and_style[]. Several can be on at once.
+export interface VoiceSwitch {
+  id: string;
+  kind: "pdf" | "website";
+  purpose?: "tone" | "style"; // in the spec, not sent by the backend yet
+  label: string; // note for the agent; "" = none
+  name: string; // file name or URL
+  // "ready" | "failed" | in progress: "pending" | "extracting" | "crawling"
+  status: string;
+  enabled: boolean;
+}
+
+export type AgentSettingsPatch = Omit<Partial<AgentSettings>, "knowledge" | "tone_and_style"> & {
   knowledge?: Pick<KnowledgeSwitch, "kind" | "id" | "enabled">[];
+  tone_and_style?: Pick<VoiceSwitch, "kind" | "id" | "enabled">[];
 };
 
 export interface AgentModelOption {

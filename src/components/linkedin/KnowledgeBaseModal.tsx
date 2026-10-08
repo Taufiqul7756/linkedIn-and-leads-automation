@@ -288,6 +288,14 @@ function ToneGuide() {
         Add writing samples — blog posts, LinkedIn posts, or documents — so the agent matches your
         voice and style.
       </span>
+      <span className="mt-1.5 block">
+        <span className="font-medium">Note for the agent:</span> e.g. &ldquo;Use for greetings and
+        sign-offs&rdquo; or &ldquo;Copy how posts open&rdquo;.
+      </span>
+      <span className="mt-1.5 block">
+        <span className="font-medium">Tip:</span> switch samples on or off in Composer settings →
+        Tone / Style. Several on = one blended voice; all off = default voice.
+      </span>
     </>
   );
 }
@@ -508,6 +516,207 @@ function DocRow({ doc, deletingDocId, onRequestDelete, onSaveNote }: DocRowProps
   );
 }
 
+// ─── add form: link + ↳ note, staged PDF + ↳ note ─────────────────────────────
+
+const isLinkedInProfileUrl = (url: string) => /linkedin\.com\/in\//i.test(url);
+
+interface AddSourceFormProps {
+  purpose: DisplayPurpose;
+  workspaceId: string;
+  urlPlaceholder: string;
+  // Called after a link / PDF is saved — parent refreshes its lists + composer switches
+  onAdded: (kind: "site" | "doc") => void;
+}
+
+// Shared by Additional knowledge and Tone / Style. The note (backend `label`) and Add link
+// appear once a link is typed; a picked PDF is staged with its own note before upload.
+function AddSourceForm({ purpose, workspaceId, urlPlaceholder, onAdded }: AddSourceFormProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [url, setUrl] = useState("");
+  // Show the invalid-link message only after blur / an Add attempt, not while typing
+  const [urlTouched, setUrlTouched] = useState(false);
+  const [urlNote, setUrlNote] = useState("");
+  const [addingUrl, setAddingUrl] = useState(false);
+  const [pendingDoc, setPendingDoc] = useState<File | null>(null);
+  const [docNote, setDocNote] = useState("");
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  const urlError = urlTouched && !!url.trim() && !isValidUrl(url);
+
+  const handleAddUrl = async () => {
+    const value = url.trim();
+    if (!value || !workspaceId) return;
+    if (!isValidUrl(value)) {
+      setUrlTouched(true);
+      return;
+    }
+    // Profiles belong in Your LinkedIn profile — not in Additional knowledge or Tone / Style
+    if (isLinkedInProfileUrl(value)) {
+      toast.error(
+        purpose === "knowledge"
+          ? "Add LinkedIn profiles under Your LinkedIn profile."
+          : "LinkedIn profiles can't be a tone / style source — use a post or article link."
+      );
+      return;
+    }
+    setAddingUrl(true);
+    try {
+      await agentService(workspaceId).addAgentWebsite(value, purpose, false, urlNote.trim());
+      setUrl("");
+      setUrlTouched(false);
+      setUrlNote("");
+      onAdded("site");
+      toast.success("Link added.");
+    } catch (err) {
+      toast.error(noteOrMessage(err));
+    } finally {
+      setAddingUrl(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setPendingDoc(file);
+    setDocNote("");
+  };
+
+  const handleUploadPendingDoc = async () => {
+    if (!pendingDoc || !workspaceId) return;
+    setUploadingDoc(true);
+    try {
+      await agentService(workspaceId).uploadAgentDocument(
+        pendingDoc,
+        purpose,
+        false,
+        docNote.trim()
+      );
+      setPendingDoc(null);
+      setDocNote("");
+      onAdded("doc");
+      toast.success("Document uploaded.");
+    } catch (err) {
+      toast.error(noteOrMessage(err));
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  return (
+    <>
+      {/* Link + note stacked; note and Add link appear once something is typed */}
+      <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+        <div>
+          <input
+            type="url"
+            placeholder={urlPlaceholder}
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onBlur={() => url.trim() && setUrlTouched(true)}
+            onKeyDown={(e) => e.key === "Enter" && handleAddUrl()}
+            aria-invalid={urlError}
+            className={cn(
+              "w-full rounded-lg border px-3.5 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2",
+              urlError
+                ? "border-red-300 focus:border-red-400 focus:ring-red-400/20"
+                : "border-gray-200 focus:border-blue-400 focus:ring-blue-400/20"
+            )}
+          />
+          {urlError && <p className="mt-1 text-xs text-red-500">{URL_ERROR}</p>}
+        </div>
+        {url.trim() && (
+          <>
+            <NoteInput
+              value={urlNote}
+              onChange={setUrlNote}
+              placeholder="How should the agent use this link? (optional)"
+              onEnter={handleAddUrl}
+            />
+            <div className="flex animate-fade-in-up justify-end">
+              <button
+                onClick={handleAddUrl}
+                disabled={!isValidUrl(url) || addingUrl}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {addingUrl && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
+                Add link
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {pendingDoc ? (
+        // Staged PDF — add a note for the agent, then upload
+        <div
+          className={cn(
+            "space-y-2 rounded-lg border border-purple-200 bg-purple-50/60 p-3",
+            uploadingDoc && "animate-sweep"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <LuFileText className="h-4 w-4 shrink-0 text-purple-600" />
+            <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
+              {pendingDoc.name}
+            </p>
+            <button
+              onClick={() => setPendingDoc(null)}
+              disabled={uploadingDoc}
+              className="shrink-0 text-gray-400 transition-colors hover:text-gray-600 disabled:opacity-50"
+              title="Remove"
+            >
+              <LuX className="h-4 w-4" />
+            </button>
+          </div>
+          <NoteInput
+            value={docNote}
+            onChange={setDocNote}
+            placeholder="How should the agent use this PDF? (optional)"
+            onEnter={handleUploadPendingDoc}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setPendingDoc(null)}
+              disabled={uploadingDoc}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUploadPendingDoc}
+              disabled={uploadingDoc}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              {uploadingDoc ? (
+                <LuLoader className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <LuUpload className="h-3.5 w-3.5" />
+              )}
+              Upload
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-purple-300 bg-purple-50 py-3 text-sm font-medium text-purple-700 transition-colors hover:border-purple-400 hover:bg-purple-100"
+        >
+          <LuUpload className="h-4 w-4 text-purple-600" />
+          <span>Upload PDF</span>
+        </button>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </>
+  );
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -519,27 +728,11 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
   const { activeWorkspace } = useWorkspace();
   const workspaceId = activeWorkspace?.id ?? "";
   const queryClient = useQueryClient();
-  const knowledgeFileInputRef = useRef<HTMLInputElement>(null);
-  const toneFileInputRef = useRef<HTMLInputElement>(null);
 
   // Your LinkedIn profile — profile URL, no note
   const [profileUrlInput, setProfileUrlInput] = useState("");
   const [addingProfile, setAddingProfile] = useState(false);
-  // Additional knowledge — websites, LinkedIn posts, other links
-  const [knowledgeUrlInput, setKnowledgeUrlInput] = useState("");
-  // Show the invalid-link message only after blur / an Add attempt, not while typing
-  const [knowledgeUrlTouched, setKnowledgeUrlTouched] = useState(false);
-  // Optional note for the agent on the link being added
-  const [urlNote, setUrlNote] = useState("");
-  // Knowledge PDF picked but not uploaded yet — shown with its own note input
-  const [pendingDoc, setPendingDoc] = useState<File | null>(null);
-  const [docNote, setDocNote] = useState("");
-  const [toneUrlInput, setToneUrlInput] = useState("");
-  const [addingKnowledgeUrl, setAddingKnowledgeUrl] = useState(false);
-  const [addingToneUrl, setAddingToneUrl] = useState(false);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
-  const [uploadingKnowledgeDoc, setUploadingKnowledgeDoc] = useState(false);
-  const [uploadingToneDoc, setUploadingToneDoc] = useState(false);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
   const [deletingSiteId, setDeletingSiteId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<{
@@ -657,8 +850,6 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
     }
   );
 
-  const isLinkedInProfileUrl = (url: string) => /linkedin\.com\/in\//i.test(url);
-
   // Your LinkedIn profile — profile URL only, no note
   const handleAddProfile = async () => {
     const url = profileUrlInput.trim();
@@ -681,91 +872,15 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
     }
   };
 
-  const handleAddUrl = async (purpose: DisplayPurpose) => {
-    const isKnowledge = purpose === "knowledge";
-    const url = (isKnowledge ? knowledgeUrlInput : toneUrlInput).trim();
-    if (!url || !workspaceId) return;
-    if (!isValidUrl(url)) {
-      if (isKnowledge) setKnowledgeUrlTouched(true);
-      else toast.error(URL_ERROR);
-      return;
-    }
-    // Profiles belong in Your LinkedIn profile — Additional knowledge is websites / posts / other links
-    if (isKnowledge && isLinkedInProfileUrl(url)) {
-      toast.error("Add LinkedIn profiles under Your LinkedIn profile.");
-      return;
-    }
-    if (isKnowledge) setAddingKnowledgeUrl(true);
-    else setAddingToneUrl(true);
-    // Note for the agent, sent as `label` — knowledge links only
-    const note = isKnowledge ? urlNote.trim() : "";
-    try {
-      await agentService(workspaceId).addAgentWebsite(url, purpose, false, note);
-      queryClient.invalidateQueries({ queryKey: ["agent-websites", workspaceId] });
-      toast.success("Link added.");
-      if (isKnowledge) {
-        setKnowledgeUrlInput("");
-        setKnowledgeUrlTouched(false);
-        setUrlNote("");
-        refreshKnowledgeSwitches();
-      } else setToneUrlInput("");
-    } catch (err) {
-      toast.error(noteOrMessage(err));
-    } finally {
-      if (isKnowledge) setAddingKnowledgeUrl(false);
-      else setAddingToneUrl(false);
-    }
+  // A link / PDF was added by an AddSourceForm — refresh its list + the composer switches
+  const handleSourceAdded = (kind: "site" | "doc") => {
+    queryClient.invalidateQueries({
+      queryKey: [kind === "site" ? "agent-websites" : "agent-documents", workspaceId],
+    });
+    refreshKnowledgeSwitches();
   };
 
-  const handleFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    purpose: DisplayPurpose
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file || !workspaceId) return;
-    e.target.value = "";
-    const isKnowledge = purpose === "knowledge";
-    // Knowledge PDF → stage it so the user can add a note, then upload from the staged card
-    if (isKnowledge) {
-      setPendingDoc(file);
-      setDocNote("");
-      return;
-    }
-    setUploadingToneDoc(true);
-    try {
-      await agentService(workspaceId).uploadAgentDocument(file, purpose, false);
-      queryClient.invalidateQueries({ queryKey: ["agent-documents", workspaceId] });
-      toast.success("Document uploaded.");
-    } catch (err) {
-      toast.error(noteOrMessage(err));
-    } finally {
-      setUploadingToneDoc(false);
-    }
-  };
-
-  const handleUploadPendingDoc = async () => {
-    if (!pendingDoc || !workspaceId) return;
-    setUploadingKnowledgeDoc(true);
-    try {
-      await agentService(workspaceId).uploadAgentDocument(
-        pendingDoc,
-        "knowledge",
-        false,
-        docNote.trim()
-      );
-      queryClient.invalidateQueries({ queryKey: ["agent-documents", workspaceId] });
-      refreshKnowledgeSwitches();
-      setPendingDoc(null);
-      setDocNote("");
-      toast.success("Document uploaded.");
-    } catch (err) {
-      toast.error(noteOrMessage(err));
-    } finally {
-      setUploadingKnowledgeDoc(false);
-    }
-  };
-
-  // Save the note for the agent on a knowledge source — PATCH { label } on its own route
+  // Save the note for the agent on a knowledge or tone / style source — PATCH { label }
   const saveNote = async (kind: "site" | "doc", id: string, note: string): Promise<boolean> => {
     try {
       const svc = agentService(workspaceId);
@@ -816,8 +931,6 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
   };
 
   const isLoading = docsLoading || sitesLoading || profilesLoading;
-  const knowledgeUrlError =
-    knowledgeUrlTouched && !!knowledgeUrlInput.trim() && !isValidUrl(knowledgeUrlInput);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Knowledge base" width="4xl">
@@ -917,114 +1030,11 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
         {/* ── Additional knowledge — links + PDFs, each with an optional note ── */}
         <div className="space-y-2 p-4">
           <SubsectionHeader title="Additional knowledge" tip={<AdditionalKnowledgeGuide />} />
-          {/* Link + note stacked; note and Add link appear once something is typed.
-              Note is sent as `label` */}
-          <div className="space-y-2 rounded-lg border border-gray-200 p-3">
-            <div>
-              <input
-                type="url"
-                placeholder="Website, LinkedIn post or article URL"
-                value={knowledgeUrlInput}
-                onChange={(e) => setKnowledgeUrlInput(e.target.value)}
-                onBlur={() => knowledgeUrlInput.trim() && setKnowledgeUrlTouched(true)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddUrl("knowledge")}
-                aria-invalid={knowledgeUrlError}
-                className={cn(
-                  "w-full rounded-lg border px-3.5 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2",
-                  knowledgeUrlError
-                    ? "border-red-300 focus:border-red-400 focus:ring-red-400/20"
-                    : "border-gray-200 focus:border-blue-400 focus:ring-blue-400/20"
-                )}
-              />
-              {knowledgeUrlError && <p className="mt-1 text-xs text-red-500">{URL_ERROR}</p>}
-            </div>
-            {/* Note appears once a link is typed, attached under it */}
-            {knowledgeUrlInput.trim() && (
-              <NoteInput
-                value={urlNote}
-                onChange={setUrlNote}
-                placeholder="How should the agent use this link? (optional)"
-                onEnter={() => handleAddUrl("knowledge")}
-              />
-            )}
-            {knowledgeUrlInput.trim() && (
-              <div className="flex animate-fade-in-up justify-end">
-                <button
-                  onClick={() => handleAddUrl("knowledge")}
-                  disabled={!isValidUrl(knowledgeUrlInput) || addingKnowledgeUrl}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {addingKnowledgeUrl && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
-                  Add link
-                </button>
-              </div>
-            )}
-          </div>
-
-          {pendingDoc ? (
-            // Staged PDF — add a note for the agent, then upload
-            <div
-              className={`space-y-2 rounded-lg border border-purple-200 bg-purple-50/60 p-3 ${
-                uploadingKnowledgeDoc ? "animate-sweep" : ""
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <LuFileText className="h-4 w-4 shrink-0 text-purple-600" />
-                <p className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
-                  {pendingDoc.name}
-                </p>
-                <button
-                  onClick={() => setPendingDoc(null)}
-                  disabled={uploadingKnowledgeDoc}
-                  className="shrink-0 text-gray-400 transition-colors hover:text-gray-600 disabled:opacity-50"
-                  title="Remove"
-                >
-                  <LuX className="h-4 w-4" />
-                </button>
-              </div>
-              <NoteInput
-                value={docNote}
-                onChange={setDocNote}
-                placeholder="How should the agent use this PDF? (optional)"
-                onEnter={handleUploadPendingDoc}
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setPendingDoc(null)}
-                  disabled={uploadingKnowledgeDoc}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleUploadPendingDoc}
-                  disabled={uploadingKnowledgeDoc}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {uploadingKnowledgeDoc ? (
-                    <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <LuUpload className="h-3.5 w-3.5" />
-                  )}
-                  Upload
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => knowledgeFileInputRef.current?.click()}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-purple-300 bg-purple-50 py-3 text-sm font-medium text-purple-700 transition-colors hover:border-purple-400 hover:bg-purple-100"
-            >
-              <LuUpload className="h-4 w-4 text-purple-600" />
-              <span>Upload PDF</span>
-            </button>
-          )}
-          <input
-            ref={knowledgeFileInputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={(e) => handleFileChange(e, "knowledge")}
+          <AddSourceForm
+            purpose="knowledge"
+            workspaceId={workspaceId}
+            urlPlaceholder="Website, LinkedIn post or article URL"
+            onAdded={handleSourceAdded}
           />
 
           {isLoading ? (
@@ -1074,77 +1084,42 @@ export default function KnowledgeBaseModal({ isOpen, onClose }: Props) {
           )}
         </div>
 
-        {/* Input fields */}
         <div className="space-y-2 p-4">
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              placeholder="https://example.com/writing-sample"
-              value={toneUrlInput}
-              onChange={(e) => setToneUrlInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddUrl("tone")}
-              className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3.5 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-            />
-            <button
-              onClick={() => handleAddUrl("tone")}
-              disabled={!toneUrlInput.trim() || addingToneUrl}
-              className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              {addingToneUrl && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
-              Add
-            </button>
-          </div>
-
-          <button
-            onClick={() => toneFileInputRef.current?.click()}
-            disabled={uploadingToneDoc}
-            className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-purple-300 bg-purple-50 py-3 text-sm font-medium text-purple-700 transition-colors hover:border-purple-400 hover:bg-purple-100 ${uploadingToneDoc ? "animate-sweep" : ""}`}
-          >
-            {uploadingToneDoc ? (
-              <LuLoader className="h-4 w-4 animate-spin text-purple-600" />
-            ) : (
-              <LuUpload className="h-4 w-4 text-purple-600" />
-            )}
-            <span>{uploadingToneDoc ? "Uploading…" : "Upload a document"}</span>
-            <span className="text-xs font-normal text-purple-500">PDF only</span>
-          </button>
-          <input
-            ref={toneFileInputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={(e) => handleFileChange(e, "tone")}
+          <AddSourceForm
+            purpose="tone"
+            workspaceId={workspaceId}
+            urlPlaceholder="Blog post, LinkedIn post or article URL"
+            onAdded={handleSourceAdded}
           />
-        </div>
 
-        {/* Source list */}
-        {isLoading ? (
-          <div className="flex items-center gap-2 border-t border-gray-100 px-4 py-4 text-sm text-gray-400">
-            <LuLoader className="h-4 w-4 animate-spin" />
-            Loading…
-          </div>
-        ) : toneCount > 0 ? (
-          <div className="border-t border-gray-100 px-4">
-            {toneSites.map((s) => (
-              <SiteRow
-                key={s.id}
-                site={s}
-                recrawlingId={recrawlingId}
-                deletingSiteId={deletingSiteId}
-                onRecrawl={handleRecrawl}
-                onRequestDelete={handleRequestDelete}
-              />
-            ))}
-            {toneDocs.map((d) => (
-              <DocRow
-                key={d.id}
-                doc={d}
-                deletingDocId={deletingDocId}
-                onRequestDelete={handleRequestDelete}
-              />
-            ))}
-          </div>
-        ) : null}
+          {isLoading ? (
+            <LoadingRow />
+          ) : toneCount > 0 ? (
+            // Gap + divider so the list reads separately from the upload controls
+            <div className="mt-5 border-t border-gray-100 pt-1">
+              {toneSites.map((s) => (
+                <SiteRow
+                  key={s.id}
+                  site={s}
+                  recrawlingId={recrawlingId}
+                  deletingSiteId={deletingSiteId}
+                  onRecrawl={handleRecrawl}
+                  onRequestDelete={handleRequestDelete}
+                  onSaveNote={(id, note) => saveNote("site", id, note)}
+                />
+              ))}
+              {toneDocs.map((d) => (
+                <DocRow
+                  key={d.id}
+                  doc={d}
+                  deletingDocId={deletingDocId}
+                  onRequestDelete={handleRequestDelete}
+                  onSaveNote={(id, note) => saveNote("doc", id, note)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* ── Audience & Length card (agent settings) ────────────────────── */}

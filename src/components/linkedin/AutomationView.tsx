@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
@@ -39,13 +40,12 @@ import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import Modal from "@/components/ui/Modal";
+import HoverGuide from "@/components/ui/HoverGuide";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
 import EditDraftModal from "./EditDraftModal";
 import AllDraftsModal from "./AllDraftsModal";
 import VersionHistoryModal from "./VersionHistoryModal";
 import SourceIcon from "./SourceIcon";
-import { agentService } from "@/service/agentService";
-import type { ProfileDocument, ProfileWebsite } from "@/types/Agent";
 import type {
   Attachment,
   Conversation,
@@ -61,6 +61,7 @@ import type {
   PendingInterrupt,
   PostVersion,
   KnowledgeSwitch,
+  VoiceSwitch,
 } from "@/types/LinkedInAgent";
 
 // ─── constants ────────────────────────────────────────────────────────────────
@@ -401,22 +402,34 @@ function Toggle({
 function SettingsAccordion({
   title,
   summary,
+  tip,
   children,
 }: {
   title: string;
   summary: string;
+  // ⓘ hover guide after the title (same as the Knowledge base modal)
+  tip?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="py-1">
+    <div className="relative py-1">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-3 py-2 text-left"
       >
-        <span className="text-sm font-medium text-gray-800">{title}</span>
+        <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+          {title}
+          {/* Opens upward and spans the accordion row (the `relative` root below), so it
+              stays inside the w-80 panel */}
+          {tip && (
+            <HoverGuide anchor="parent" position="top">
+              {tip}
+            </HoverGuide>
+          )}
+        </span>
         <span className="flex shrink-0 items-center gap-1.5 text-xs text-gray-400">
           {summary}
           <LuChevronDown
@@ -459,7 +472,67 @@ function EmptySources({ onOpenKnowledgeBase }: { onOpenKnowledgeBase: () => void
   );
 }
 
-// Composer settings → one switch per knowledge source (tone/style references are never listed)
+// One row per source with a switch — shared by the Knowledge and Tone / Style accordions.
+// `label` is the user's note for the agent, shown under the source name.
+function SourceSwitchList<T extends KnowledgeSwitch | VoiceSwitch>({
+  items,
+  onToggle,
+  onOpenKnowledgeBase,
+}: {
+  items: T[];
+  onToggle: (item: T, enabled: boolean) => void;
+  onOpenKnowledgeBase: () => void;
+}) {
+  if (items.length === 0) return <EmptySources onOpenKnowledgeBase={onOpenKnowledgeBase} />;
+  return (
+    // More than 5 sources → list scrolls inside the accordion (about 5 rows tall)
+    <div className={cn("space-y-1", items.length > 5 && "max-h-64 overflow-y-auto pr-1")}>
+      {items.map((item) => (
+        <div
+          key={`${item.kind}:${item.id}`}
+          className="flex items-center gap-2 rounded-lg px-1 py-1.5"
+        >
+          <SourceIcon kind={item.kind} url={item.name} className="h-5 w-5" />
+          <div
+            className="min-w-0 flex-1"
+            title={item.label ? `${item.name}\nNote: ${item.label}` : item.name}
+          >
+            {/* Websites / LinkedIn links open in a new tab; PDFs only have a file name here */}
+            {item.kind === "pdf" ? (
+              <p className="truncate text-xs text-gray-700">{item.name}</p>
+            ) : (
+              <a
+                href={/^https?:\/\//i.test(item.name) ? item.name : `https://${item.name}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block truncate text-xs text-gray-700 hover:text-blue-600 hover:underline"
+              >
+                {item.name}
+              </a>
+            )}
+            {item.label && (
+              <p className="truncate text-[11px] text-gray-700">
+                <span className="font-semibold">Note:</span> {item.label}
+              </p>
+            )}
+          </div>
+          {"purpose" in item && item.purpose && (
+            <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium capitalize text-gray-500">
+              {item.purpose}
+            </span>
+          )}
+          <SourceStatus status={item.status} />
+          <Toggle small checked={item.enabled} onChange={(v) => onToggle(item, v)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const onSummary = (items: { enabled: boolean }[]) =>
+  items.length ? `${items.filter((i) => i.enabled).length} of ${items.length} on` : "None";
+
+// Composer settings → one switch per knowledge source (tone/style sources are never listed)
 function KnowledgeSwitches({
   items,
   onToggle,
@@ -469,96 +542,42 @@ function KnowledgeSwitches({
   onToggle: (item: KnowledgeSwitch, enabled: boolean) => void;
   onOpenKnowledgeBase: () => void;
 }) {
-  const onCount = items.filter((i) => i.enabled).length;
   return (
     <SettingsAccordion
       title="Knowledge"
-      summary={items.length ? `${onCount} of ${items.length} on` : "None"}
+      summary={onSummary(items)}
+      tip="Only sources switched on are used. All off = no knowledge."
     >
-      <p className="mb-2 text-xs text-gray-400">
-        Only sources switched on are used. All off = no knowledge
-      </p>
-      {items.length === 0 ? (
-        <EmptySources onOpenKnowledgeBase={onOpenKnowledgeBase} />
-      ) : (
-        <div className="max-h-48 space-y-1 overflow-y-auto">
-          {items.map((item) => (
-            <div
-              key={`${item.kind}:${item.id}`}
-              className="flex items-center gap-2 rounded-lg px-1 py-1.5"
-            >
-              <SourceIcon kind={item.kind} url={item.name} className="h-5 w-5" />
-              {/* `label` is the user's note for the agent — shown under the source name */}
-              <div
-                className="min-w-0 flex-1"
-                title={item.label ? `${item.name}\nNote: ${item.label}` : item.name}
-              >
-                <p className="truncate text-xs text-gray-700">{item.name}</p>
-                {item.label && (
-                  <p className="truncate text-[11px] text-gray-400">Note: {item.label}</p>
-                )}
-              </div>
-              <SourceStatus status={item.status} />
-              <Toggle small checked={item.enabled} onChange={(v) => onToggle(item, v)} />
-            </div>
-          ))}
-        </div>
-      )}
+      <SourceSwitchList
+        items={items}
+        onToggle={onToggle}
+        onOpenKnowledgeBase={onOpenKnowledgeBase}
+      />
     </SettingsAccordion>
   );
 }
 
-interface ToneSource {
-  id: string;
-  kind: "pdf" | "website";
-  name: string;
-  status: string;
-  isDefault: boolean;
-}
-
-// Composer settings → tone / style references (read-only — no per-source switch in the API)
-function ToneSources({
+// Composer settings → one switch per tone / style source (settings.tone_and_style). Several can be on.
+function VoiceSwitches({
   items,
-  loading,
+  onToggle,
   onOpenKnowledgeBase,
 }: {
-  items: ToneSource[];
-  loading: boolean;
+  items: VoiceSwitch[];
+  onToggle: (item: VoiceSwitch, enabled: boolean) => void;
   onOpenKnowledgeBase: () => void;
 }) {
   return (
-    <SettingsAccordion title="Tone / Style" summary={items.length ? `${items.length}` : "None"}>
-      <p className="mb-2 text-xs text-gray-400">
-        Writing samples the agent matches your voice to. Manage them in Knowledge base
-      </p>
-      {loading ? (
-        <p className="flex items-center gap-2 text-xs text-gray-400">
-          <LuLoader className="h-3.5 w-3.5 animate-spin" />
-          Loading…
-        </p>
-      ) : items.length === 0 ? (
-        <EmptySources onOpenKnowledgeBase={onOpenKnowledgeBase} />
-      ) : (
-        <div className="max-h-48 space-y-1 overflow-y-auto">
-          {items.map((item) => (
-            <div
-              key={`${item.kind}:${item.id}`}
-              className="flex items-center gap-2 rounded-lg px-1 py-1.5"
-            >
-              <SourceIcon kind={item.kind} url={item.name} className="h-5 w-5" />
-              <p className="min-w-0 flex-1 truncate text-xs text-gray-700" title={item.name}>
-                {item.name}
-              </p>
-              {item.isDefault && (
-                <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
-                  Default
-                </span>
-              )}
-              <SourceStatus status={item.status} />
-            </div>
-          ))}
-        </div>
-      )}
+    <SettingsAccordion
+      title="Tone / Style"
+      summary={onSummary(items)}
+      tip="Posts blend every voice switched on. All off = default voice."
+    >
+      <SourceSwitchList
+        items={items}
+        onToggle={onToggle}
+        onOpenKnowledgeBase={onOpenKnowledgeBase}
+      />
     </SettingsAccordion>
   );
 }
@@ -1595,6 +1614,23 @@ export default function AutomationView() {
   const hasScrolledToBottomRef = useRef(false);
   const promptRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  // Fixed-position anchor for the Composer settings portal (px from the viewport edges)
+  const [settingsAnchor, setSettingsAnchor] = useState<{
+    bottom: number;
+    right: number;
+    maxHeight: number;
+  } | null>(null);
+  const measureSettingsAnchor = useCallback(() => {
+    const rect = settingsRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const gap = 8; // space between the button and the panel, and from the top of the screen
+    setSettingsAnchor({
+      bottom: window.innerHeight - rect.top + gap,
+      right: window.innerWidth - rect.right,
+      maxHeight: rect.top - gap * 2,
+    });
+  }, []);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1618,41 +1654,8 @@ export default function AutomationView() {
     saving: settingsSaving,
     saveSettings,
     setKnowledgeEnabled,
+    setVoiceEnabled,
   } = useAgentSettings(workspaceId);
-
-  // Tone / Style references for the composer settings accordion — shares the
-  // Knowledge base modal's query keys so both stay in sync
-  const { data: toneDocsData, isLoading: toneDocsLoading } = useQueryWithTokenRefresh(
-    ["agent-documents", workspaceId],
-    () => agentService(workspaceId).getAgentDocuments(),
-    { enabled: !!workspaceId && settingsOpen }
-  );
-  const { data: toneSitesData, isLoading: toneSitesLoading } = useQueryWithTokenRefresh(
-    ["agent-websites", workspaceId],
-    () => agentService(workspaceId).getAgentWebsites(),
-    { enabled: !!workspaceId && settingsOpen }
-  );
-  const isToneSource = (purpose: string) => purpose === "tone" || purpose === "style";
-  const toneSources = [
-    ...((toneSitesData as { results?: ProfileWebsite[] } | undefined)?.results ?? [])
-      .filter((w) => isToneSource(w.purpose))
-      .map((w) => ({
-        id: w.id,
-        kind: "website" as const,
-        name: w.url,
-        status: w.status,
-        isDefault: w.is_default,
-      })),
-    ...((toneDocsData as { results?: ProfileDocument[] } | undefined)?.results ?? [])
-      .filter((d) => isToneSource(d.purpose))
-      .map((d) => ({
-        id: d.id,
-        kind: "pdf" as const,
-        name: d.filename,
-        status: d.status,
-        isDefault: d.is_default,
-      })),
-  ];
 
   // ── approve draft posts ──
   const handleApprovePost = useCallback(
@@ -2002,12 +2005,20 @@ export default function AutomationView() {
   useEffect(() => {
     if (!settingsOpen) return;
     const h = (e: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node))
-        setSettingsOpen(false);
+      const target = e.target as Node;
+      // Panel lives in a portal on <body>, so check it as well as the button wrapper
+      if (settingsRef.current?.contains(target) || settingsPanelRef.current?.contains(target))
+        return;
+      setSettingsOpen(false);
     };
+    // Keep the portal panel anchored to the ⚙ button when the window changes size
+    window.addEventListener("resize", measureSettingsAnchor);
     document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [settingsOpen]);
+    return () => {
+      window.removeEventListener("resize", measureSettingsAnchor);
+      document.removeEventListener("mousedown", h);
+    };
+  }, [settingsOpen, measureSettingsAnchor]);
 
   useEffect(() => {
     if (!plusOpen) return;
@@ -3344,7 +3355,10 @@ export default function AutomationView() {
                       {/* Settings */}
                       <div ref={settingsRef} className="relative">
                         <button
-                          onClick={() => setSettingsOpen((v) => !v)}
+                          onClick={() => {
+                            if (!settingsOpen) measureSettingsAnchor();
+                            setSettingsOpen((v) => !v);
+                          }}
                           className={cn(
                             "flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition-colors hover:bg-gray-100 hover:border-gray-400",
                             settingsSaving && "opacity-50"
@@ -3353,116 +3367,132 @@ export default function AutomationView() {
                           <LuSettings className="h-4 w-4" />
                         </button>
 
-                        {settingsOpen && (
-                          <div className="absolute bottom-full right-0 z-20 mb-2 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
-                            <div className="flex items-center justify-between px-4 py-3">
-                              <span className="text-sm font-semibold text-gray-900">
-                                Composer settings
-                              </span>
-                              <button
-                                onClick={() => setSettingsOpen(false)}
-                                className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
-                              >
-                                <LuX className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                        {settingsOpen &&
+                          settingsAnchor &&
+                          // Portal + fixed position: the chat column has overflow-hidden, which
+                          // clipped the panel when an accordion made it taller. Capped to the
+                          // space above the button, body scrolls, header always visible.
+                          createPortal(
+                            <div
+                              ref={settingsPanelRef}
+                              style={{
+                                bottom: settingsAnchor.bottom,
+                                right: settingsAnchor.right,
+                                maxHeight: settingsAnchor.maxHeight,
+                              }}
+                              className="fixed z-50 flex w-80 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg"
+                            >
+                              <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
+                                <span className="text-sm font-semibold text-gray-900">
+                                  Composer settings
+                                </span>
+                                <button
+                                  onClick={() => setSettingsOpen(false)}
+                                  className="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                                >
+                                  <LuX className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
 
-                            <div className="divide-y divide-gray-100 px-4 pb-4">
-                              {/* Post count */}
-                              <div className="flex items-center justify-between gap-3 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-800">
-                                    Posts per batch
-                                  </p>
-                                  <p className="text-xs text-gray-400">
-                                    How many drafts per run (1–20)
-                                  </p>
+                              <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto px-4 pb-4">
+                                {/* Post count */}
+                                <div className="flex items-center justify-between gap-3 py-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-800">
+                                      Posts per batch
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                      How many drafts per run (1–20)
+                                    </p>
+                                  </div>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={20}
+                                    value={settings.post_count}
+                                    onChange={(e) => {
+                                      const n = Math.min(20, Math.max(1, Number(e.target.value)));
+                                      if (!isNaN(n)) handleSettingChange("post_count", n);
+                                    }}
+                                    className="w-16 rounded-lg border border-gray-200 px-2 py-1.5 text-center text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                                  />
                                 </div>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={20}
-                                  value={settings.post_count}
-                                  onChange={(e) => {
-                                    const n = Math.min(20, Math.max(1, Number(e.target.value)));
-                                    if (!isNaN(n)) handleSettingChange("post_count", n);
+
+                                {/* Content toggles */}
+                                <div className="flex items-start justify-between gap-3 py-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-800">Use emoji</p>
+                                    <p className="text-xs text-gray-400">
+                                      Sprinkle emoji into drafts
+                                    </p>
+                                  </div>
+                                  <Toggle
+                                    checked={settings.use_emoji}
+                                    onChange={(v) => handleSettingChange("use_emoji", v)}
+                                  />
+                                </div>
+                                <div className="flex items-start justify-between gap-3 py-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-800">
+                                      Use hashtags
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                      Add hashtags to each draft
+                                    </p>
+                                  </div>
+                                  <Toggle
+                                    checked={settings.use_hashtags}
+                                    onChange={(v) => handleSettingChange("use_hashtags", v)}
+                                  />
+                                </div>
+                                <div className="flex items-start justify-between gap-3 py-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-800">
+                                      Use target audience
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                      Write for the audience set in Knowledge base
+                                    </p>
+                                  </div>
+                                  <Toggle
+                                    checked={settings.use_target_audience}
+                                    onChange={(v) => handleSettingChange("use_target_audience", v)}
+                                  />
+                                </div>
+                                <div className="flex items-start justify-between gap-3 py-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-800">
+                                      Use post length
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                      Match the length set in Knowledge base
+                                    </p>
+                                  </div>
+                                  <Toggle
+                                    checked={settings.use_post_length}
+                                    onChange={(v) => handleSettingChange("use_post_length", v)}
+                                  />
+                                </div>
+                                <KnowledgeSwitches
+                                  items={settings.knowledge ?? []}
+                                  onToggle={setKnowledgeEnabled}
+                                  onOpenKnowledgeBase={() => {
+                                    setSettingsOpen(false);
+                                    setKnowledgeOpen(true);
                                   }}
-                                  className="w-16 rounded-lg border border-gray-200 px-2 py-1.5 text-center text-sm text-gray-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                                />
+                                <VoiceSwitches
+                                  items={settings.tone_and_style ?? []}
+                                  onToggle={setVoiceEnabled}
+                                  onOpenKnowledgeBase={() => {
+                                    setSettingsOpen(false);
+                                    setKnowledgeOpen(true);
+                                  }}
                                 />
                               </div>
-
-                              {/* Content toggles */}
-                              <div className="flex items-start justify-between gap-3 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-800">Use emoji</p>
-                                  <p className="text-xs text-gray-400">
-                                    Sprinkle emoji into drafts
-                                  </p>
-                                </div>
-                                <Toggle
-                                  checked={settings.use_emoji}
-                                  onChange={(v) => handleSettingChange("use_emoji", v)}
-                                />
-                              </div>
-                              <div className="flex items-start justify-between gap-3 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-800">Use hashtags</p>
-                                  <p className="text-xs text-gray-400">
-                                    Add hashtags to each draft
-                                  </p>
-                                </div>
-                                <Toggle
-                                  checked={settings.use_hashtags}
-                                  onChange={(v) => handleSettingChange("use_hashtags", v)}
-                                />
-                              </div>
-                              <div className="flex items-start justify-between gap-3 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-800">
-                                    Use target audience
-                                  </p>
-                                  <p className="text-xs text-gray-400">
-                                    Write for the audience set in Knowledge base
-                                  </p>
-                                </div>
-                                <Toggle
-                                  checked={settings.use_target_audience}
-                                  onChange={(v) => handleSettingChange("use_target_audience", v)}
-                                />
-                              </div>
-                              <div className="flex items-start justify-between gap-3 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-800">
-                                    Use post length
-                                  </p>
-                                  <p className="text-xs text-gray-400">
-                                    Match the length set in Knowledge base
-                                  </p>
-                                </div>
-                                <Toggle
-                                  checked={settings.use_post_length}
-                                  onChange={(v) => handleSettingChange("use_post_length", v)}
-                                />
-                              </div>
-                              <KnowledgeSwitches
-                                items={settings.knowledge ?? []}
-                                onToggle={setKnowledgeEnabled}
-                                onOpenKnowledgeBase={() => {
-                                  setSettingsOpen(false);
-                                  setKnowledgeOpen(true);
-                                }}
-                              />
-                              <ToneSources
-                                items={toneSources}
-                                loading={toneDocsLoading || toneSitesLoading}
-                                onOpenKnowledgeBase={() => {
-                                  setSettingsOpen(false);
-                                  setKnowledgeOpen(true);
-                                }}
-                              />
-                            </div>
-                          </div>
-                        )}
+                            </div>,
+                            document.body
+                          )}
                       </div>
 
                       {/* Send / Cancel — mutually exclusive */}
