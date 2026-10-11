@@ -689,6 +689,8 @@ One post, one conversation about its picture. The user says in their own words h
 | `POST` | `image-chats/{id}/add_to_post/` | `200` full chat | `{ image: imageId }` |
 | `GET` | `image-chats/` | `200` paginated list | `count`/`next`/`previous`/`results`, page size 25 |
 | `GET`/`PATCH` | `image-chats/settings/{chatId}/` | `200` settings | Per-chat image settings — see §4 |
+| `GET` | `image-chats/{id}/stock/recommended/` | `200` `{ query, photos }` | Pexels photos picked for the post — see §5 |
+| `GET` | `image-chats/{id}/stock/search/?q=&page=` | `200` `{ query, page, has_more, photos }` | User's own Pexels search — see §5 |
 
 ---
 
@@ -761,7 +763,7 @@ type GeneratedImage = {
   prompt: string;                  // "" on a base image
   is_base: boolean;                // the post's own picture, copied in
   is_added_on_post: boolean;       // true if this image is currently on the post
-  kind: "edit" | "new";
+  kind: "edit" | "new" | "stock";  // unknown kinds → render as a normal picture card
   source: string | null;           // id of the picture it was made from
   error: string;                   // filled only when failed
   created_at: string;
@@ -821,6 +823,7 @@ A greeting, a question about the assistant, anything unrelated: **200 OK**. No n
 |---|---|
 | `"edit"` | Last `ready` picture sent as the source to change. `source` points at it. |
 | `"new"` | No picture sent — drawn fresh from post body + prompt. `source` is `null`. |
+| `"stock"` | A Pexels photo put on the post (§5). Card text "Added a stock photo to your post.", `prompt: ""`, `is_base: true`. The next turn edits this photo. |
 
 ### Refusals
 
@@ -949,6 +952,96 @@ type ImageChatSettingsPatch = Partial<{
 
 ---
 
+## 5. Stock photos (Pexels)
+
+Two read routes. Putting a photo on the post uses the existing post `PATCH` — no new route for that step. Wrong chat id or another workspace's chat → `404 {"detail": "No ImageChat matches the given query."}`.
+
+### Photo shape — `StockPhoto`
+
+```json
+{
+  "id": 7710157,
+  "alt": "Young professionals engaged in a strategic planning session…",
+  "photographer": "Alena Darmel",
+  "width": 4933,
+  "height": 3289,
+  "thumbnail_url": "https://images.pexels.com/photos/7710157/pexels-photo-7710157.jpeg?auto=compress&cs=tinysrgb&h=350",
+  "url": "https://images.pexels.com/photos/7710157/pexels-photo-7710157.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  "pexels_url": "https://www.pexels.com/photo/colleagues-having-a-business-meeting-7710157/"
+}
+```
+
+```ts
+type StockPhoto = {
+  id: number;            // grid key
+  alt: string;           // may be ""
+  photographer: string;  // optional credit
+  width: number;         // original size — every photo is landscape
+  height: number;
+  thumbnail_url: string; // grid image only
+  url: string;           // send THIS in PATCH { image_url } — never thumbnail_url
+  pexels_url: string;
+};
+```
+
+### `GET image-chats/{id}/stock/recommended/`
+
+```json
+{ "query": "generative ai marketing teams small business marketing", "photos": [ /* ≤ 15 */ ] }
+```
+
+```ts
+type StockRecommendedResponse = { query: string; photos: StockPhoto[] };
+```
+
+- Searches the post's first three hashtags as words (`#RemoteWork` → `remote work`); no hashtags → stored image search term → headline / first body line. If the hashtags find nothing together, the first hashtag alone. `query` is always what actually answered — shown as the search box placeholder.
+- Nothing to search for → `{"query": "", "photos": []}`.
+- Cached 24h by the backend (re-searches when hashtags change).
+
+### `GET image-chats/{id}/stock/search/?q=&page=`
+
+```json
+{ "query": "coffee shop", "page": 1, "has_more": true, "photos": [ /* ≤ 15 */ ] }
+```
+
+```ts
+type StockSearchResponse = { query: string; page: number; has_more: boolean; photos: StockPhoto[] };
+```
+
+| Param | Required | Notes |
+|---|---|---|
+| `q` | yes | Trimmed, max 200 chars |
+| `page` | no | Default `1`, max `100` |
+
+Request `page + 1` while `has_more`; pages never repeat a photo. Empty `photos` + `has_more: false` = no results. Not cached.
+
+### Put a photo on the post — `PATCH content/posts/{postId}/ { "image_url": photo.url }`
+
+**200** with the full post. Only a `https://images.pexels.com/…` address counts as a stock pick:
+
+| Field | Becomes |
+|---|---|
+| `image_url` | The photo's `url` |
+| `image_origin` | `"stock"` — a later Regenerate keeps this photo |
+| `media_type` | `"image"`, **unless** the post was set to video on purpose (stays `"video"` → offer `PATCH {"media": "image"}`) |
+| `current_version` | New version (`source: "editor"`); same-user edits within 2 min fold into one |
+
+Status does not change. Then `GET image-chats/{id}/` — the transcript ends with an agent card `"Added a stock photo to your post."` whose `image.kind === "stock"`, `is_added_on_post: true` (earlier cards turn `false`). One card per pick; every Image Chat open on the post gets it; no card if the post has no chat yet.
+
+### Errors
+
+| Status | Body | When |
+|---|---|---|
+| `400` | `{"q": ["This field is required."]}` / `{"q": ["This field may not be blank."]}` | Search with missing / blank `q` — never sent by the UI |
+| `400` | `{"page": ["Ensure this value is greater than or equal to 1."]}` | Bad `page` |
+| `400` | `{"image_url": ["This post is already on LinkedIn — its image cannot be changed."]}` | `PATCH` a Pexels `url` on a published post |
+| `503` | `{"detail": "Stock photos are not available right now. Try again in a moment."}` | Pexels failed / not configured (either `GET`) — show with **Retry** |
+| `404` | `{"detail": "No ImageChat matches the given query."}` | Wrong chat id / workspace |
+
+Show backend text as is.
+
+---
+
 ## Polling rule
 
 Poll `GET image-chats/{id}/` every 2s while `chat.status === "running"`. The chat-level `status` is the single source of truth — `"running"` exactly while a turn is being generated. A failed turn leaves the chat `"ready"`. A spinner never runs forever — a background sweep fails any turn still `pending` after 20 minutes.
@@ -974,6 +1067,7 @@ A generated picture follows the chat's active `image_ratio` (1:1, 16:9 or 4:5 �
 | turn accepted | *written from what they asked* |
 | turn failed | I could not make that image. Try describing the change again. |
 | added to the post | Added to your post. |
+| stock photo put on the post | Added a stock photo to your post. |
 | message not about the picture | *written for what they asked — varies* |
 
 Never re-write agent copy client-side.

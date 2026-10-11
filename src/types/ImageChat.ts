@@ -5,7 +5,7 @@ export type GeneratedImage = {
   prompt: string;
   is_base: boolean;
   is_added_on_post: boolean;
-  kind: "edit" | "new";
+  kind: "edit" | "new" | "stock"; // unknown kinds render as a normal picture card
   source: string | null;
   error: string;
   created_at: string;
@@ -59,6 +59,32 @@ export type ImageChatSettings = {
   image_ratio: ImageRatioOption[];
   ai_model: ImageModelOption[];
   image_style: ImageStyleOption[];
+};
+
+// Stock photos (Pexels) — every photo is landscape
+export type StockPhoto = {
+  id: number;
+  alt: string; // may be ""
+  photographer: string;
+  width: number;
+  height: number;
+  thumbnail_url: string; // grid only
+  url: string; // send this in PATCH posts/{id}/ { image_url }
+  pexels_url: string;
+};
+
+// GET image-chats/{chatId}/stock/recommended/ — query "" + photos [] when the post has nothing to search for
+export type StockRecommendedResponse = {
+  query: string;
+  photos: StockPhoto[];
+};
+
+// GET image-chats/{chatId}/stock/search/?q=&page=
+export type StockSearchResponse = {
+  query: string;
+  page: number;
+  has_more: boolean;
+  photos: StockPhoto[];
 };
 
 // PATCH image-chats/settings/{chatId}/ — send only the changed field

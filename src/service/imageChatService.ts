@@ -1,6 +1,12 @@
 import axios from "axios";
 import { Config } from "@/config/config";
-import type { ImageChat, ImageChatSettings, ImageChatSettingsPatch } from "@/types/ImageChat";
+import type {
+  ImageChat,
+  ImageChatSettings,
+  ImageChatSettingsPatch,
+  StockRecommendedResponse,
+  StockSearchResponse,
+} from "@/types/ImageChat";
 
 function getAuthHeaders(): Record<string, string> {
   const stored = typeof window !== "undefined" ? localStorage.getItem("auth") : null;
@@ -45,6 +51,18 @@ export const imageChatService = (workspaceId: string) => ({
     axiosPost<ImageChat>(`/workspaces/${workspaceId}/image-chats/${chatId}/add_to_post/`, {
       image: imageId,
     }),
+
+  // GET image-chats/{id}/stock/recommended/ — cached 24h by the backend
+  getStockRecommended: (chatId: string) =>
+    axiosGet<StockRecommendedResponse>(
+      `/workspaces/${workspaceId}/image-chats/${chatId}/stock/recommended/`
+    ),
+
+  // GET image-chats/{id}/stock/search/?q=&page= — q must be non-blank, page 1–100
+  searchStock: (chatId: string, q: string, page: number) =>
+    axiosGet<StockSearchResponse>(
+      `/workspaces/${workspaceId}/image-chats/${chatId}/stock/search/?q=${encodeURIComponent(q)}&page=${page}`
+    ),
 
   // GET image-chats/settings/{chatId}/
   getSettings: (chatId: string) =>
