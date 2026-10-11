@@ -32,6 +32,7 @@ Token-based auth. `Authorization: Token <key>` header on every API request. Toke
 | **Restore ("Use this version")** | Brings an old version back as a **new** version number; approved/scheduled posts return to Draft |
 | **Image Chat** | One-per-post AI conversation for generating and editing a post's image. Accessed at `/linkedin/edit-image/[postId]` |
 | **Image Settings** | Per-chat settings for Image Chat (`image-chats/settings/{chatId}/`): Use post body toggle, **AI Model** (e.g. Nano Banana) and **Image Ratio** / media size (e.g. Landscape Size 1200 X 628, 16:9). One active option each |
+| **Stock Image** | A Pexels photo picked in the Image Chat's "Stock image" modal (recommended from the post's hashtags, or searched) and put on the post via `PATCH posts/{id}/ { image_url }`. The post's `image_origin` becomes `"stock"`; the chat gets a `kind: "stock"` card |
 | **Run Agent** | Bulk action that triggers the agentic swarm for selected leads |
 | **Lead Status** | Validation state of a lead: Valid (green) · Risky (amber) · Invalid (red — auto-removed) |
 | **Outreach** | Channel/state of outreach for a lead: Not contacted · Email sent · WhatsApp sent · LinkedIn sent · Replied |

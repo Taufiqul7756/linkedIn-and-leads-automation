@@ -26,6 +26,7 @@ import {
   LuCpu,
   LuChevronDown,
   LuPalette,
+  LuImages,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -39,6 +40,8 @@ import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import toast from "react-hot-toast";
 import TiptapEditor from "@/components/ui/TiptapEditor";
 import ImageRatioModal from "@/components/linkedin/ImageRatioModal";
+import StockImageModal from "@/components/linkedin/StockImageModal";
+import { queryClient } from "@/lib/queryClient";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
 import type {
   ImageChat,
@@ -47,6 +50,7 @@ import type {
   ImageChatSettings,
   ImageChatSettingsPatch,
   ImageModelOption,
+  StockPhoto,
 } from "@/types/ImageChat";
 
 // ─── body_blocks → Tiptap helpers ────────────────────────────────────────────
@@ -118,6 +122,11 @@ function getInitialContent(post: AgentPost): object {
 
 // Chat input grows with its content up to this many lines, then scrolls inside
 const CHAT_INPUT_MAX_ROWS = 8;
+
+// Only Pexels addresses count as a stock pick (backend rule)
+function isStockImageUrl(url: string): boolean {
+  return url.startsWith("https://images.pexels.com/");
+}
 
 // Fixed prompt sent by the "AI Generated Image" quick-action button
 const AI_GENERATED_IMAGE_PROMPT = "Make Ai generated image";
@@ -218,7 +227,7 @@ function ImageResultCard({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={image.url}
-            alt={image.prompt || "Generated image"}
+            alt={image.prompt || (image.kind === "stock" ? "Stock photo" : "Generated image")}
             onLoad={() => setLoaded(true)}
             className={cn(
               "block h-auto max-h-(--chat-image-max-h) w-auto max-w-full cursor-zoom-in",
@@ -677,6 +686,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const [ratioModalOpen, setRatioModalOpen] = useState(false);
+  const [stockModalOpen, setStockModalOpen] = useState(false);
   const activeModel = imgSettings.ai_model.find((m) => m.is_active);
   const activeRatio = imgSettings.image_ratio.find((r) => r.is_active);
   // No active style (fresh chat) is the same as "None"
@@ -977,6 +987,67 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     }
   }
 
+  // ── Add stock photo (Pexels) to post ────────────────────────────────────────
+  // PATCH the post with the photo's full `url`, then refetch the chat — the backend
+  // appends an "Added a stock photo" card and updates post_image_url (Edit + Preview).
+  async function handleAddStockPhoto(photo: StockPhoto) {
+    if (!post || !chat) return;
+    let updated;
+    try {
+      updated = await postsService(workspaceId).patchPostRaw(post.id, { image_url: photo.url });
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+      return;
+    }
+    setStockModalOpen(false);
+    setPost((prev) =>
+      prev ? { ...prev, image_url: updated.image_url, media_type: updated.media_type } : prev
+    );
+    queryClient.invalidateQueries({ queryKey: ["posts", "draft", workspaceId] });
+    queryClient.invalidateQueries({ queryKey: ["posts", "all", workspaceId] });
+    try {
+      const c = await imageChatService(workspaceId).getChat(chat.id);
+      setChat(c);
+      setAddedImageId(c.images.find((img) => img.is_added_on_post)?.id ?? null);
+    } catch {
+      // photo is on the post even if the refetch failed — keep the preview in sync
+      setChat((prev) => (prev ? { ...prev, post_image_url: photo.url } : prev));
+    }
+    if (updated.media_type === "video") {
+      toast(
+        (t) => (
+          <span className="flex items-center gap-3 text-sm">
+            Photo saved, but this post publishes its video.
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                void handleSwitchToImage();
+              }}
+              className="shrink-0 rounded-lg bg-violet-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-violet-700"
+            >
+              Switch to image
+            </button>
+          </span>
+        ),
+        { duration: 10000 }
+      );
+    } else {
+      toast.success("Stock photo added to post.");
+    }
+  }
+
+  async function handleSwitchToImage() {
+    if (!post) return;
+    try {
+      const updated = await postsService(workspaceId).patchPostRaw(post.id, { media: "image" });
+      setPost((prev) => (prev ? { ...prev, media_type: updated.media_type } : prev));
+      setChat((prev) => (prev ? { ...prev, post_media_type: "image" } : prev));
+      toast.success("Post will publish the image.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    }
+  }
+
   // ── Right-panel actions ─────────────────────────────────────────────────────
 
   const [input, setInput] = useState("");
@@ -1240,6 +1311,16 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {/* Stock photos (Pexels) */}
+                    <button
+                      onClick={() => setStockModalOpen(true)}
+                      disabled={!chat || isChatRunning}
+                      className="flex h-7 items-center gap-1.5 rounded-lg border border-gray-300 px-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <LuImages className="h-3.5 w-3.5" />
+                      Stock image
+                    </button>
+
                     {/* AI model */}
                     {imgSettings.ai_model.length > 0 && (
                       <div ref={modelMenuRef} className="relative">
@@ -1624,7 +1705,9 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                               className="h-full w-full object-cover"
                             />
                           </div>
-                          <span className="flex-1 text-sm font-medium text-gray-700">AI Image</span>
+                          <span className="flex-1 text-sm font-medium text-gray-700">
+                            {isStockImageUrl(postImageUrl) ? "Stock photo" : "AI Image"}
+                          </span>
                           <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-600">
                             <LuCheck className="h-3 w-3" />
                             Attached
@@ -1832,6 +1915,17 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
         options={imgSettings.image_ratio}
         onSelect={handleRatioChange}
       />
+
+      {/* ── Stock image picker (Pexels) ───────────────────────────────────────── */}
+      {chat && (
+        <StockImageModal
+          isOpen={stockModalOpen}
+          onClose={() => setStockModalOpen(false)}
+          workspaceId={workspaceId}
+          chatId={chat.id}
+          onAdd={handleAddStockPhoto}
+        />
+      )}
     </div>
   );
 }

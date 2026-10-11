@@ -694,6 +694,7 @@ Full spec: `docs/api-reference.md` (Part 2 — Image Chat)
 - Page: `src/app/linkedin/edit-image/[postId]/page.tsx`
 - Service: `src/service/imageChatService.ts`
 - Types: `src/types/ImageChat.ts`
+- Stock picker: `src/components/linkedin/StockImageModal.tsx`
 
 ### API base
 ```
@@ -708,6 +709,8 @@ Full spec: `docs/api-reference.md` (Part 2 — Image Chat)
 | `GET` | `image-chats/{id}/` | `200` full chat | Poll while `status === "running"` |
 | `POST` | `image-chats/{id}/messages/` | `202` generating / `200` text-only | `{ prompt }` |
 | `POST` | `image-chats/{id}/add_to_post/` | `200` full chat | `{ image: imageId }` |
+| `GET` | `image-chats/{id}/stock/recommended/` | `200` `{ query, photos }` | Pexels photos for the post |
+| `GET` | `image-chats/{id}/stock/search/?q=&page=` | `200` `{ query, page, has_more, photos }` | User's Pexels search |
 
 ### Polling rule
 Poll `GET image-chats/{id}/` every 2s while `chat.status === "running"`. Stop on `"ready"`. Send button disabled while running.
@@ -729,6 +732,21 @@ Images are never forced into a fixed box or cropped — landscape, portrait and 
 - Calls `add_to_post` → returns updated chat with new `post_image_url`
 - Preview and media section both read `chat.post_image_url` — update automatically
 - Delete image: `PATCH /content/posts/{id}/ { image_url: "" }` then clear local chat state
+- Media section label: "Stock photo" when `post_image_url` starts with `https://images.pexels.com/`, otherwise "AI Image"
+
+### Stock image (Pexels)
+PRD: `docs/prd/stock-image.md` · API: `docs/api-reference.md` → Image Chat §5.
+- **Button**: "Stock image" (`LuImages`) in the composer toolbar's right group, directly left of the AI model button. Disabled until the chat is open and while `chat.status === "running"`. Not shown on published posts (no composer).
+- **Modal** (`StockImageModal`, `Modal` width `4xl`, `disableBackdropClose`): closes **only** via the ✕ — backdrop click and ESC do nothing. The inner browser mounts only while open, so every open starts with an empty search.
+- **Recommended** (search box empty): `GET stock/recommended/` (`["stock-recommended", workspaceId, chatId]`, `staleTime: 0` — backend caches 24h). Label "Recommended for this post · "<query>"", and `query` is the search placeholder. `query: ""` + no photos → placeholder "Search for a photo" + hint "Search for a photo to add to your post."
+- **Search**: as-you-type, debounced 400 ms (Enter searches immediately); input trimmed, max 200 chars; blank → back to recommended. `useInfiniteQuery` (`["stock-search", workspaceId, chatId, q]`), next page while `has_more` (cap page 100). **Infinite scroll**: an `IntersectionObserver` sentinel under the grid (`rootMargin: 200px`) calls `fetchNextPage`; spinner while loading the next page. No results → "No photos found for '<q>'."
+- **Loading**: 9-tile `aspect-video` skeleton grid. **Errors** (e.g. 503): backend text + **Retry** (refetches the current mode). Queries use `retry: false`.
+- **Grid**: 3 columns (2 on small screens), `thumbnail_url` `object-cover` in `aspect-video` tiles, `alt` as tooltip. Hover → dark overlay with photographer name + **Add to post** button. Clicking the tile opens the large preview.
+- **Large preview**: full-screen dark overlay above the modal; shows `thumbnail_url` instantly and swaps to the full `url` once loaded (spinner meanwhile), natural ratio capped by `--lightbox-image-max-h`. Footer: alt text, "Photo by X on Pexels ↗" (`pexels_url`), **Back** and **Add to post**. Closes only via ✕ / Back.
+- **Add to post** (grid hover or preview): `postsService.patchPostRaw(post.id, { image_url: photo.url })` (always `url`). While in flight the clicked button spins and all Add buttons are disabled. Error → toast with backend text (e.g. published post 400), modal stays open. Success → close modal, update local `post` (`image_url`, `media_type`), invalidate `["posts","draft",ws]` / `["posts","all",ws]`, refetch the chat (`GET image-chats/{id}/`) → the "Added a stock photo to your post." card appears with **Added**, `addedImageId` set from `is_added_on_post`, and `post_image_url` updates both the Edit (Media) and Preview tabs. If the refetch fails, `post_image_url` is set locally to `photo.url`.
+- **Video post**: if the PATCH response keeps `media_type: "video"`, a 10s toast says "Photo saved, but this post publishes its video." with **Switch to image** → `PATCH { media: "image" }`. Otherwise toast "Stock photo added to post."
+- `kind: "stock"` chat cards render like any image card (alt "Stock photo"); Add to post on an older stock card uses `add_to_post/` as usual.
+- `extractErrorMessage` now falls back to the first field-error string (e.g. `{"image_url": ["…"]}`) app-wide.
 
 ### Chat auto-scroll
 - On page load the chat opens already at the latest message (instant jump, no visible scroll through history)
@@ -758,6 +776,7 @@ User's typed message is appended to `chat.messages` immediately (before API resp
 ### Chat input toolbar
 - **Auto-growing textarea** (same behaviour as the LinkedIn Agent composer): starts at 2 rows; an effect on `input` sets `height = min(scrollHeight, lineHeight × CHAT_INPUT_MAX_ROWS)` (8 rows ≈ 160px, same cap as the LinkedIn Agent; `lineHeight` read from the textarea via `getComputedStyle`, no CSS token dependency), so it grows upward line by line until the cap, after which it stops growing and the text scrolls inside (`overflow-y-auto`). Shrinks back to 2 rows when the input is cleared on send
 - Emoji button (`LuSmile`) and file/attachment button (`LuPaperclip`) are **disabled** — `cursor-not-allowed`, greyed out, show a "Soon" tooltip on hover
+- **Stock image** button sits directly left of the AI model button — see "Stock image (Pexels)" above
 - Send button: `bg-violet-600`, disabled while `!input.trim() || isSending || isChatRunning`
 - **"AI generated image" suggestion** (`AiImageSuggestion`): plain text line (no bubble, no shadow, no avatar; indented to align with agent content, `pb-6` bottom space) rendered after the last message — _"Next, I could generate another image for you. Just click on this: **AI generated image**"_ — with the link text clickable (blue, underlined). UI-only (not persisted, not part of `chat.messages`). Shown only when the last message is from the agent, chat is idle (`!isSending && !isChatRunning`) and the post is not published. Click sends the fixed prompt `"Make Ai generated image"` through the same `POST image-chats/{id}/messages/` call as a typed prompt — same optimistic append + polling flow; does not touch the textarea
 - **Image settings are per chat**: loaded via `GET image-chats/settings/{chatId}/` once the chat is open (`chat.id`); all changes go through `saveImgSettings(next, patch)` — optimistic local update, `PATCH` with only the changed field, rollback + toast on failure. Applies to the "Use post body" toggle, model, and ratio
