@@ -739,11 +739,11 @@ function GrillForm({
               {row.map((q) => {
                 const isOn = !skipped[q.id];
                 return (
-                  <div key={q.id}>
+                  <div key={q.id} className="min-w-0">
                     <div className="mb-1.5 flex items-start justify-between gap-3">
                       <label
                         className={cn(
-                          "block text-xs font-semibold transition-colors",
+                          "block min-w-0 break-words text-xs font-semibold transition-colors",
                           isOn ? "text-blue-600" : "text-gray-400"
                         )}
                       >
@@ -2694,7 +2694,7 @@ export default function AutomationView() {
                       if (!filled.length) return null;
                       return (
                         <div key={msg.id} className="mt-4 flex justify-end">
-                          <div className="max-w-md rounded-2xl rounded-tr-sm bg-blue-50 px-4 py-3 text-sm">
+                          <div className="min-w-0 max-w-md break-words rounded-2xl rounded-tr-sm bg-blue-50 px-4 py-3 text-sm">
                             <div className="space-y-2.5">
                               {filled.map((q) => (
                                 <div key={q.id}>

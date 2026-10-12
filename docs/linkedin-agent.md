@@ -335,6 +335,12 @@ Optional — include `post` to target a specific draft:
   `{ interrupt_id, answers: { "clarifier_0": "…", "clarifier_1": "", "clarifier_2": "…" } }`
 - **Skip questioning** is unchanged — still `answers: { skip_remaining: true }` (toggles have no effect; the backend handles it)
 
+### Long text in questions / answers
+
+Questions can contain long unbroken strings (e.g. "I couldn't read the tone/style source you added (https://www.linkedin.com/feed/update/urn:li:activity:…)"). Both places that render them wrap such strings inside their container instead of overflowing:
+- `GrillForm` — each question cell is `min-w-0` and the label is `min-w-0 break-words`, so the URL wraps beside the skip toggle
+- Answered Q&A recap bubble (user message with empty `text` + `payload.questions`) — bubble is `min-w-0 max-w-md break-words`, covering both question and answer lines
+
 ### body_blocks (JSON string — must `JSON.parse`)
 
 ```ts
