@@ -129,6 +129,7 @@ POST attachments/          application/json
 ```json
 {
   "id": "9b1f2c0e-9a0e-4a7e-8a3f-1f2b7c4e5d60",
+  "number": 1,
   "kind": "url",
   "url": "https://acme.com/blog/how-we-cut-inference-cost",
   "url_kind": "page",
@@ -141,6 +142,7 @@ POST attachments/          application/json
 
 | Field | Notes |
 |---|---|
+| `number` | Position in this conversation from **1**, upload order. **Fixed** — never changes, never reused (delete #2 → the next upload is #4). Per conversation. Lists are ordered by it. Show it on the chip (`#2 pricing.pdf`) — it's what the user types |
 | `kind` | `pdf` or `url` |
 | `url_kind` | `site`, `page` or `profile` on a URL; `""` on a PDF. **Derived server-side** |
 | `label` | What to render in the chip: file name or address |
@@ -161,6 +163,40 @@ Poll `GET conversations/{id}/` — the same list is inlined there, so one poll c
 ### Remove one — `DELETE attachments/{aid}/`
 
 `204`. An unknown id is a `404`.
+
+### When an attachment is used (story #4084)
+
+**Only when the message asks for it.** An attachment the message doesn't mention is ignored — the turn runs as if nothing were attached. The message also says **what for**: as **knowledge** or for **tone and style**. The user refers to a file by number ("#2", "the second one"), name ("pricing.pdf"), type ("the pdf", "the url") or order ("the first pdf").
+
+- **Edits** keep the knowledge files the post was written from; **Generate more drafts** uses the files of its card. Nothing to send.
+- A later new message uses an attachment only if it asks for it again.
+- A failed file the message doesn't mention changes nothing.
+
+**Attachment questions** — when the message is unclear, the turn stops with the usual `kind: "questions"` interrupt (answer via `answer/`). Asked **even when Ask Questions is off**. The round has **`can_skip: false`** (no "Skip questioning") and doesn't count towards the question-round limit. The `_0`, `_1`… suffix = which reference in the message; both can come in one round; a normal question round may follow.
+
+```json
+{ "id": "attachment_which_0", "field": "attachment_which",
+  "question": "Which attachment do you mean by \"the pdf\"?", "kind": "choice",
+  "options": ["#1 deck.pdf", "#2 pricing.pdf"], "default": "", "allow_free_text": false }
+```
+
+```json
+{ "id": "attachment_use_0", "field": "attachment_use",
+  "question": "How should I use \"my attachment\" (#1 pricing.pdf)?", "kind": "choice",
+  "options": ["as knowledge", "for tone and style"], "default": "as knowledge", "allow_free_text": false }
+```
+
+- `attachment_which` — no default; send one option exactly as given. Blank → the turn ends with `attachment_unclear`.
+- `attachment_use` — pre-select `default`; blank = as knowledge.
+
+**New agent messages** (ordinary agent text message, the turn ends, no posts) — `payload.kind`:
+
+| `payload.kind` | When | Text |
+|---|---|---|
+| `attachment_unusable` | The message asked for a file that **failed** | `I couldn't use #1 scan.pdf: <the file's error>. Attach it again or remove it, then send your message again.` |
+| `attachment_unusable` | A file it asked for is still being read (rare) | `I'm still reading #1 deck.pdf. Give it a moment and send that again.` |
+| `attachment_unclear` | "Which attachment?" answer blank / not an option | `I still couldn't tell which attachment you meant. Mention it by its number or name and send that again.` |
+| `attachment_decision_failed` | The model call deciding which files to use failed | `I couldn't work out which of your attachments to use. Please send that again.` |
 
 ## 3. Send a message — `POST conversations/{id}/messages/`
 
