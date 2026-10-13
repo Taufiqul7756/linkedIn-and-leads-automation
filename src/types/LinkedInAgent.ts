@@ -47,6 +47,8 @@ export interface Message {
 
 export interface Attachment {
   id: string;
+  // Position in this conversation from 1, upload order — fixed, never reused. The user types it ("#2")
+  number: number;
   kind: "pdf" | "url";
   url: string;
   url_kind: "site" | "page" | "profile" | "";

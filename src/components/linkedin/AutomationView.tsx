@@ -50,6 +50,7 @@ import type {
   Attachment,
   Conversation,
   ConversationListItem,
+  Message,
   PaginatedConversations,
   Question,
   AgentPost,
@@ -98,6 +99,20 @@ const CYCLING_PLACEHOLDERS = [
 ];
 
 const POLL_INTERVAL_MS = 2000;
+
+// Poll while a turn runs or any attachment is still being read
+const needsPolling = (conv: Conversation) =>
+  conv.status === "running" || (conv.attachments?.some((a) => a.status === "pending") ?? false);
+
+// Agent messages about an attachment it couldn't use (failed / still reading / unclear) —
+// the turn ended without posts; the user fixes it and sends again
+const ATTACHMENT_NOTICE_KINDS = [
+  "attachment_unusable",
+  "attachment_unclear",
+  "attachment_decision_failed",
+];
+const isAttachmentNotice = (msg: Message) =>
+  ATTACHMENT_NOTICE_KINDS.includes(String(msg.payload?.kind ?? ""));
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -643,8 +658,17 @@ function QuestionField({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+          className={cn(
+            "w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20",
+            value ? "text-gray-800" : "text-gray-400"
+          )}
         >
+          {/* No default (e.g. "Which attachment?") → the user must pick one */}
+          {!value && (
+            <option value="" disabled>
+              Choose one…
+            </option>
+          )}
           {question.options.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
@@ -706,6 +730,16 @@ function GrillForm({
   const [skipped, setSkipped] = useState<Record<string, boolean>>({});
 
   if (questions.length === 0) return null;
+
+  // A choice question with no default (and no free text) must be picked before Next
+  const missingChoice = questions.some(
+    (q) =>
+      !skipped[q.id] &&
+      q.kind === "choice" &&
+      !q.allow_free_text &&
+      (q.options?.length ?? 0) > 0 &&
+      !answers[q.id]
+  );
 
   const answersForNext = Object.fromEntries(
     Object.entries(answers).map(([id, v]) => [id, skipped[id] ? "" : v])
@@ -779,7 +813,8 @@ function GrillForm({
         <div className="mt-5 flex items-center gap-3">
           <button
             onClick={() => onSubmit(answersForNext)}
-            disabled={submitting}
+            disabled={submitting || missingChoice}
+            title={missingChoice ? "Pick an option first" : undefined}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
           >
             {submitting && <LuLoader className="h-3.5 w-3.5 animate-spin" />}
@@ -1549,6 +1584,8 @@ export default function AutomationView() {
   const [urlInput, setUrlInput] = useState("");
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [addingUrl, setAddingUrl] = useState(false);
+  // Temporary chips while an attachment POST is in flight (replaced by the real #n chip)
+  const [uploadingChips, setUploadingChips] = useState<{ key: string; label: string }[]>([]);
 
   // Conversation state
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -1845,18 +1882,21 @@ export default function AutomationView() {
     [stopPolling, fetchPosts, refreshHistory]
   );
 
+  // handlePollResult stops it once nothing runs and no attachment is pending.
+  // immediate → first check now instead of after POLL_INTERVAL_MS (used after attaching)
   const startPolling = useCallback(
-    (convId: string) => {
+    (convId: string, immediate = false) => {
       stopPolling();
-      pollRef.current = setInterval(async () => {
+      const tick = async () => {
         try {
           const conv = await svc().getConversation(convId);
           handlePollResult(conv);
-          if (conv.status !== "running") stopPolling();
         } catch {
           stopPolling();
         }
-      }, POLL_INTERVAL_MS);
+      };
+      pollRef.current = setInterval(tick, POLL_INTERVAL_MS);
+      if (immediate) tick();
     },
     [svc, stopPolling, handlePollResult]
   );
@@ -1907,7 +1947,7 @@ export default function AutomationView() {
             }
             setConversation(conv);
             refreshHistory();
-            if (conv.status === "running") startPolling(conv.id);
+            if (needsPolling(conv)) startPolling(conv.id);
             // Always fetch the edited post so its live status is in state
             // (approve updates posts state; cards read from it, not the frozen snapshot)
             fetchPosts(conv.artifacts.post_ids.length > 0 ? conv.artifacts.post_ids : [editPostId]);
@@ -1928,7 +1968,7 @@ export default function AutomationView() {
 
         const conv = await svc().getConversation(targetId);
         setConversation(conv);
-        if (conv.status === "running") startPolling(conv.id);
+        if (needsPolling(conv)) startPolling(conv.id);
         if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
           fetchPosts(conv.artifacts.post_ids);
         }
@@ -2163,23 +2203,39 @@ export default function AutomationView() {
     return newConv.id;
   };
 
-  // ── attach file (PDF only) ──
-  const handleFileAttach = async (file: File) => {
-    if ((conversation?.attachments?.length ?? 0) >= 5) {
+  // ── attach (shared by PDF + URL) ──
+  // An "Uploading…" chip shows at once; the real #n chip replaces it when the POST returns,
+  // then polling runs (first check now) until every attachment is ready / failed.
+  const attach = async (
+    label: string,
+    create: (convId: string) => Promise<Attachment>
+  ): Promise<void> => {
+    if ((conversation?.attachments?.length ?? 0) + uploadingChips.length >= 5) {
       toast.error("Maximum 5 attachments per conversation.");
       return;
     }
-    setUploadingAttachment(true);
+    const key = `${Date.now()}-${label}`;
+    setUploadingChips((prev) => [...prev, { key, label }]);
     try {
       const convId = await ensureConversation();
       if (!convId) return;
-      const att = await svc().uploadAttachment(convId, file);
+      const att = await create(convId);
       setConversation((prev) =>
         prev ? { ...prev, attachments: [...(prev.attachments ?? []), att] } : prev
       );
-      startPolling(convId);
+      startPolling(convId, true);
     } catch (err) {
       toast.error(extractErrorMessage(err));
+    } finally {
+      setUploadingChips((prev) => prev.filter((c) => c.key !== key));
+    }
+  };
+
+  // ── attach file (PDF only) ──
+  const handleFileAttach = async (file: File) => {
+    setUploadingAttachment(true);
+    try {
+      await attach(file.name, (convId) => svc().uploadAttachment(convId, file));
     } finally {
       setUploadingAttachment(false);
     }
@@ -2189,23 +2245,11 @@ export default function AutomationView() {
   const handleUrlAttach = async (url: string) => {
     const trimmed = url.trim();
     if (!trimmed) return;
-    if ((conversation?.attachments?.length ?? 0) >= 5) {
-      toast.error("Maximum 5 attachments per conversation.");
-      return;
-    }
     setAddingUrl(true);
     setUrlInput("");
     setPlusOpen(false);
     try {
-      const convId = await ensureConversation();
-      if (!convId) return;
-      const att = await svc().addAttachmentUrl(convId, trimmed);
-      setConversation((prev) =>
-        prev ? { ...prev, attachments: [...(prev.attachments ?? []), att] } : prev
-      );
-      startPolling(convId);
-    } catch (err) {
-      toast.error(extractErrorMessage(err));
+      await attach(trimmed, (convId) => svc().addAttachmentUrl(convId, trimmed));
     } finally {
       setAddingUrl(false);
     }
@@ -2287,7 +2331,7 @@ export default function AutomationView() {
     try {
       const conv = await svc().getConversation(id);
       setConversation(conv);
-      if (conv.status === "running") startPolling(id);
+      if (needsPolling(conv)) startPolling(id);
       if (conv.status === "completed" && conv.artifacts.post_ids.length > 0) {
         fetchPosts(conv.artifacts.post_ids);
       }
@@ -2415,6 +2459,20 @@ export default function AutomationView() {
   const isTerminal = conversation?.status === "cancelled" || conversation?.status === "archived";
   const hasPendingAttachments =
     conversation?.attachments?.some((a) => a.status === "pending") ?? false;
+  // Chips in backend number order (#1, #3… — numbers are fixed, never renumbered)
+  const sortedAttachments = [...(conversation?.attachments ?? [])].sort(
+    (a, b) => a.number - b.number
+  );
+  // Max 5 per conversation — counts uploads still in flight
+  const attachmentsFull = sortedAttachments.length + uploadingChips.length >= 5;
+  // An attachment the message doesn't mention is ignored → hint built from the real numbers
+  const usableNumbers = sortedAttachments.filter((a) => a.status !== "failed").map((a) => a.number);
+  const attachmentHint =
+    usableNumbers.length === 0
+      ? null
+      : usableNumbers.length === 1
+        ? `Say how to use it — e.g. "use #${usableNumbers[0]} as knowledge"`
+        : `Say how to use it — e.g. "use #${usableNumbers[0]} as knowledge, #${usableNumbers[1]} for tone"`;
   const isDraft = conversation?.status === "draft";
 
   // Drop the "generate more drafts" flag when switching conversations mid-run
@@ -2923,7 +2981,9 @@ export default function AutomationView() {
                           "max-w-xl break-words rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed",
                           msg.kind === "error"
                             ? "bg-red-50 text-red-700"
-                            : "bg-gray-50 text-gray-700"
+                            : isAttachmentNotice(msg)
+                              ? "bg-amber-50 text-amber-800"
+                              : "bg-gray-50 text-gray-700"
                         )}
                       >
                         {msg.text}
@@ -3065,9 +3125,9 @@ export default function AutomationView() {
                       !isGeneratingMoreDrafts && (
                         <div
                           className="pointer-events-none absolute inset-x-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 transition-opacity duration-300"
-                          style={{ opacity: placeholderVisible ? 1 : 0 }}
+                          style={{ opacity: attachmentHint || placeholderVisible ? 1 : 0 }}
                         >
-                          {CYCLING_PLACEHOLDERS[placeholderIdx]}
+                          {attachmentHint ?? CYCLING_PLACEHOLDERS[placeholderIdx]}
                         </div>
                       )}
                     <textarea
@@ -3087,7 +3147,9 @@ export default function AutomationView() {
                           ? "Answer the questions above…"
                           : isRunning
                             ? "Agent is working…"
-                            : ""
+                            : isFocused && attachmentHint
+                              ? attachmentHint
+                              : ""
                       }
                       disabled={isRunning || isAwaiting || isGeneratingMoreDrafts}
                       rows={2}
@@ -3096,42 +3158,61 @@ export default function AutomationView() {
                   </div>
 
                   {/* Attachment chips */}
-                  {(conversation?.attachments?.length ?? 0) > 0 && (
-                    <div className="flex flex-wrap gap-1.5 px-4 pb-2">
-                      {conversation!.attachments.map((a: Attachment) => {
-                        const isPending = a.status === "pending";
-                        const isFailed = a.status === "failed";
-                        const chipCls = isFailed
-                          ? "border-red-200 bg-red-50 text-red-700"
-                          : isPending
-                            ? "border-gray-200 bg-gray-50 text-gray-500"
-                            : "border-blue-200 bg-blue-50 text-blue-700";
-                        return (
-                          <span
-                            key={a.id}
-                            title={isFailed ? a.error : undefined}
-                            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${chipCls}`}
-                          >
-                            {isPending ? (
-                              <LuLoader className="h-3 w-3 shrink-0 animate-spin" />
-                            ) : a.kind === "url" ? (
-                              <LuLink className="h-3 w-3 shrink-0" />
-                            ) : (
-                              <LuPaperclip className="h-3 w-3 shrink-0" />
-                            )}
-                            <span className="max-w-[140px] truncate">{a.label}</span>
-                            {isFailed && (
-                              <span className="shrink-0 text-[10px] text-red-400">Failed</span>
-                            )}
-                            <button
-                              onClick={() => handleDeleteAttachment(a.id)}
-                              className="shrink-0 opacity-60 hover:opacity-100"
+                  {(sortedAttachments.length > 0 || uploadingChips.length > 0) && (
+                    <div className="px-4 pb-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {sortedAttachments.map((a: Attachment) => {
+                          const isPending = a.status === "pending";
+                          const isFailed = a.status === "failed";
+                          const chipCls = isFailed
+                            ? "border-red-200 bg-red-50 text-red-700"
+                            : isPending
+                              ? "border-gray-200 bg-gray-50 text-gray-500"
+                              : "border-blue-200 bg-blue-50 text-blue-700";
+                          return (
+                            <span
+                              key={a.id}
+                              title={isFailed ? a.error : undefined}
+                              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${chipCls}`}
                             >
-                              <LuX className="h-3 w-3" />
-                            </button>
+                              {isPending ? (
+                                <LuLoader className="h-3 w-3 shrink-0 animate-spin" />
+                              ) : a.kind === "url" ? (
+                                <LuLink className="h-3 w-3 shrink-0" />
+                              ) : (
+                                <LuPaperclip className="h-3 w-3 shrink-0" />
+                              )}
+                              <span className="shrink-0 font-semibold">#{a.number}</span>
+                              <span className="max-w-[140px] truncate">{a.label}</span>
+                              {isFailed && (
+                                <span className="shrink-0 text-[10px] text-red-400">Failed</span>
+                              )}
+                              <button
+                                onClick={() => handleDeleteAttachment(a.id)}
+                                className="shrink-0 opacity-60 hover:opacity-100"
+                                title={`Remove #${a.number}`}
+                              >
+                                <LuX className="h-3 w-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                        {/* POST in flight — swapped for the real #n chip when it returns */}
+                        {uploadingChips.map((c) => (
+                          <span
+                            key={c.key}
+                            className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-500"
+                          >
+                            <LuLoader className="h-3 w-3 shrink-0 animate-spin" />
+                            <span className="shrink-0">Uploading…</span>
+                            <span className="max-w-[140px] truncate">{c.label}</span>
                           </span>
-                        );
-                      })}
+                        ))}
+                      </div>
+                      <p className="mt-1.5 text-xs text-gray-400">
+                        Only attachments your message mentions are used — refer to them by number,
+                        name or type, and say if it&apos;s knowledge or tone.
+                      </p>
                     </div>
                   )}
 
@@ -3168,28 +3249,27 @@ export default function AutomationView() {
                       {/* Plus — file / URL attach */}
                       <div ref={plusRef} className="relative">
                         <button
-                          disabled
-                          title="Coming soon"
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-300 cursor-not-allowed"
+                          onClick={() => setPlusOpen((v) => !v)}
+                          disabled={isRunning || isAwaiting || isGeneratingMoreDrafts}
+                          title="Attach a PDF or URL"
+                          className={cn(
+                            "flex h-8 w-8 items-center justify-center rounded-lg border text-gray-600 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:pointer-events-none disabled:opacity-50",
+                            plusOpen ? "border-blue-300 bg-blue-50" : "border-gray-300"
+                          )}
                         >
                           <LuPlus className="h-4 w-4" />
                         </button>
-                        <span className="absolute -top-2 -right-2 rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold text-gray-400 leading-none">
-                          Soon
-                        </span>
 
                         {plusOpen && (
                           <div className="absolute bottom-full right-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white p-3 shadow-lg">
-                            {(conversation?.attachments?.length ?? 0) >= 5 && (
+                            {attachmentsFull && (
                               <p className="mb-2 text-center text-xs text-amber-600">
                                 Maximum 5 attachments reached.
                               </p>
                             )}
                             <button
                               onClick={() => fileInputRef.current?.click()}
-                              disabled={
-                                uploadingAttachment || (conversation?.attachments?.length ?? 0) >= 5
-                              }
+                              disabled={uploadingAttachment || attachmentsFull}
                               className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 py-2.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:bg-gray-50 disabled:opacity-50"
                             >
                               {uploadingAttachment ? (
@@ -3211,11 +3291,7 @@ export default function AutomationView() {
                                 className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
                               />
                               <button
-                                disabled={
-                                  !urlInput.trim() ||
-                                  addingUrl ||
-                                  (conversation?.attachments?.length ?? 0) >= 5
-                                }
+                                disabled={!urlInput.trim() || addingUrl || attachmentsFull}
                                 onClick={() => handleUrlAttach(urlInput)}
                                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                               >
