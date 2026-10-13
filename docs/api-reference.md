@@ -691,6 +691,9 @@ One post, one conversation about its picture. The user says in their own words h
 | `GET`/`PATCH` | `image-chats/settings/{chatId}/` | `200` settings | Per-chat image settings — see §4 |
 | `GET` | `image-chats/{id}/stock/recommended/` | `200` `{ query, photos }` | Pexels photos picked for the post — see §5 |
 | `GET` | `image-chats/{id}/stock/search/?q=&page=` | `200` `{ query, page, has_more, photos }` | User's own Pexels search — see §5 |
+| `GET`/`PATCH` | `image-chats/settings/` | `200` settings | **Workspace** settings (no chat id) — `image_knowledge` switches, see §6 |
+| `GET`/`POST` | `image-chats/knowledge/` | `200` paginated / `201` source | Image knowledge sources — see §6 |
+| `GET`/`PATCH`/`DELETE` | `image-chats/knowledge/{id}/` | `200` / `200` / `204` | One source; `PATCH` changes `label`, and `text` on typed-text sources — see §6 |
 
 ---
 
@@ -1039,6 +1042,132 @@ Status does not change. Then `GET image-chats/{id}/` — the transcript ends wit
 | `404` | `{"detail": "No ImageChat matches the given query."}` | Wrong chat id / workspace |
 
 Show backend text as is.
+
+---
+
+## 6. Image knowledge (brand guide for pictures)
+
+Story #4075. A workspace uploads its brand guide for pictures (colours, fonts for text on images, logo rules, visual style) as **sources**: a **PDF**, a **URL** or **typed text**, each with an optional **note** (`label`). Sources that are switched on and `ready` are added to every picture's prompt, **workspace-wide**: Image Chat turns, a post's automatic picture, the composer's "generate image" button and image edits in Agent Mode. They are read when each picture is made, so a toggle applies to the next one. The user's message still wins. Chat / message / image payloads are unchanged; `GeneratedImage.prompt` still shows only what the user typed.
+
+> **Any number of sources can be on at once.** Each toggle is independent: turning one on or off never changes another. Every source that is on and `ready` is sent, oldest first; two guides that disagree are both sent as written.
+
+### `GET image-chats/settings/` — workspace settings (no chat id)
+
+```json
+{
+  "image_ratio": ["… unchanged …"],
+  "ai_model": ["… unchanged …"],
+  "image_knowledge": [
+    { "id": "79e82157-…", "kind": "pdf", "label": "Brand Guide 2026", "name": "Brand Guide 2026", "status": "ready", "enabled": true },
+    { "id": "be5897fb-…", "kind": "text", "label": "Christmas colours", "name": "Christmas colours", "status": "ready", "enabled": false }
+  ]
+}
+```
+
+Oldest first, every source in the workspace, `[]` when none. `name` = label, else filename / URL.
+
+### `PATCH image-chats/settings/` — toggle one source
+
+```json
+{ "image_knowledge": { "id": "be5897fb-…", "enabled": true } }
+```
+
+One toggle per request (an object, not an array); may be sent together with `image_ratio` / `ai_model`. `200` → the whole settings payload; re-render the list from it. A `pending` source can be switched on, but nothing reaches the image model until it is `ready`; a `failed` one never sends anything.
+
+### `POST image-chats/knowledge/` — add a source
+
+Exactly one of `text`, `url`, `file`; `label` optional (≤ 200).
+
+| Source | Content type | Body |
+|---|---|---|
+| Text | JSON | `{ "label": "Brand colours", "text": "Use only orange #FF6B00…" }` |
+| URL | JSON | `{ "label": "Brand page", "url": "acme.com/brand" }` |
+| PDF | multipart | `file=<brand.pdf>`, `label=Typography` |
+
+`201` → the new source, **switched on** (the others keep their toggle). Text is `ready` at once; a PDF / URL starts `pending` and is read in the background (a few seconds), then becomes `ready` or `failed`. Poll while any source is `pending`. A URL is read as **one page** (no crawl).
+
+```json
+{
+  "id": "6f1c2b9e-…",
+  "kind": "text",
+  "label": "Brand colours",
+  "name": "Brand colours",
+  "filename": "",
+  "url": "",
+  "text": "Use only orange #FF6B00 and charcoal #1A1A1A…",
+  "status": "ready",
+  "enabled": true,
+  "error": "",
+  "created_at": "2026-10-12T09:30:00Z"
+}
+```
+
+`filename`: PDF only · `url`: normalised (`https://…`), URL only · `text`: text sources only (what was read from a PDF / URL is not returned) · `error`: sentence to show when `failed`.
+
+Limits: `label` 200 · `text` 8,000 · `.pdf` only · 8,000 characters **in total** for every source that is on reach the image model, oldest first — when over, the newest text is cut off.
+
+### List, rename, delete
+
+| Request | Response |
+|---|---|
+| `GET image-chats/knowledge/?page=` | `200` paginated (25), oldest first |
+| `GET image-chats/knowledge/{id}/` | `200` one source |
+| `PATCH image-chats/knowledge/{id}/ { "label": "…" }` | `200` source — rename / note |
+| `PATCH image-chats/knowledge/{id}/ { "text": "…" }` | `200` source — **typed-text sources only** |
+| `DELETE image-chats/knowledge/{id}/` | `204` — a source that was on just leaves the brand guide |
+
+**Edit a typed note:** send `text` to a `text` source — same rules as adding (not blank, ≤ 8,000, trimmed). `label` can change in the same request:
+
+```json
+{ "label": "Brand colours v2", "text": "Use only orange #FF6B00 and navy #1A2B4C." }
+```
+
+`200` → the source with the new `text`. Its toggle doesn't change, so if it's on, the **next** picture uses the new text. `PATCH` changes only `label` and `text` — `enabled` (or anything else) is ignored; toggling happens only through the settings route. A PDF's or URL's text can't be edited (`400`) — to replace one, delete it and add a new one.
+
+### TypeScript types
+
+```ts
+type ImageKnowledgeKind = "pdf" | "url" | "text";
+type ImageKnowledgeStatus = "pending" | "ready" | "failed";
+
+// GET/PATCH image-chats/settings/ → image_knowledge[]
+type ImageKnowledgeSwitch = {
+  id: string;
+  kind: ImageKnowledgeKind;
+  label: string;
+  name: string;
+  status: ImageKnowledgeStatus;
+  enabled: boolean;
+};
+
+// image-chats/knowledge/ routes
+type ImageKnowledgeSource = ImageKnowledgeSwitch & {
+  filename: string;
+  url: string;
+  text: string;
+  error: string;
+  created_at: string;
+};
+```
+
+### Errors
+
+| Case | Response |
+|---|---|
+| None / more than one of `text`, `url`, `file` | `400 {"source": ["Give exactly one of file, url or text."]}` |
+| Not a PDF | `400 {"file": ["Only PDF files are supported."]}` |
+| Blank text (adding or editing) | `400 {"text": ["A brand guide note cannot be blank."]}` |
+| Text > 8,000 (adding or editing) | `400 {"text": ["Ensure this field has no more than 8000 characters."]}` |
+| Editing `text` on a PDF or URL source | `400 {"text": ["Only a typed note can be edited. Replace a PDF or URL by deleting it and adding another."]}` |
+| Invalid URL | `400 {"url": ["Enter a valid URL."]}` |
+| Label > 200 | `400 {"label": ["Ensure this field has no more than 200 characters."]}` |
+| Bad toggle shape | `400 {"image_knowledge": ["Send one toggle: …"]}` |
+| Toggle id not in workspace | `400 {"image_knowledge": ["No image knowledge source with that id in this workspace."]}` |
+| Not the user's workspace / source from another workspace / missing | `404` |
+
+A source that can't be read is not an HTTP error. It comes back `status: "failed"` with one of:
+- `I couldn't read that — check the link, or upload the file itself.`
+- `There was no readable text in that — a scanned PDF or a page that builds itself in the browser will read empty.`
 
 ---
 

@@ -27,6 +27,7 @@ import {
   LuChevronDown,
   LuPalette,
   LuImages,
+  LuDatabase,
 } from "react-icons/lu";
 import Image from "next/image";
 import { cn } from "@/utils/cn";
@@ -41,6 +42,8 @@ import toast from "react-hot-toast";
 import TiptapEditor from "@/components/ui/TiptapEditor";
 import ImageRatioModal from "@/components/linkedin/ImageRatioModal";
 import StockImageModal from "@/components/linkedin/StockImageModal";
+import ImageKnowledgeModal from "@/components/linkedin/ImageKnowledgeModal";
+import ImageKnowledgeSwitches from "@/components/linkedin/ImageKnowledgeSwitches";
 import { queryClient } from "@/lib/queryClient";
 import type { AgentPost, BlockNode, SpanNode } from "@/types/LinkedInAgent";
 import type {
@@ -687,6 +690,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const [ratioModalOpen, setRatioModalOpen] = useState(false);
   const [stockModalOpen, setStockModalOpen] = useState(false);
+  const [knowledgeModalOpen, setKnowledgeModalOpen] = useState(false);
   const activeModel = imgSettings.ai_model.find((m) => m.is_active);
   const activeRatio = imgSettings.image_ratio.find((r) => r.is_active);
   // No active style (fresh chat) is the same as "None"
@@ -1208,6 +1212,14 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
               </div>
               <span className="text-sm font-semibold text-gray-800">Image Agent</span>
             </div>
+            {/* Image knowledge base — brand guide for every picture in this workspace */}
+            <button
+              onClick={() => setKnowledgeModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              <LuDatabase className="h-3.5 w-3.5 text-gray-400" />
+              Image knowledge base
+            </button>
           </div>
 
           <div className="relative min-h-0 flex-1">
@@ -1523,7 +1535,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                       </button>
 
                       {imgSettingsOpen && (
-                        <div className="absolute bottom-full right-0 z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+                        <div className="absolute bottom-full right-0 z-20 mb-2 w-80 rounded-2xl border border-gray-200 bg-white shadow-lg">
                           <div className="flex items-center justify-between px-4 py-3">
                             <span className="text-sm font-semibold text-gray-900">
                               Image agent settings
@@ -1563,6 +1575,13 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                                 />
                               </button>
                             </div>
+                            <ImageKnowledgeSwitches
+                              workspaceId={workspaceId}
+                              onOpenKnowledgeBase={() => {
+                                setImgSettingsOpen(false);
+                                setKnowledgeModalOpen(true);
+                              }}
+                            />
                           </div>
                         </div>
                       )}
@@ -1914,6 +1933,13 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
         onClose={() => setRatioModalOpen(false)}
         options={imgSettings.image_ratio}
         onSelect={handleRatioChange}
+      />
+
+      {/* ── Image knowledge base (brand guide for pictures) ─────────────────────── */}
+      <ImageKnowledgeModal
+        isOpen={knowledgeModalOpen}
+        onClose={() => setKnowledgeModalOpen(false)}
+        workspaceId={workspaceId}
       />
 
       {/* ── Stock image picker (Pexels) ───────────────────────────────────────── */}

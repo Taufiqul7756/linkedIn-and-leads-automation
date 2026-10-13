@@ -94,3 +94,49 @@ export type ImageChatSettingsPatch = Partial<{
   ai_model: string; // ImageModelOption.model_name
   image_style: string; // ImageStyleOption.title
 }>;
+
+// ─── Image Knowledge (brand guide for pictures) — workspace-wide ─────────────
+
+export type ImageKnowledgeKind = "pdf" | "url" | "text";
+export type ImageKnowledgeStatus = "pending" | "ready" | "failed";
+
+// One row of image_knowledge in GET/PATCH image-chats/settings/ (workspace route, no chat id)
+export type ImageKnowledgeSwitch = {
+  id: string;
+  kind: ImageKnowledgeKind;
+  label: string; // the user's note, or ""
+  name: string; // label, or else filename / URL
+  status: ImageKnowledgeStatus;
+  enabled: boolean;
+};
+
+// Full source — image-chats/knowledge/ routes
+export type ImageKnowledgeSource = {
+  id: string;
+  kind: ImageKnowledgeKind;
+  label: string; // the user's note (max 200 chars)
+  name: string;
+  filename: string; // PDF only, else ""
+  url: string; // normalised (https://…), URL only, else ""
+  text: string; // text only, else ""
+  status: ImageKnowledgeStatus;
+  enabled: boolean;
+  error: string; // shown as is when status === "failed"
+  created_at: string;
+};
+
+// GET image-chats/knowledge/?page= — 25 per page, oldest first
+export type ImageKnowledgePage = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: ImageKnowledgeSource[];
+};
+
+// GET/PATCH image-chats/settings/ — workspace composer settings
+export type WorkspaceImageSettings = {
+  image_knowledge: ImageKnowledgeSwitch[];
+};
+
+// POST image-chats/knowledge/ (JSON) — exactly one of text / url; PDFs go multipart. Text has no note
+export type ImageKnowledgeCreate = { text: string } | { url: string; label?: string };
