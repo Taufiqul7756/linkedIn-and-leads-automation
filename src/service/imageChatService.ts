@@ -4,6 +4,10 @@ import type {
   ImageChat,
   ImageChatSettings,
   ImageChatSettingsPatch,
+  ImageKnowledgeCreate,
+  ImageKnowledgePage,
+  ImageKnowledgeSource,
+  WorkspaceImageSettings,
   StockRecommendedResponse,
   StockSearchResponse,
 } from "@/types/ImageChat";
@@ -31,6 +35,10 @@ async function axiosPatch<T>(path: string, data?: unknown): Promise<T> {
     headers: getAuthHeaders(),
   });
   return res.data;
+}
+
+async function axiosDelete(path: string): Promise<void> {
+  await axios.delete(`${Config.API_URL}${path}`, { headers: getAuthHeaders() });
 }
 
 export const imageChatService = (workspaceId: string) => ({
@@ -74,4 +82,59 @@ export const imageChatService = (workspaceId: string) => ({
       `/workspaces/${workspaceId}/image-chats/settings/${chatId}/`,
       data
     ),
+
+  // ─── Image Knowledge (brand guide for pictures) — workspace-wide ───────────
+
+  // GET image-chats/settings/ (workspace route) — image_knowledge switch list
+  getWorkspaceSettings: () =>
+    axiosGet<WorkspaceImageSettings>(`/workspaces/${workspaceId}/image-chats/settings/`),
+
+  // PATCH image-chats/settings/ — one toggle per request; returns the whole settings payload
+  toggleImageKnowledge: (id: string, enabled: boolean) =>
+    axiosPatch<WorkspaceImageSettings>(`/workspaces/${workspaceId}/image-chats/settings/`, {
+      image_knowledge: { id, enabled },
+    }),
+
+  // GET image-chats/knowledge/ — paginated (25), oldest first; walks every page
+  listImageKnowledge: async () => {
+    const all: ImageKnowledgeSource[] = [];
+    for (let page = 1; ; page++) {
+      const res = await axiosGet<ImageKnowledgePage>(
+        `/workspaces/${workspaceId}/image-chats/knowledge/?page=${page}`
+      );
+      all.push(...res.results);
+      if (!res.next) return all;
+    }
+  },
+
+  // POST image-chats/knowledge/ { label?, text | url } — 201, new source starts ON
+  addImageKnowledge: (data: ImageKnowledgeCreate) =>
+    axiosPost<ImageKnowledgeSource>(`/workspaces/${workspaceId}/image-chats/knowledge/`, data),
+
+  // POST image-chats/knowledge/ multipart file + label — PDF only
+  uploadImageKnowledgePdf: (file: File, label: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (label) form.append("label", label);
+    return axiosPost<ImageKnowledgeSource>(
+      `/workspaces/${workspaceId}/image-chats/knowledge/`,
+      form
+    );
+  },
+
+  // PATCH image-chats/knowledge/{id}/ { label } — only the note can change
+  patchImageKnowledgeLabel: (id: string, label: string) =>
+    axiosPatch<ImageKnowledgeSource>(`/workspaces/${workspaceId}/image-chats/knowledge/${id}/`, {
+      label,
+    }),
+
+  // PATCH image-chats/knowledge/{id}/ { text } — typed-text sources only; toggle unchanged
+  patchImageKnowledgeText: (id: string, text: string) =>
+    axiosPatch<ImageKnowledgeSource>(`/workspaces/${workspaceId}/image-chats/knowledge/${id}/`, {
+      text,
+    }),
+
+  // DELETE image-chats/knowledge/{id}/ — 204
+  deleteImageKnowledge: (id: string) =>
+    axiosDelete(`/workspaces/${workspaceId}/image-chats/knowledge/${id}/`),
 });

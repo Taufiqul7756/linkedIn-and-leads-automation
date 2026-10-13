@@ -1,14 +1,15 @@
-import { LuFileText, LuGlobe } from "react-icons/lu";
+import { LuFileText, LuGlobe, LuStickyNote } from "react-icons/lu";
 import { FaLinkedinIn } from "react-icons/fa";
 import { cn } from "@/utils/cn";
 
-export type SourceIconKind = "pdf" | "website" | "linkedin";
+export type SourceIconKind = "pdf" | "website" | "linkedin" | "text";
 
 // Rounded tile + glyph per source kind
 const STYLE: Record<SourceIconKind, { Icon: React.ElementType; tile: string; label: string }> = {
   pdf: { Icon: LuFileText, tile: "bg-red-50 text-red-500 ring-red-100", label: "PDF" },
   website: { Icon: LuGlobe, tile: "bg-sky-50 text-sky-600 ring-sky-100", label: "Website" },
   linkedin: { Icon: FaLinkedinIn, tile: "bg-linkedin text-white ring-linkedin", label: "LinkedIn" },
+  text: { Icon: LuStickyNote, tile: "bg-amber-50 text-amber-600 ring-amber-100", label: "Text" },
 };
 
 interface SourceIconProps {
@@ -21,7 +22,7 @@ interface SourceIconProps {
 
 const isLinkedInUrl = (url: string) => /(^|\/\/|\.)linkedin\.com\b/i.test(url);
 
-// Knowledge / tone source icon (PDF, website, LinkedIn)
+// Knowledge / tone source icon (PDF, website, LinkedIn, free-hand text)
 export default function SourceIcon({ kind: rawKind, className = "h-5 w-5", url }: SourceIconProps) {
   const kind: SourceIconKind =
     rawKind === "website" && url && isLinkedInUrl(url) ? "linkedin" : rawKind;
