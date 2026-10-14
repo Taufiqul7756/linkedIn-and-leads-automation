@@ -16,6 +16,8 @@ export type LinkedInAccountResponse = {
   id: string;
   member_urn: string;
   name: string;
+  /** Profile photo from LinkedIn; empty / null when the member has none */
+  picture_url?: string | null;
   scope: string;
   expires_at: string;
   created_at: string;

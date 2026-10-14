@@ -11,6 +11,7 @@ import { useQueryWithTokenRefresh } from "@/hooks/useQueryWithTokenRefresh";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import LinkedInManageModal from "@/components/linkedin-autopilot/LinkedInManageModal";
 import KnowledgeBaseModal from "./KnowledgeBaseModal";
+import LinkedInAvatar from "./LinkedInAvatar";
 
 export default function AccountsView() {
   const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
@@ -112,9 +113,27 @@ export default function AccountsView() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {/* LinkedIn Account card */}
           <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-              <FaLinkedinIn className="h-6 w-6 text-white" />
-            </div>
+            {isConnected && account?.picture_url ? (
+              <div className="relative shrink-0">
+                <LinkedInAvatar
+                  pictureUrl={account.picture_url}
+                  name={account.name}
+                  className="h-12 w-12 rounded-full"
+                  fallback={
+                    <div className="flex h-full w-full items-center justify-center bg-blue-600">
+                      <FaLinkedinIn className="h-6 w-6 text-white" />
+                    </div>
+                  }
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-linkedin ring-2 ring-white">
+                  <FaLinkedinIn className="h-3 w-3 text-white" />
+                </span>
+              </div>
+            ) : (
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                <FaLinkedinIn className="h-6 w-6 text-white" />
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900">LinkedIn account</span>
