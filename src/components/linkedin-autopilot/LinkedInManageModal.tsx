@@ -2,6 +2,7 @@ import Modal from "@/components/ui/Modal";
 import { FaLinkedinIn } from "react-icons/fa";
 import { LuShieldCheck, LuCircleUser, LuUnlink, LuLoader } from "react-icons/lu";
 import { LinkedInAccountResponse } from "@/types/LinkedIn";
+import LinkedInAvatar from "@/components/linkedin/LinkedInAvatar";
 
 interface LinkedInManageModalProps {
   isOpen: boolean;
@@ -32,9 +33,27 @@ export default function LinkedInManageModal({
           isConnected ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"
         }`}
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-          <FaLinkedinIn className="h-5 w-5 text-white" />
-        </div>
+        {isConnected && account?.picture_url ? (
+          <div className="relative shrink-0">
+            <LinkedInAvatar
+              pictureUrl={account.picture_url}
+              name={account.name}
+              className="h-10 w-10 rounded-full"
+              fallback={
+                <div className="flex h-full w-full items-center justify-center bg-blue-600">
+                  <FaLinkedinIn className="h-5 w-5 text-white" />
+                </div>
+              }
+            />
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-linkedin ring-2 ring-white">
+              <FaLinkedinIn className="h-2.5 w-2.5 text-white" />
+            </span>
+          </div>
+        ) : (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+            <FaLinkedinIn className="h-5 w-5 text-white" />
+          </div>
+        )}
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-900">

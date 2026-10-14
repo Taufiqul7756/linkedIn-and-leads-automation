@@ -825,6 +825,10 @@ User's typed message is appended to `chat.messages` immediately (before API resp
 - Any other error status falls through to `toast.error` as before
 - `postNotFound` resets to `false` on each `workspaceId`/`postId` change
 
+### Account photo (preview panel)
+- The preview header shows the connected account's LinkedIn photo (`picture_url` from `GET linkedin/account/`, query `["linkedin-account", workspaceId]`) through `LinkedInAvatar` (`src/components/linkedin/LinkedInAvatar.tsx`)
+- No photo, or the image fails to load → the orange gradient circle with the name's first letter (as before)
+
 ### Reaction icons (preview panel)
 - Three overlapping circles (18×18px) showing Like / Support / Celebrate
 - PNG assets: `public/icons/Linkedin-Like-Icon-Thumbup.png`, `Linkedin-Support-Icon-HeartinHand.png`, `Linkedin-Celebrate-Icon-ClappingHands.png`
@@ -867,3 +871,11 @@ GET    content/posts/?state=agent                            200  3 drafts with 
 POST   conversations/f4d6…/messages/                         202
        { "text": "make post 2 longer" }                           ← edits, not a new batch
 ```
+
+---
+
+## LinkedIn Account (`/linkedin/accounts`)
+
+- `GET linkedin/account/` → `LinkedInAccountResponse` (`src/types/LinkedIn.ts`), query `["linkedin-account", workspaceId]`. API: `docs/api-reference.md` → LinkedIn Account
+- **Account photo**: once connected and `picture_url` is set, the **LinkedIn account** card (`AccountsView`) and the **LinkedIn Account** modal (`LinkedInManageModal`) show the photo as a round avatar with a small LinkedIn badge at the bottom-right, instead of the blue LinkedIn tile. Not connected / no photo / broken image → the blue LinkedIn tile
+- `LinkedInAvatar` (`pictureUrl`, `name`, `className`, `fallback`) — shared by the Accounts card, the modal and the Edit Image preview. It remembers a failed URL so a new photo after reconnecting is tried again

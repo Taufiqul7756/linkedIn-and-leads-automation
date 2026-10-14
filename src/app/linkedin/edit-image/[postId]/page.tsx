@@ -30,6 +30,7 @@ import {
   LuDatabase,
 } from "react-icons/lu";
 import Image from "next/image";
+import LinkedInAvatar from "@/components/linkedin/LinkedInAvatar";
 import { cn } from "@/utils/cn";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { linkedinAgentService } from "@/service/linkedinAgentService";
@@ -425,11 +426,13 @@ function LinkedInPostPreview({
   postImageUrl,
   extraImageCount,
   accountName,
+  accountPictureUrl,
 }: {
   bodyJson: object;
   postImageUrl: string;
   extraImageCount: number;
   accountName: string;
+  accountPictureUrl?: string | null;
 }) {
   const [showFull, setShowFull] = useState(false);
 
@@ -445,11 +448,16 @@ function LinkedInPostPreview({
     <div className="mx-auto w-full max-w-[500px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm mb-2">
       <div className="flex items-start justify-between px-4 pt-4 pb-1">
         <div className="flex items-start gap-3">
-          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-orange-400 to-rose-500">
-            <div className="flex h-full w-full items-center justify-center text-lg font-bold text-white">
-              {initial}
-            </div>
-          </div>
+          <LinkedInAvatar
+            pictureUrl={accountPictureUrl}
+            name={accountName}
+            className="h-11 w-11 rounded-full bg-gradient-to-br from-orange-400 to-rose-500"
+            fallback={
+              <div className="flex h-full w-full items-center justify-center text-lg font-bold text-white">
+                {initial}
+              </div>
+            }
+          />
           <div>
             <p className="text-sm font-semibold text-gray-900">{accountName || "—"}</p>
             <div className="mt-0.5 flex items-center gap-1">
@@ -1669,6 +1677,7 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
                 postImageUrl={postImageUrl}
                 extraImageCount={extraImages.length}
                 accountName={linkedInAccount?.name ?? ""}
+                accountPictureUrl={linkedInAccount?.picture_url}
               />
             ) : (
               <div className="mx-auto w-full max-w-[500px] space-y-3">

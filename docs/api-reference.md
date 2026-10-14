@@ -10,6 +10,8 @@ Full API specification for all backend services. Covers request shapes, response
 
 1. [LinkedIn Agent — Conversation API](#1-linkedin-agent--conversation-api)
 2. [Image Chat API](#2-image-chat-api)
+3. [Posts API](#3-posts-api)
+4. [LinkedIn Account](#4-linkedin-account)
 
 ---
 
@@ -1236,3 +1238,39 @@ A generated picture follows the chat's active `image_ratio` (1:1, 16:9 or 4:5 �
 | message not about the picture | *written for what they asked — varies* |
 
 Never re-write agent copy client-side.
+
+---
+
+# 4. LinkedIn Account
+
+## `GET linkedin/account/`
+
+`/workspaces/{workspaceId}/linkedin/account/` — the workspace's connected LinkedIn account.
+
+```ts
+interface LinkedInAccountResponse {
+  connected: boolean;
+  id: string;
+  member_urn: string;          // "urn:li:person:…"
+  name: string;
+  picture_url?: string | null; // profile photo copied from LinkedIn; empty / null when none
+  scope: string;               // "openid profile w_member_social"
+  expires_at: string;          // ISO — token expiry
+  created_at: string;
+}
+```
+
+```json
+{
+  "connected": true,
+  "id": "b258083c-8ec3-4afc-9ff7-30c3eb0738fd",
+  "member_urn": "urn:li:person:DEKOg5u2Gk",
+  "name": "Taufiqul Islam",
+  "picture_url": "https://creativegenie.blob.core.windows.net/relay-media/linkedin_pictures/linkedin_b258083c-8ec3-4afc-9ff7-30c3eb0738fd.jpg",
+  "scope": "openid profile w_member_social",
+  "expires_at": "2026-12-13T04:47:04.822420Z",
+  "created_at": "2026-10-14T04:47:05.832231Z"
+}
+```
+
+Frontend: `picture_url` is the avatar on the Accounts card, the LinkedIn Account modal and the Edit Image post preview (fallback: LinkedIn tile / name initial).
