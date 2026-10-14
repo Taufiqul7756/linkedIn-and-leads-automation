@@ -563,6 +563,17 @@ function isoToTimeInput(iso: string | null): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 // ─── Schedule popover ─────────────────────────────────────────────────────────
 
 function SchedulePopover({
@@ -571,12 +582,14 @@ function SchedulePopover({
   loading,
   initialDate,
   initialTime,
+  title = "Schedule post",
 }: {
   onConfirm: (date: string, time: string) => void;
   onClose: () => void;
   loading: boolean;
   initialDate?: string;
   initialTime?: string;
+  title?: string;
 }) {
   const [date, setDate] = useState(initialDate ?? "");
   const [time, setTime] = useState(initialTime ?? "");
@@ -595,7 +608,7 @@ function SchedulePopover({
       ref={ref}
       className="absolute bottom-full right-0 mb-2 w-64 rounded-xl border border-gray-200 bg-white p-4 shadow-lg z-10"
     >
-      <p className="mb-3 text-xs font-semibold text-gray-700">Schedule post</p>
+      <p className="mb-3 text-xs font-semibold text-gray-700">{title}</p>
       <div className="flex flex-col gap-2">
         <input
           type="date"
@@ -675,10 +688,11 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   const [isDirty, setIsDirty] = useState(false);
   const [approving, setApproving] = useState(false);
   const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
-  const [approved, setApproved] = useState(false);
   const [backingToDraft, setBackingToDraft] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -710,6 +724,9 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
   ];
 
   const isPublished = post?.status === "published";
+  // Approved / scheduled footer comes from the post's status, so it survives reload
+  const isScheduled = post?.status === "scheduled";
+  const isApproved = post?.status === "approved" || isScheduled;
   const isChatRunning = chat?.status === "running";
   // Agent-style "generate another image" nudge — only after the latest agent reply, when idle
   const showAiImageSuggestion =
@@ -1094,8 +1111,8 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     setApproving(true);
     setConfirmPublishOpen(false);
     try {
-      await postsService(workspaceId).approvePost(post.id);
-      setApproved(true);
+      const updated = await postsService(workspaceId).approvePost(post.id);
+      setPost((prev) => (prev ? { ...prev, status: updated?.status ?? "approved" } : prev));
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -1119,13 +1136,39 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
     }
   }
 
+  // Approved or scheduled post → schedule it for the picked time (status becomes "scheduled")
+  async function handleReschedule(date: string, time: string) {
+    if (!post || !workspaceId || !date) return;
+    const newIso = new Date(`${date}T${time || "00:00"}`).toISOString();
+    setRescheduling(true);
+    try {
+      const updated = await postsService(workspaceId).schedulePostRaw(post.id, newIso);
+      setPost((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: updated?.status ?? "scheduled",
+              scheduled_at: updated?.scheduled_at ?? newIso,
+            }
+          : prev
+      );
+      toast.success(isScheduled ? "Post rescheduled!" : "Post scheduled!");
+      setRescheduleOpen(false);
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setRescheduling(false);
+    }
+  }
+
   async function handleBackToDraft() {
     if (!post || !workspaceId) return;
     setBackingToDraft(true);
     try {
-      await postsService(workspaceId).patchPost(post.id, { status: "draft" });
+      await postsService(workspaceId).patchPostRaw(post.id, { status: "draft" });
+      setPost((prev) => (prev ? { ...prev, status: "draft", scheduled_at: null } : prev));
+      setRescheduleOpen(false);
       toast.success("Post moved back to draft.");
-      setApproved(false);
     } catch (err) {
       toast.error(extractErrorMessage(err));
     } finally {
@@ -1784,30 +1827,66 @@ export default function EditImagePage({ params }: { params: Promise<{ postId: st
           </div>
 
           {/* Footer */}
-          {isPublished ? null : approved ? (
-            /* ── Approved success state ── */
-            <div className="flex shrink-0 items-center justify-between border-t border-green-100 bg-green-50 px-5 py-3">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-green-500 text-white">
+          {isPublished ? null : isApproved ? (
+            /* ── Approved / scheduled state (from post.status) ── */
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-green-100 bg-green-50 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-500 text-white">
                   <LuCheck className="h-4 w-4" />
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-green-800">Post approved!</p>
-                  <p className="text-xs text-green-600">Your post has been approved and queued.</p>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-green-800">
+                    {isScheduled ? "Post scheduled!" : "Post approved!"}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    {isScheduled && post?.scheduled_at
+                      ? `Publishes on ${formatDateTime(post.scheduled_at)}`
+                      : "Your post has been approved and queued."}
+                  </p>
                 </div>
               </div>
-              <button
-                onClick={handleBackToDraft}
-                disabled={backingToDraft}
-                className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
-              >
-                {backingToDraft ? (
-                  <LuLoader className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <LuArrowLeft className="h-3.5 w-3.5" />
-                )}
-                Back to draft
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <div className="relative">
+                  <button
+                    onClick={() => setRescheduleOpen((o) => !o)}
+                    disabled={rescheduling || backingToDraft}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {rescheduling ? (
+                      <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <LuClock className="h-3.5 w-3.5" />
+                    )}
+                    Reschedule
+                  </button>
+                  {rescheduleOpen && (
+                    <SchedulePopover
+                      title={isScheduled ? "Reschedule post" : "Schedule post"}
+                      onConfirm={handleReschedule}
+                      onClose={() => setRescheduleOpen(false)}
+                      loading={rescheduling}
+                      initialDate={isoToDateInput(
+                        post?.scheduled_at ?? post?.suggested_publish_at ?? null
+                      )}
+                      initialTime={isoToTimeInput(
+                        post?.scheduled_at ?? post?.suggested_publish_at ?? null
+                      )}
+                    />
+                  )}
+                </div>
+                <button
+                  onClick={handleBackToDraft}
+                  disabled={backingToDraft}
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {backingToDraft ? (
+                    <LuLoader className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <LuArrowLeft className="h-3.5 w-3.5" />
+                  )}
+                  Back to draft
+                </button>
+              </div>
             </div>
           ) : (
             /* ── Normal footer ── */

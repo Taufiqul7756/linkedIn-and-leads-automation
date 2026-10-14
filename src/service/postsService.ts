@@ -43,6 +43,11 @@ export const postsService = (workspaceId: string) => ({
     post<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/schedule/`, {
       scheduled_at,
     }),
+  // Throws on error — for callers that show the backend message (e.g. past time)
+  schedulePostRaw: (id: string, scheduled_at: string) =>
+    postRaw<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/schedule/`, {
+      scheduled_at,
+    }),
   getPost: (id: string) => get<PostType>(`/workspaces/${workspaceId}/content/posts/${id}/`),
   patchPost: (
     id: string,
