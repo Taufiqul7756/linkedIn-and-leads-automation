@@ -825,6 +825,17 @@ User's typed message is appended to `chat.messages` immediately (before API resp
 - Any other error status falls through to `toast.error` as before
 - `postNotFound` resets to `false` on each `workspaceId`/`postId` change
 
+### Approve / schedule footer (right panel)
+- Footer state comes from the post's **status** (not local state), so it survives reload:
+  - `draft` / `failed` → normal footer: **Save** (Edit tab), **Schedule** (sets `suggested_publish_at` only), **Approve** (confirm modal → `POST posts/{id}/approve/`)
+  - `approved` → green "Post approved!" / "Your post has been approved and queued."
+  - `scheduled` → green "Post scheduled!" / "Publishes on <date, time>" (`scheduled_at`)
+  - `published` → no footer
+- Green footer buttons: **Reschedule** + **Back to draft**
+  - **Reschedule** → date/time popover (pre-filled with `scheduled_at`, else `suggested_publish_at`; title "Schedule post" when approved, "Reschedule post" when scheduled) → `POST posts/{id}/schedule/ { scheduled_at }` via `schedulePostRaw` → status becomes `scheduled`; toast "Post scheduled!" / "Post rescheduled!". Errors (e.g. past time) → backend message toast, popover stays open
+  - **Back to draft** → `PATCH posts/{id}/ { status: "draft" }` (`patchPostRaw`) → normal footer again; errors → toast
+- After approve / reschedule / back to draft the local `post` is updated from the response, so the footer switches at once
+
 ### Account photo (preview panel)
 - The preview header shows the connected account's LinkedIn photo (`picture_url` from `GET linkedin/account/`, query `["linkedin-account", workspaceId]`) through `LinkedInAvatar` (`src/components/linkedin/LinkedInAvatar.tsx`)
 - No photo, or the image fails to load → the orange gradient circle with the name's first letter (as before)
